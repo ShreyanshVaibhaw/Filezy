@@ -113,38 +113,38 @@
     {:else if openMenu === "sort"}
       {#each sortItems as [key, label] (key)}
         <button class="menu-item" onclick={() => { openMenu = ""; sortBy(key, app.sortKey === key ? app.asc : true); }}>
-          <span class="check">{app.sortKey === key ? "" : ""}</span> {label}
+          <span class="check">{app.sortKey === key ? "●" : ""}</span> {label}
         </button>
       {/each}
       <div class="menu-sep"></div>
       <button class="menu-item" onclick={() => { openMenu = ""; sortBy(app.sortKey, true); }}>
-        <span class="check">{app.asc ? "" : ""}</span> Ascending
+        <span class="check">{app.asc ? "●" : ""}</span> Ascending
       </button>
       <button class="menu-item" onclick={() => { openMenu = ""; sortBy(app.sortKey, false); }}>
-        <span class="check">{!app.asc ? "" : ""}</span> Descending
+        <span class="check">{!app.asc ? "●" : ""}</span> Descending
       </button>
       <div class="menu-sep"></div>
       {#each [["none", "Group: None"], ["name", "Group by Name"], ["modified", "Group by Date"], ["type", "Group by Type"], ["size", "Group by Size"]] as [gkey, glabel] (gkey)}
         <button class="menu-item" onclick={() => { openMenu = ""; setGroup(gkey); }}>
-          <span class="check">{app.groupKey === gkey ? "" : ""}</span> {glabel}
+          <span class="check">{app.groupKey === gkey ? "●" : ""}</span> {glabel}
         </button>
       {/each}
     {:else if openMenu === "view"}
       {#each [["icons_xl", "Extra large icons"], ["icons_l", "Large icons"], ["icons_m", "Medium icons"], ["icons_s", "Small icons"], ["list", "List"], ["details", "Details"], ["tiles", "Tiles"]] as [vkey, vlabel] (vkey)}
         <button class="menu-item" onclick={() => { openMenu = ""; app.view = vkey; }}>
-          <span class="check">{app.view === vkey ? "" : ""}</span> {vlabel}
+          <span class="check">{app.view === vkey ? "●" : ""}</span> {vlabel}
         </button>
       {/each}
       <div class="menu-sep"></div>
       <button class="menu-item" onclick={() => { openMenu = ""; app.previewPane = !app.previewPane; }}>
-        <span class="check">{app.previewPane ? "" : ""}</span> Preview pane
+        <span class="check">{app.previewPane ? "●" : ""}</span> Preview pane
       </button>
       <div class="menu-sep"></div>
       <button class="menu-item" onclick={() => { openMenu = ""; toggleHidden(); }}>
-        <span class="check">{app.showHidden ? "" : ""}</span> Hidden items
+        <span class="check">{app.showHidden ? "●" : ""}</span> Hidden items
       </button>
       <button class="menu-item" onclick={() => { openMenu = ""; app.showExt = !app.showExt; }}>
-        <span class="check">{app.showExt ? "" : ""}</span> File name extensions
+        <span class="check">{app.showExt ? "●" : ""}</span> File name extensions
       </button>
       <div class="menu-sep"></div>
       <div class="subwrap" role="none" onmouseenter={() => (themeSubOpen = true)} onmouseleave={() => (themeSubOpen = false)}>
@@ -157,7 +157,7 @@
           <div class="menu submenu">
             {#each THEMES as [tid, tlabel] (tid)}
               <button class="menu-item" onclick={() => { openMenu = ""; setTheme(tid); }}>
-                <span class="check">{app.theme === tid ? "" : ""}</span> {tlabel}
+                <span class="check">{app.theme === tid ? "●" : ""}</span> {tlabel}
               </button>
             {/each}
           </div>
