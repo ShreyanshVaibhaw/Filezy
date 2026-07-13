@@ -1,0 +1,160 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --font: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", sans-serif;
+  --icons: "Segoe Fluent Icons", "Segoe MDL2 Assets";
+  color-scheme: dark;
+
+  --text: #ffffff;
+  --text-2: rgba(255, 255, 255, 0.786);
+  --text-3: rgba(255, 255, 255, 0.55);
+  --text-disabled: rgba(255, 255, 255, 0.36);
+  --mica-fallback: #202020;
+  --card: rgba(255, 255, 255, 0.033);
+  --surface: rgba(255, 255, 255, 0.06);
+  --surface-hover: rgba(255, 255, 255, 0.09);
+  --stroke: rgba(255, 255, 255, 0.07);
+  --stroke-strong: rgba(255, 255, 255, 0.14);
+  --hover: rgba(255, 255, 255, 0.058);
+  --sel: rgba(255, 255, 255, 0.09);
+  --sel-hover: rgba(255, 255, 255, 0.12);
+  --accent: #4cc2ff;
+  --menu-bg: #2c2c2c;
+  --input-bg: rgba(255, 255, 255, 0.06);
+  --close-hover: #c42b1c;
+  --scrollbar: rgba(255, 255, 255, 0.35);
+}
+
+@media (prefers-color-scheme: light) {
+  /* System theme only: an explicit data-theme always wins over the OS setting. */
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --text: #1a1a1a;
+    --text-2: rgba(0, 0, 0, 0.78);
+    --text-3: rgba(0, 0, 0, 0.55);
+    --text-disabled: rgba(0, 0, 0, 0.36);
+    --mica-fallback: #f3f3f3;
+    --card: rgba(255, 255, 255, 0.5);
+    --surface: rgba(255, 255, 255, 0.7);
+    --surface-hover: rgba(249, 249, 249, 0.55);
+    --stroke: rgba(0, 0, 0, 0.06);
+    --stroke-strong: rgba(0, 0, 0, 0.14);
+    --hover: rgba(0, 0, 0, 0.045);
+    --sel: rgba(0, 0, 0, 0.065);
+    --sel-hover: rgba(0, 0, 0, 0.09);
+    --accent: #005fb8;
+    --menu-bg: #f9f9f9;
+    --input-bg: rgba(255, 255, 255, 0.85);
+    --scrollbar: rgba(0, 0, 0, 0.35);
+  }
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  font-family: var(--font);
+  color: var(--text);
+  font-size: 14px;
+  user-select: none;
+  cursor: default;
+}
+
+#app {
+  height: 100%;
+}
+
+.glyph {
+  font-family: var(--icons);
+  font-style: normal;
+  line-height: 1;
+  display: inline-block;
+}
+
+/* Fluent-ish thin overlay scrollbars */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar);
+  border-radius: 7px;
+  border: 4px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  border-width: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+button {
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--text);
+  background: none;
+  border: none;
+  border-radius: 4px;
+}
+button:disabled {
+  color: var(--text-disabled);
+}
+
+input {
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--text);
+  background: none;
+  border: none;
+  outline: none;
+}
+
+/* Shared dropdown menu look (Win11 flyout) */
+.menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 200px;
+  background: var(--menu-bg);
+  border: 1px solid var(--stroke-strong);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 4px;
+  text-align: left;
+  white-space: nowrap;
+}
+.menu-item:hover:not(:disabled) {
+  background: var(--hover);
+}
+.menu-item .glyph {
+  font-size: 16px;
+  width: 16px;
+  color: var(--text-2);
+}
+.menu-item .check {
+  width: 14px;
+  font-size: 12px;
+  color: var(--text);
+}
+.menu-sep {
+  height: 1px;
+  background: var(--stroke);
+  margin: 4px 2px;
+}

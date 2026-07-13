@@ -1,0 +1,187 @@
+/* Selectable themes: each block overrides the fluent.css variable set.
+   No data-theme attribute = System (follows the OS via prefers-color-scheme).
+   --bg is transparent for mica themes and opaque for community palettes. */
+
+[data-theme="win11-dark"] {
+  color-scheme: dark;
+  --bg: transparent;
+  --text: #ffffff;
+  --text-2: rgba(255, 255, 255, 0.786);
+  --text-3: rgba(255, 255, 255, 0.55);
+  --text-disabled: rgba(255, 255, 255, 0.36);
+  --mica-fallback: #202020;
+  --card: rgba(255, 255, 255, 0.033);
+  --surface: rgba(255, 255, 255, 0.06);
+  --surface-hover: rgba(255, 255, 255, 0.09);
+  --stroke: rgba(255, 255, 255, 0.07);
+  --stroke-strong: rgba(255, 255, 255, 0.14);
+  --hover: rgba(255, 255, 255, 0.058);
+  --sel: rgba(255, 255, 255, 0.09);
+  --sel-hover: rgba(255, 255, 255, 0.12);
+  --accent: #4cc2ff;
+  --menu-bg: #2c2c2c;
+  --input-bg: rgba(255, 255, 255, 0.06);
+  --close-hover: #c42b1c;
+  --scrollbar: rgba(255, 255, 255, 0.35);
+}
+
+[data-theme="win11-light"] {
+  color-scheme: light;
+  --bg: transparent;
+  --text: #1a1a1a;
+  --text-2: rgba(0, 0, 0, 0.78);
+  --text-3: rgba(0, 0, 0, 0.55);
+  --text-disabled: rgba(0, 0, 0, 0.36);
+  --mica-fallback: #f3f3f3;
+  --card: rgba(255, 255, 255, 0.5);
+  --surface: rgba(255, 255, 255, 0.7);
+  --surface-hover: rgba(249, 249, 249, 0.55);
+  --stroke: rgba(0, 0, 0, 0.06);
+  --stroke-strong: rgba(0, 0, 0, 0.14);
+  --hover: rgba(0, 0, 0, 0.045);
+  --sel: rgba(0, 0, 0, 0.065);
+  --sel-hover: rgba(0, 0, 0, 0.09);
+  --accent: #005fb8;
+  --menu-bg: #f9f9f9;
+  --input-bg: rgba(255, 255, 255, 0.85);
+  --close-hover: #c42b1c;
+  --scrollbar: rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="catppuccin-mocha"] {
+  color-scheme: dark;
+  --bg: #1e1e2e;
+  --text: #cdd6f4;
+  --text-2: #bac2de;
+  --text-3: #a6adc8;
+  --text-disabled: #6c7086;
+  --mica-fallback: #1e1e2e;
+  --card: #181825;
+  --surface: #313244;
+  --surface-hover: #45475a;
+  --stroke: #313244;
+  --stroke-strong: #45475a;
+  --hover: rgba(205, 214, 244, 0.07);
+  --sel: rgba(137, 180, 250, 0.18);
+  --sel-hover: rgba(137, 180, 250, 0.25);
+  --accent: #89b4fa;
+  --menu-bg: #181825;
+  --input-bg: #313244;
+  --close-hover: #f38ba8;
+  --scrollbar: rgba(205, 214, 244, 0.35);
+}
+
+[data-theme="catppuccin-latte"] {
+  color-scheme: light;
+  --bg: #eff1f5;
+  --text: #4c4f69;
+  --text-2: #5c5f77;
+  --text-3: #6c6f85;
+  --text-disabled: #9ca0b0;
+  --mica-fallback: #eff1f5;
+  --card: #e6e9ef;
+  --surface: #ccd0da;
+  --surface-hover: #bcc0cc;
+  --stroke: #ccd0da;
+  --stroke-strong: #bcc0cc;
+  --hover: rgba(76, 79, 105, 0.06);
+  --sel: rgba(30, 102, 245, 0.14);
+  --sel-hover: rgba(30, 102, 245, 0.2);
+  --accent: #1e66f5;
+  --menu-bg: #e6e9ef;
+  --input-bg: #ffffff;
+  --close-hover: #d20f39;
+  --scrollbar: rgba(76, 79, 105, 0.35);
+}
+
+[data-theme="dracula"] {
+  color-scheme: dark;
+  --bg: #282a36;
+  --text: #f8f8f2;
+  --text-2: #e6e6dc;
+  --text-3: #9ea8c7;
+  --text-disabled: #6272a4;
+  --mica-fallback: #282a36;
+  --card: #21222c;
+  --surface: #44475a;
+  --surface-hover: #565a75;
+  --stroke: #44475a;
+  --stroke-strong: #565a75;
+  --hover: rgba(248, 248, 242, 0.07);
+  --sel: rgba(189, 147, 249, 0.2);
+  --sel-hover: rgba(189, 147, 249, 0.28);
+  --accent: #bd93f9;
+  --menu-bg: #21222c;
+  --input-bg: #44475a;
+  --close-hover: #ff5555;
+  --scrollbar: rgba(248, 248, 242, 0.35);
+}
+
+[data-theme="nord"] {
+  color-scheme: dark;
+  --bg: #2e3440;
+  --text: #eceff4;
+  --text-2: #d8dee9;
+  --text-3: #aab2c0;
+  --text-disabled: #616e88;
+  --mica-fallback: #2e3440;
+  --card: #292e39;
+  --surface: #3b4252;
+  --surface-hover: #434c5e;
+  --stroke: #3b4252;
+  --stroke-strong: #4c566a;
+  --hover: rgba(236, 239, 244, 0.06);
+  --sel: rgba(136, 192, 208, 0.18);
+  --sel-hover: rgba(136, 192, 208, 0.25);
+  --accent: #88c0d0;
+  --menu-bg: #3b4252;
+  --input-bg: #3b4252;
+  --close-hover: #bf616a;
+  --scrollbar: rgba(236, 239, 244, 0.35);
+}
+
+[data-theme="tokyo-night"] {
+  color-scheme: dark;
+  --bg: #1a1b26;
+  --text: #c0caf5;
+  --text-2: #a9b1d6;
+  --text-3: #787c99;
+  --text-disabled: #565f89;
+  --mica-fallback: #1a1b26;
+  --card: #16161e;
+  --surface: #24283b;
+  --surface-hover: #2f334d;
+  --stroke: #24283b;
+  --stroke-strong: #2f334d;
+  --hover: rgba(192, 202, 245, 0.06);
+  --sel: rgba(122, 162, 247, 0.18);
+  --sel-hover: rgba(122, 162, 247, 0.26);
+  --accent: #7aa2f7;
+  --menu-bg: #16161e;
+  --input-bg: #24283b;
+  --close-hover: #f7768e;
+  --scrollbar: rgba(192, 202, 245, 0.35);
+}
+
+[data-theme="gruvbox-dark"] {
+  color-scheme: dark;
+  --bg: #282828;
+  --text: #ebdbb2;
+  --text-2: #d5c4a1;
+  --text-3: #a89984;
+  --text-disabled: #7c6f64;
+  --mica-fallback: #282828;
+  --card: #1d2021;
+  --surface: #3c3836;
+  --surface-hover: #504945;
+  --stroke: #3c3836;
+  --stroke-strong: #504945;
+  --hover: rgba(235, 219, 178, 0.06);
+  --sel: rgba(131, 165, 152, 0.2);
+  --sel-hover: rgba(131, 165, 152, 0.28);
+  --accent: #83a598;
+  --menu-bg: #1d2021;
+  --input-bg: #3c3836;
+  --close-hover: #fb4934;
+  --scrollbar: rgba(235, 219, 178, 0.35);
+}

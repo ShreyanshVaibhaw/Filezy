@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Filezy",
+  "version": "0.1.0",
+  "identifier": "com.filezy.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Filezy",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 500,
+        "minHeight": 320,
+        "decorations": false,
+        "transparent": true,
+        "windowEffects": { "effects": ["mica"] }
+      }
+    ],
+    "security": { "csp": null }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["icons/icon.ico"]
+  }
+}
