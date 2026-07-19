@@ -10,6 +10,7 @@ mod ops;
 mod pins;
 mod props;
 mod recent;
+mod recycle;
 mod search;
 mod shellmenu;
 mod watch;
@@ -722,6 +723,24 @@ fn onedrive_dir() -> Option<String> {
     std::path::Path::new(&p).is_dir().then_some(p)
 }
 
+#[tauri::command]
+async fn recycle_list() -> Result<Vec<recycle::RecycleItem>, String> {
+    tauri::async_runtime::spawn_blocking(recycle::list).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn recycle_restore(names: Vec<String>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || recycle::restore(&names))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Shows Windows' own confirmation dialog before anything is deleted.
+#[tauri::command]
+async fn recycle_empty() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(recycle::empty).await.map_err(|e| e.to_string())?
+}
+
 /// Open a terminal in `dir`: Windows Terminal when available, else cmd.
 #[tauri::command]
 fn open_terminal(dir: String) -> Result<(), String> {
@@ -788,6 +807,9 @@ fn main() {
             path_thumb,
             onedrive_dir,
             open_terminal,
+            recycle_list,
+            recycle_restore,
+            recycle_empty,
             ext_meta,
             path_icon,
             thumb,

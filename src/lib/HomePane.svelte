@@ -37,8 +37,8 @@
   <div class="qtiles">
     {#each app.specials as [name, path] (path)}
       <button class="qtile" ondblclick={() => navigate(path)} title={path}>
-        {#if shellIcon(path, 40)}
-          <img class="qimg" src={shellIcon(path, 40)} alt="" width="40" height="40" />
+        {#if shellIcon(path, 48)}
+          <img class="qimg" src={shellIcon(path, 48)} alt="" width="40" height="40" />
         {:else}
           <span class="glyph qicon">{glyphs[name] ?? c(0xe8b7)}</span>
         {/if}
@@ -51,8 +51,8 @@
     {/each}
     {#each app.pins as p (p)}
       <button class="qtile" ondblclick={() => navigate(p)} title={p}>
-        {#if shellIcon(p, 40)}
-          <img class="qimg" src={shellIcon(p, 40)} alt="" width="40" height="40" />
+        {#if shellIcon(p, 48)}
+          <img class="qimg" src={shellIcon(p, 48)} alt="" width="40" height="40" />
         {:else}
           <span class="glyph qicon">{c(0xe8b7)}</span>
         {/if}

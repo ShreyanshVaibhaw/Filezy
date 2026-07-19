@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { app, navigate, folderName, pinRemove, shellIcon, THIS_PC, HOME } from "./store.svelte";
+  import { app, navigate, folderName, pinRemove, shellIcon, THIS_PC, HOME, RECYCLE, RECYCLE_GUID } from "./store.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
 
@@ -63,8 +63,8 @@
     >
       {open.has(path) ? "" : ""}
     </span>
-    {#if shellIcon(path, 16)}
-      <img class="navicon" src={shellIcon(path, 16)} alt="" width="16" height="16" />
+    {#if shellIcon(path, 48)}
+      <img class="navicon" src={shellIcon(path, 48)} alt="" width="16" height="16" />
     {:else}
       <span class="glyph icon">{glyph}</span>
     {/if}
@@ -93,8 +93,8 @@
   {#each app.specials as [name, path] (path)}
     <button class="navitem" class:active={isActive(path)} onclick={() => navigate(path)}>
       <span class="chevslot"></span>
-      {#if shellIcon(path, 16)}
-        <img class="navicon" src={shellIcon(path, 16)} alt="" width="16" height="16" />
+      {#if shellIcon(path, 48)}
+        <img class="navicon" src={shellIcon(path, 48)} alt="" width="16" height="16" />
       {:else}
         <span class="glyph icon">{specialGlyphs[name] ?? ""}</span>
       {/if}
@@ -112,8 +112,8 @@
       title={p}
     >
       <span class="chevslot"></span>
-      {#if shellIcon(p, 16)}
-        <img class="navicon" src={shellIcon(p, 16)} alt="" width="16" height="16" />
+      {#if shellIcon(p, 48)}
+        <img class="navicon" src={shellIcon(p, 48)} alt="" width="16" height="16" />
       {:else}
         <span class="glyph icon">&#xE8B7;</span>
       {/if}
@@ -146,6 +146,18 @@
       {@render treeNode(d.path, d.name, "", 1)}
     {/each}
   {/if}
+
+  <div class="sep"></div>
+
+  <button class="navitem" class:active={app.path === RECYCLE} onclick={() => navigate(RECYCLE)}>
+    <span class="chevslot"></span>
+    {#if shellIcon(RECYCLE_GUID, 48)}
+      <img class="navicon" src={shellIcon(RECYCLE_GUID, 48)} alt="" width="16" height="16" />
+    {:else}
+      <span class="glyph icon">&#xE74D;</span>
+    {/if}
+    <span class="label">Recycle Bin</span>
+  </button>
 </div>
 
 {#if pinCtx}

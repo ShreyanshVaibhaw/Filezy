@@ -195,6 +195,17 @@ export function setView(v: string) {
 // Virtual locations (no backend listing).
 export const THIS_PC = "::ThisPC";
 export const HOME = "::Home";
+export const RECYCLE = "::RecycleBin";
+// Shell GUID of the bin itself, for its real icon.
+export const RECYCLE_GUID = "::{645FF040-5081-101B-9F08-00AA002F954E}";
+
+export interface RecycleItem {
+  name: string;
+  original: string;
+  deleted: string;
+  size: string;
+}
+export const recycleItems = $state<{ list: RecycleItem[] }>({ list: [] });
 
 export interface RecentFile {
   name: string;
@@ -207,6 +218,7 @@ export const recentFiles = $state<{ list: RecentFile[] }>({ list: [] });
 export function folderName(p: string): string {
   if (p === THIS_PC) return "This PC";
   if (p === HOME) return "Home";
+  if (p === RECYCLE) return "Recycle Bin";
   const t = p.replace(/\\$/, "");
   const i = t.lastIndexOf("\\");
   return i < 0 ? p : t.slice(i + 1) || p;
@@ -289,10 +301,15 @@ function resetRows(total: number) {
 function loadVirtual(p: string) {
   if (p === THIS_PC) invoke<typeof app.drives>("drives").then((d) => (app.drives = d));
   if (p === HOME) invoke<RecentFile[]>("recent_files").then((r) => (recentFiles.list = r));
+  if (p === RECYCLE) {
+    invoke<RecycleItem[]>("recycle_list")
+      .then((r) => (recycleItems.list = r))
+      .catch((e) => (app.status = String(e)));
+  }
 }
 
 export async function navigate(p: string, push = true) {
-  if (p === THIS_PC || p === HOME) {
+  if (p === THIS_PC || p === HOME || p === RECYCLE) {
     const t = activeTab();
     if (t) {
       if (push) {

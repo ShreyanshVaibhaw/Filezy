@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { app, navigate, back, forward, up, refresh, setFilter, folderName, joinPath, THIS_PC, HOME } from "./store.svelte";
+  import { app, navigate, back, forward, up, refresh, setFilter, folderName, joinPath, THIS_PC, HOME, RECYCLE } from "./store.svelte";
 
   let editing = $state(false);
   let editValue = $state("");
@@ -17,6 +17,7 @@
     if (!app.path) return [] as { name: string; path: string }[];
     if (app.path === THIS_PC) return [{ name: "This PC", path: THIS_PC }];
     if (app.path === HOME) return [{ name: "Home", path: HOME }];
+    if (app.path === RECYCLE) return [{ name: "Recycle Bin", path: RECYCLE }];
     const parts = app.path.replace(/\\$/, "").split("\\");
     const out: { name: string; path: string }[] = [];
     let acc = "";
@@ -71,16 +72,59 @@
   function startEdit() {
     editValue = app.path;
     editing = true;
+    suggestions = [];
     setTimeout(() => {
       editInput?.focus();
       editInput?.select();
     });
   }
 
-  function commitEdit() {
+  function commitEdit(path?: string) {
     editing = false;
-    const v = editValue.trim();
+    suggestions = [];
+    const v = (path ?? editValue).trim();
     if (v && v !== app.path) navigate(v);
+  }
+
+  // Path autocomplete: complete the segment after the last backslash.
+  let suggestions = $state<string[]>([]);
+  let sugSel = $state(-1);
+  let sugSeq = 0;
+  async function updateSuggestions() {
+    const v = editValue;
+    const cut = v.lastIndexOf("\\");
+    if (cut < 2 || v.startsWith("::")) {
+      suggestions = [];
+      return;
+    }
+    const parent = cut === 2 ? v.slice(0, 3) : v.slice(0, cut);
+    const prefix = v.slice(cut + 1).toLowerCase();
+    const seq = ++sugSeq;
+    const kids = await invoke<string[]>("list_dirs", { path: parent }).catch(() => [] as string[]);
+    if (seq !== sugSeq || !editing) return;
+    suggestions = kids
+      .filter((k) => k.toLowerCase().startsWith(prefix))
+      .slice(0, 8)
+      .map((k) => joinPath(parent, k));
+    sugSel = -1;
+  }
+  function editKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter") {
+      commitEdit(sugSel >= 0 ? suggestions[sugSel] : undefined);
+    } else if (e.key === "Escape") {
+      editing = false;
+      suggestions = [];
+    } else if (e.key === "ArrowDown" && suggestions.length) {
+      sugSel = (sugSel + 1) % suggestions.length;
+      e.preventDefault();
+    } else if (e.key === "ArrowUp" && suggestions.length) {
+      sugSel = (sugSel - 1 + suggestions.length) % suggestions.length;
+      e.preventDefault();
+    } else if (e.key === "Tab" && suggestions.length) {
+      editValue = suggestions[sugSel >= 0 ? sugSel : 0];
+      updateSuggestions();
+      e.preventDefault();
+    }
   }
 </script>
 
@@ -98,18 +142,29 @@
     <span class="glyph">&#xE72C;</span>
   </button>
 
-  <div class="addressbox" role="textbox" tabindex="-1" onclick={(e) => { if (e.target === e.currentTarget) startEdit(); }}>
+  <div class="addressbox" class:editing role="textbox" tabindex="-1" onclick={(e) => { if (e.target === e.currentTarget) startEdit(); }}>
     {#if editing}
       <input
         bind:this={editInput}
         bind:value={editValue}
-        onkeydown={(e) => {
-          if (e.key === "Enter") commitEdit();
-          else if (e.key === "Escape") editing = false;
-        }}
-        onblur={() => (editing = false)}
+        onkeydown={editKeydown}
+        oninput={updateSuggestions}
+        onblur={() => setTimeout(() => { editing = false; suggestions = []; }, 150)}
         spellcheck="false"
       />
+      {#if suggestions.length}
+        <div class="sugmenu">
+          {#each suggestions as sug, i (sug)}
+            <button
+              class="menu-item"
+              class:sugactive={i === sugSel}
+              onmousedown={(e) => { e.preventDefault(); commitEdit(sug); }}
+            >
+              <span class="glyph">&#xE8B7;</span> {sug}
+            </button>
+          {/each}
+        </div>
+      {/if}
     {:else}
       <span class="glyph pcicon">&#xE977;</span>
       {#if hiddenSegs.length}
@@ -195,6 +250,7 @@
     background: var(--hover);
   }
   .addressbox {
+    position: relative;
     flex: 1;
     min-width: 120px;
     height: 34px;
@@ -256,6 +312,25 @@
   .crumbfill {
     flex: 1;
     align-self: stretch;
+  }
+  .addressbox.editing {
+    overflow: visible; /* the suggestion dropdown hangs below */
+  }
+  .sugmenu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    background: var(--menu-bg);
+    border: 1px solid var(--stroke-strong);
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+  }
+  .sugmenu .menu-item.sugactive {
+    background: var(--sel);
   }
   .searchbox {
     width: 240px;

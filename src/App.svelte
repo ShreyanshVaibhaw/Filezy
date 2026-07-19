@@ -10,11 +10,12 @@
   import DrivesPane from "./lib/DrivesPane.svelte";
   import PreviewPane from "./lib/PreviewPane.svelte";
   import HomePane from "./lib/HomePane.svelte";
+  import RecyclePane from "./lib/RecyclePane.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
   import {
     app, sel, tabs, navigate, refresh, back, forward, up, del, copySel, paste,
     newFolder, selectAll, startRename, openEntry, hooks, selCount, selIndices, clearSel,
-    newTab, closeTab, switchTab, searchUpdate, loadPins, THIS_PC, HOME,
+    newTab, closeTab, switchTab, searchUpdate, loadPins, THIS_PC, HOME, RECYCLE,
   } from "./lib/store.svelte";
 
   let addressEdit: { focus: () => void } | undefined = $state();
@@ -116,6 +117,8 @@
         <DrivesPane />
       {:else if app.path === HOME}
         <HomePane />
+      {:else if app.path === RECYCLE}
+        <RecyclePane />
       {:else}
         <div class="filerow">
           <FilePane />
