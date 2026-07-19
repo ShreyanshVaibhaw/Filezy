@@ -15,7 +15,8 @@
   import {
     app, sel, tabs, navigate, refresh, back, forward, up, del, copySel, paste,
     newFolder, selectAll, startRename, openEntry, hooks, selCount, selIndices, clearSel,
-    newTab, closeTab, switchTab, searchUpdate, loadPins, THIS_PC, HOME, RECYCLE,
+    newTab, closeTab, switchTab, searchUpdate, loadPins, reopenClosedTab,
+    THIS_PC, HOME, RECYCLE,
   } from "./lib/store.svelte";
 
   let addressEdit: { focus: () => void } | undefined = $state();
@@ -45,8 +46,10 @@
   function onKeydown(ev: KeyboardEvent) {
     if (ev.target instanceof HTMLInputElement) return;
     const k = ev.key;
+    if (ev.ctrlKey && ev.shiftKey && (k === "t" || k === "T")) { reopenClosedTab(); ev.preventDefault(); return; }
     if (ev.ctrlKey && (k === "t" || k === "T")) { newTab(); ev.preventDefault(); return; }
     if (ev.ctrlKey && (k === "w" || k === "W")) { closeTab(app.activeTab); ev.preventDefault(); return; }
+    if (ev.ctrlKey && (k === "n" || k === "N")) { invoke("new_window").catch(() => {}); ev.preventDefault(); return; }
     if (ev.ctrlKey && k === "Tab") {
       const i = tabs.findIndex((t) => t.id === app.activeTab);
       const next = tabs[(i + (ev.shiftKey ? tabs.length - 1 : 1)) % tabs.length];

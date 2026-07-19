@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
     app, sel, sortBy, setGroup, refresh, copySel, paste, del, newFolder, startRename, toggleHidden,
-    THEMES, setTheme, setView,
+    THEMES, setTheme, setView, toggleCompact,
     selectAll, loadNewItems, newFile, newItems, extMeta,
   } from "./store.svelte";
 
@@ -140,6 +140,9 @@
           <span class="check">{app.view === vkey ? "●" : ""}</span> {vlabel}
         </button>
       {/each}
+      <button class="menu-item" onclick={() => { openMenu = ""; toggleCompact(); }}>
+        <span class="check">{app.compact ? "●" : ""}</span> Compact view
+      </button>
       <div class="menu-sep"></div>
       <button class="menu-item" onclick={() => { openMenu = ""; app.previewPane = !app.previewPane; }}>
         <span class="check">{app.previewPane ? "●" : ""}</span> Preview pane

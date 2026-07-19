@@ -1,6 +1,9 @@
 <script lang="ts">
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import { app, tabs, extMeta, folderName, newTab, switchTab, closeTab } from "./store.svelte";
+  import {
+    app, tabs, extMeta, folderName, newTab, switchTab, closeTab,
+    duplicateTab, closeOtherTabs, closeTabsRight,
+  } from "./store.svelte";
 
   const win = getCurrentWindow();
   let maximized = $state(false);
@@ -11,6 +14,12 @@
 
   // Drag a tab horizontally to reorder, like Explorer/browsers.
   let drag = $state<{ id: number; x: number; moved: boolean } | null>(null);
+
+  let tabCtx = $state<{ x: number; y: number; id: number } | null>(null);
+  function onTabContext(e: MouseEvent, id: number) {
+    e.preventDefault();
+    tabCtx = { x: e.clientX, y: e.clientY, id };
+  }
 
   function tabDown(e: MouseEvent, id: number) {
     if (e.button === 1) {
@@ -38,7 +47,29 @@
   }
 </script>
 
-<svelte:window onmousemove={tabDragMove} onmouseup={() => (drag = null)} />
+<svelte:window
+  onmousemove={tabDragMove}
+  onmouseup={() => (drag = null)}
+  onmousedown={(e) => { if (tabCtx && !(e.target as HTMLElement).closest(".menu")) tabCtx = null; }}
+/>
+
+{#if tabCtx}
+  <div class="menu" style="left:{tabCtx.x}px; top:{tabCtx.y}px">
+    <button class="menu-item" onclick={() => { duplicateTab(tabCtx!.id); tabCtx = null; }}>
+      <span class="glyph">&#xE8C8;</span> Duplicate tab
+    </button>
+    <div class="menu-sep"></div>
+    <button class="menu-item" onclick={() => { closeTab(tabCtx!.id); tabCtx = null; }}>
+      <span class="glyph">&#xE8BB;</span> Close tab
+    </button>
+    <button class="menu-item" disabled={tabs.length < 2} onclick={() => { closeOtherTabs(tabCtx!.id); tabCtx = null; }}>
+      Close other tabs
+    </button>
+    <button class="menu-item" disabled={tabs.findIndex((t) => t.id === tabCtx!.id) === tabs.length - 1} onclick={() => { closeTabsRight(tabCtx!.id); tabCtx = null; }}>
+      Close tabs to the right
+    </button>
+  </div>
+{/if}
 
 <div class="titlebar" data-tauri-drag-region>
   {#each tabs as t (t.id)}
@@ -49,6 +80,7 @@
       tabindex="-1"
       aria-selected={t.id === app.activeTab}
       onmousedown={(e) => tabDown(e, t.id)}
+      oncontextmenu={(e) => onTabContext(e, t.id)}
     >
       {#if folderIcon}
         <img src={folderIcon} alt="" width="16" height="16" />

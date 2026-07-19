@@ -741,6 +741,13 @@ async fn recycle_empty() -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(recycle::empty).await.map_err(|e| e.to_string())?
 }
 
+/// Ctrl+N: another instance of this app.
+#[tauri::command]
+fn new_window() -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    std::process::Command::new(exe).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
 /// Open a terminal in `dir`: Windows Terminal when available, else cmd.
 #[tauri::command]
 fn open_terminal(dir: String) -> Result<(), String> {
@@ -807,6 +814,7 @@ fn main() {
             path_thumb,
             onedrive_dir,
             open_terminal,
+            new_window,
             recycle_list,
             recycle_restore,
             recycle_empty,

@@ -48,7 +48,14 @@
   let viewH = $state(600);
   let gridW = $state(800);
 
-  const v = $derived(VIEWS[app.view] ?? VIEWS.details);
+  // Compact view tightens the row-based views (details/list), like Explorer's.
+  const v = $derived.by(() => {
+    const base = VIEWS[app.view] ?? VIEWS.details;
+    if (!app.compact) return base;
+    if (app.view === "details") return { ...base, rowH: 28 };
+    if (app.view === "list") return { ...base, rowH: 24 };
+    return base;
+  });
   // items per column for column flow; visual columns otherwise
   const ipc = $derived(v.flow === "column" ? Math.max(1, Math.floor(viewH / v.rowH)) : 1);
   const cols = $derived(

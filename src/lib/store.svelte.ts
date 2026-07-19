@@ -48,6 +48,7 @@ export const app = $state({
   showHidden: false,
   showExt: true,
   theme: "system",
+  compact: localStorage.getItem("compact") === "1",
   filter: "",
   searching: false,
   groupKey: "none",
@@ -190,6 +191,18 @@ function applyPrefs(p: string) {
 export function setView(v: string) {
   app.view = v;
   savePrefs();
+}
+
+export function toggleCompact() {
+  app.compact = !app.compact;
+  localStorage.setItem("compact", app.compact ? "1" : "0");
+}
+
+// Reopen-closed-tab stack (Ctrl+Shift+T), session-only.
+const closedTabs: string[] = [];
+export function reopenClosedTab() {
+  const p = closedTabs.pop();
+  if (p) newTab(p);
 }
 
 // Virtual locations (no backend listing).
@@ -430,6 +443,7 @@ export function switchTab(id: number) {
 export function closeTab(id: number) {
   const idx = tabs.findIndex((t) => t.id === id);
   if (idx < 0) return;
+  if (tabs[idx].path) closedTabs.push(tabs[idx].path);
   tabs.splice(idx, 1);
   if (!tabs.length) {
     import("@tauri-apps/api/window").then((m) => m.getCurrentWindow().close());
@@ -442,6 +456,21 @@ export function closeTab(id: number) {
     navigate(next.path, false).then(() => restoreScroll(next.scroll));
   }
 }
+export function duplicateTab(id: number) {
+  const t = tabs.find((t) => t.id === id);
+  if (t) newTab(t.path);
+}
+
+export function closeOtherTabs(id: number) {
+  for (const t of [...tabs]) if (t.id !== id) closeTab(t.id);
+}
+
+export function closeTabsRight(id: number) {
+  const idx = tabs.findIndex((t) => t.id === id);
+  if (idx < 0) return;
+  for (const t of [...tabs.slice(idx + 1)]) closeTab(t.id);
+}
+
 export function up() {
   if (app.path.startsWith("::")) return;
   const t = app.path.replace(/\\$/, "");
