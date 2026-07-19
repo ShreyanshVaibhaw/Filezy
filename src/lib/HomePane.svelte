@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { SvelteMap } from "svelte/reactivity";
-  import { app, navigate, recentFiles, fmtDate, folderName, type ExtMeta } from "./store.svelte";
+  import { app, navigate, recentFiles, fmtDate, folderName, shellIcon, type ExtMeta } from "./store.svelte";
 
   const c = String.fromCharCode;
   const glyphs: Record<string, string> = {
@@ -37,7 +37,11 @@
   <div class="qtiles">
     {#each app.specials as [name, path] (path)}
       <button class="qtile" ondblclick={() => navigate(path)} title={path}>
-        <span class="glyph qicon">{glyphs[name] ?? c(0xe8b7)}</span>
+        {#if shellIcon(path, 40)}
+          <img class="qimg" src={shellIcon(path, 40)} alt="" width="40" height="40" />
+        {:else}
+          <span class="glyph qicon">{glyphs[name] ?? c(0xe8b7)}</span>
+        {/if}
         <span class="qinfo">
           <span class="qname">{name}</span>
           <span class="qsub">Stored locally</span>
@@ -47,7 +51,11 @@
     {/each}
     {#each app.pins as p (p)}
       <button class="qtile" ondblclick={() => navigate(p)} title={p}>
-        <span class="glyph qicon">{c(0xe8b7)}</span>
+        {#if shellIcon(p, 40)}
+          <img class="qimg" src={shellIcon(p, 40)} alt="" width="40" height="40" />
+        {:else}
+          <span class="glyph qicon">{c(0xe8b7)}</span>
+        {/if}
         <span class="qinfo">
           <span class="qname">{folderName(p)}</span>
           <span class="qsub">{parentDir(p)}</span>
@@ -110,6 +118,9 @@
   .qicon {
     font-size: 28px;
     color: var(--text-2);
+    flex-shrink: 0;
+  }
+  .qimg {
     flex-shrink: 0;
   }
   .qinfo {

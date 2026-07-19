@@ -101,6 +101,25 @@ export const pathIcons = new SvelteMap<string, string | null>();
 // Thumbnails for icon/tile views, keyed "path|size".
 export const thumbs = new SvelteMap<string, string | null>();
 
+// Real shell icons for fixed chrome (nav pane, Home tiles, drives), keyed "path|size".
+export const shellIcons = new SvelteMap<string, string | null>();
+export function shellIcon(path: string, size: number): string | null {
+  const key = path + "|" + size;
+  const v = shellIcons.get(key);
+  if (v === undefined) {
+    // Callable from templates: mutating reactive state during render is illegal
+    // in Svelte 5, so the fetch kicks off in a microtask.
+    queueMicrotask(() => {
+      if (shellIcons.has(key)) return;
+      shellIcons.set(key, null);
+      invoke<string | null>("path_thumb", { path, size }).then((ic) => {
+        if (ic) shellIcons.set(key, ic);
+      });
+    });
+  }
+  return v ?? null;
+}
+
 // Callbacks registered by FilePane so store actions can control the scroller.
 export const hooks: {
   scrollTo?: (px: number) => void;

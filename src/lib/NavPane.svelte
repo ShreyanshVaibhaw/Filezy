@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { app, navigate, folderName, pinRemove, THIS_PC, HOME } from "./store.svelte";
+  import { app, navigate, folderName, pinRemove, shellIcon, THIS_PC, HOME } from "./store.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
 
@@ -62,7 +62,11 @@
     >
       {open.has(path) ? "" : ""}
     </span>
-    <span class="glyph icon">{glyph}</span>
+    {#if shellIcon(path, 16)}
+      <img class="navicon" src={shellIcon(path, 16)} alt="" width="16" height="16" />
+    {:else}
+      <span class="glyph icon">{glyph}</span>
+    {/if}
     <span class="label">{label}</span>
   </button>
   {#if open.has(path)}
@@ -88,7 +92,11 @@
   {#each app.specials as [name, path] (path)}
     <button class="navitem" class:active={isActive(path)} onclick={() => navigate(path)}>
       <span class="chevslot"></span>
-      <span class="glyph icon">{specialGlyphs[name] ?? ""}</span>
+      {#if shellIcon(path, 16)}
+        <img class="navicon" src={shellIcon(path, 16)} alt="" width="16" height="16" />
+      {:else}
+        <span class="glyph icon">{specialGlyphs[name] ?? ""}</span>
+      {/if}
       <span class="label">{name}</span>
       <span class="glyph pin">&#xE840;</span>
     </button>
@@ -103,7 +111,11 @@
       title={p}
     >
       <span class="chevslot"></span>
-      <span class="glyph icon">&#xE8B7;</span>
+      {#if shellIcon(p, 16)}
+        <img class="navicon" src={shellIcon(p, 16)} alt="" width="16" height="16" />
+      {:else}
+        <span class="glyph icon">&#xE8B7;</span>
+      {/if}
       <span class="label">{folderName(p)}</span>
       <span class="glyph pin">&#xE840;</span>
     </button>
@@ -176,6 +188,10 @@
   }
   .navitem .chev:hover {
     color: var(--text);
+  }
+  .navitem .navicon {
+    margin-right: 8px;
+    flex-shrink: 0;
   }
   .navitem .icon {
     font-size: 16px;

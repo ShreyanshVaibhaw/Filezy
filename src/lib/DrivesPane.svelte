@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { app, navigate, pinAdd, pinRemove } from "./store.svelte";
+  import { app, navigate, pinAdd, pinRemove, shellIcon } from "./store.svelte";
 
   interface ShellItem {
     id: number;
@@ -90,7 +90,11 @@
         oncontextmenu={(e) => onContext(e, d.path)}
         title={d.path}
       >
-        <span class="glyph icon">&#xEDA2;</span>
+        {#if shellIcon(d.path, 48)}
+          <img class="dimg" src={shellIcon(d.path, 48)} alt="" width="48" height="48" />
+        {:else}
+          <span class="glyph icon">&#xEDA2;</span>
+        {/if}
         <span class="info">
           <span class="name">{d.name}</span>
           <span class="bar" class:low={d.free < d.total * 0.1}>
@@ -219,6 +223,9 @@
   .drivetile .icon {
     font-size: 40px;
     color: var(--text-2);
+    flex-shrink: 0;
+  }
+  .dimg {
     flex-shrink: 0;
   }
   .info {

@@ -618,6 +618,14 @@ async fn show_properties_path(
         .map_err(|e| e.to_string())?
 }
 
+/// Real shell icon for an arbitrary path (nav pane, Home tiles, drive tiles).
+#[tauri::command]
+async fn path_thumb(path: String, size: i32) -> Option<String> {
+    tauri::async_runtime::spawn_blocking(move || icons::thumbnail(&path, size))
+        .await
+        .unwrap_or(None)
+}
+
 #[tauri::command]
 fn get_pins() -> Vec<String> {
     pins::load()
@@ -736,6 +744,7 @@ fn main() {
             show_properties_path,
             get_pins,
             set_pins,
+            path_thumb,
             ext_meta,
             path_icon,
             thumb,
