@@ -75,8 +75,7 @@
   const totalRows = $derived(Math.ceil(dispTotal / cols));
 
   // Grouped GRID views (icons/tiles): pixel-based segments - a header band per
-  // group followed by its rows of cells. List (column flow) keeps grouped order
-  // without headers. ponytail: headers in column flow if ever missed.
+  // group followed by its rows of cells.
   const HDR_H = 40;
   const ggrid = $derived.by(() => {
     if (!v.grid || v.flow === "column" || app.groupKey === "none" || !app.groups.length)
@@ -93,8 +92,47 @@
     return { segs, height: y };
   });
 
+  // Grouped LIST view (column flow): groups laid out left-to-right, each with a
+  // header on top and its items flowing top-to-bottom in columns beneath it.
+  const glist = $derived.by(() => {
+    if (!v.grid || v.flow !== "column" || app.groupKey === "none" || !app.groups.length)
+      return null;
+    const ipcG = Math.max(1, Math.floor((viewH - HDR_H) / v.rowH));
+    let x = 0;
+    const segs = app.groups.map((g) => {
+      const open = !collapsedGroups.has(g.label);
+      const colsN = open ? Math.ceil(g.count / ipcG) : 0;
+      const xStart = x;
+      x += Math.max(colsN, 1) * v.cellW + 24; // collapsed groups keep a header-wide slot
+      return { g, open, colsN, xStart };
+    });
+    return { segs, width: x, ipcG };
+  });
+
+  function segOf<T extends { g: Group }>(segs: T[], i: number): T {
+    let lo = 0,
+      hi = segs.length - 1,
+      k = 0;
+    while (lo <= hi) {
+      const m = (lo + hi) >> 1;
+      if (segs[m].g.start <= i) {
+        k = m;
+        lo = m + 1;
+      } else hi = m - 1;
+    }
+    return segs[k];
+  }
+
   /** Absolute canvas position of entry i in a grid view (group-aware). */
   function cellPos(i: number): { x: number; y: number } {
+    if (glist) {
+      const s = segOf(glist.segs, i);
+      const local = i - s.g.start;
+      return {
+        x: s.xStart + 8 + Math.floor(local / glist.ipcG) * v.cellW,
+        y: HDR_H + (local % glist.ipcG) * v.rowH,
+      };
+    }
     if (ggrid) {
       const segs = ggrid.segs;
       let lo = 0,
@@ -159,6 +197,23 @@
   });
   const visible = $derived.by(() => {
     const out: number[] = [];
+    if (glist) {
+      const left = scrollLeft - 200;
+      const right = scrollLeft + gridW + 200;
+      for (const s of glist.segs) {
+        if (!s.open || s.colsN === 0) continue;
+        if (s.xStart + s.colsN * v.cellW < left || s.xStart > right) continue;
+        const cF = Math.max(0, Math.floor((left - s.xStart) / v.cellW));
+        const cL = Math.min(s.colsN - 1, Math.floor((right - s.xStart) / v.cellW));
+        for (let c = cF; c <= cL; c++) {
+          for (let r = 0; r < glist.ipcG; r++) {
+            const i = s.g.start + c * glist.ipcG + r;
+            if (i < s.g.start + s.g.count) out.push(i);
+          }
+        }
+      }
+      return out;
+    }
     if (ggrid) {
       const OV = 200; // px overscan
       const top = scrollTop - OV;
@@ -183,7 +238,7 @@
 
   // Entry-index span behind the visible display rows (identical when ungrouped).
   const entrySpan = $derived.by(() => {
-    if (ggrid) {
+    if (ggrid || glist) {
       return visible.length
         ? { first: visible[0], last: visible[visible.length - 1] + 1 }
         : { first: 0, last: 0 };
@@ -213,7 +268,7 @@
   });
   $effect(() => {
     hooks.gridCols = v.flow === "column" ? 1 : cols;
-    hooks.hStep = v.flow === "column" ? ipc : 1;
+    hooks.hStep = v.flow === "column" ? (glist ? glist.ipcG : ipc) : 1;
   });
 
   hooks.scrollTo = (px) => {
@@ -225,6 +280,17 @@
   hooks.getScroll = () => scroller?.scrollTop ?? 0;
   hooks.scrollToIndex = (i) => {
     if (!scroller) return;
+    if (glist) {
+      const s = glist.segs.find(({ g }) => i >= g.start && i < g.start + g.count);
+      if (!s) return;
+      const left = s.open
+        ? s.xStart + Math.floor((i - s.g.start) / glist.ipcG) * v.cellW
+        : s.xStart;
+      if (left < scroller.scrollLeft) scroller.scrollLeft = left;
+      else if (left + v.cellW > scroller.scrollLeft + gridW)
+        scroller.scrollLeft = left + v.cellW - gridW;
+      return;
+    }
     if (ggrid) {
       const s = ggrid.segs.find(({ g }) => i >= g.start && i < g.start + g.count);
       if (!s) return;
@@ -529,6 +595,21 @@
         const it = displayItem(d);
         if (!it.header && it.idx >= 0 && it.idx < app.total) sel.add(it.idx);
       }
+    } else if (glist) {
+      const rFirst = Math.max(0, Math.floor((m.y - HDR_H) / v.rowH));
+      const rLast = Math.min(glist.ipcG - 1, Math.floor((m.y + m.h - HDR_H) / v.rowH));
+      for (const s of glist.segs) {
+        if (!s.open || s.colsN === 0) continue;
+        const cFirst = Math.max(0, Math.floor((m.x - s.xStart - 8) / v.cellW));
+        const cLast = Math.min(s.colsN - 1, Math.floor((m.x + m.w - s.xStart - 8) / v.cellW));
+        if (cLast < 0 || cFirst > s.colsN - 1) continue;
+        for (let c = cFirst; c <= cLast; c++) {
+          for (let r = rFirst; r <= rLast; r++) {
+            const i = s.g.start + c * glist.ipcG + r;
+            if (i < s.g.start + s.g.count) sel.add(i);
+          }
+        }
+      }
     } else if (ggrid) {
       const cFirst = Math.max(0, Math.floor((m.x - 8) / v.cellW));
       const cLast = Math.min(cols - 1, Math.floor((m.x + m.w - 8) / v.cellW));
@@ -664,10 +745,29 @@
       class="canvas"
       style={ggrid
         ? `height:${ggrid.height}px`
-        : v.flow === "column"
-          ? `height:${ipc * v.rowH}px; width:${cols * v.cellW + 16}px`
-          : `height:${totalRows * v.rowH}px`}
+        : glist
+          ? `height:${glist.ipcG * v.rowH + HDR_H}px; width:${glist.width + 16}px`
+          : v.flow === "column"
+            ? `height:${ipc * v.rowH}px; width:${cols * v.cellW + 16}px`
+            : `height:${totalRows * v.rowH}px`}
     >
+      {#if glist}
+        {#each glist.segs as s (s.g.label)}
+          {#if s.xStart + Math.max(s.colsN, 1) * v.cellW > scrollLeft - 200 && s.xStart < scrollLeft + gridW + 200}
+            <div
+              class="grouphdr listhdr"
+              style="transform: translateX({s.xStart + 8}px); width:{Math.max(s.colsN, 1) * v.cellW - 16}px; height:{HDR_H}px"
+              role="button"
+              tabindex="-1"
+              onmousedown={() => toggleGroup(s.g.label)}
+            >
+              <span class="glyph gchev">{collapsedGroups.has(s.g.label) ? "" : ""}</span>
+              <span class="ghlabel">{s.g.label}</span>
+              <span class="ghcount">({s.g.count})</span>
+            </div>
+          {/if}
+        {/each}
+      {/if}
       {#if ggrid}
         {#each ggrid.segs as s (s.g.label)}
           {#if s.headerTop + HDR_H > scrollTop - 200 && s.headerTop < scrollTop + viewH + 200}
@@ -1010,6 +1110,10 @@
     gap: 10px;
     padding: 0 8px;
     border-radius: 4px;
+  }
+  .grouphdr.listhdr {
+    left: 0;
+    right: auto;
   }
   .grouphdr:hover {
     background: var(--hover);
