@@ -621,7 +621,7 @@ async fn show_properties_path(
 /// Real shell icon for an arbitrary path (nav pane, Home tiles, drive tiles).
 #[tauri::command]
 async fn path_thumb(path: String, size: i32) -> Option<String> {
-    tauri::async_runtime::spawn_blocking(move || icons::thumbnail(&path, size))
+    tauri::async_runtime::spawn_blocking(move || icons::shell_icon_png(&path, size))
         .await
         .unwrap_or(None)
 }
@@ -684,12 +684,30 @@ fn drives() -> Vec<drives::Drive> {
 
 #[tauri::command]
 fn special_dirs() -> Vec<(String, String)> {
+    use windows::Win32::UI::Shell::{
+        FOLDERID_Desktop, FOLDERID_Documents, FOLDERID_Downloads, FOLDERID_Music,
+        FOLDERID_Pictures, FOLDERID_Videos, SHGetKnownFolderPath, KF_FLAG_DEFAULT,
+    };
     let profile = std::env::var("USERPROFILE").unwrap_or_default();
-    ["Desktop", "Documents", "Downloads", "Pictures", "Music", "Videos"]
-        .iter()
-        .map(|n| (n.to_string(), format!("{profile}\\{n}")))
-        .filter(|(_, p)| std::path::Path::new(p).is_dir())
-        .collect()
+    // Real known-folder paths (OneDrive redirection etc.), USERPROFILE join fallback.
+    [
+        ("Desktop", &FOLDERID_Desktop),
+        ("Documents", &FOLDERID_Documents),
+        ("Downloads", &FOLDERID_Downloads),
+        ("Pictures", &FOLDERID_Pictures),
+        ("Music", &FOLDERID_Music),
+        ("Videos", &FOLDERID_Videos),
+    ]
+    .iter()
+    .map(|(n, id)| {
+        let path = unsafe { SHGetKnownFolderPath(*id, KF_FLAG_DEFAULT, None) }
+            .ok()
+            .and_then(|p| unsafe { p.to_string() }.ok())
+            .unwrap_or_else(|| format!("{profile}\\{n}"));
+        (n.to_string(), path)
+    })
+    .filter(|(_, p)| std::path::Path::new(p).is_dir())
+    .collect()
 }
 
 #[tauri::command]

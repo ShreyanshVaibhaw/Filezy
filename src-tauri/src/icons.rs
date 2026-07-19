@@ -56,16 +56,32 @@ pub fn path_icon(path: &str) -> Option<String> {
 /// Explorer-quality thumbnail/large icon via IShellItemImageFactory (images get real
 /// picture thumbnails, everything else gets its high-res icon).
 pub fn thumbnail(path: &str, size: i32) -> Option<String> {
+    image_of(path, size, false)
+}
+
+/// Force the ICON (never a thumbnail): special-folder icons (Desktop, Documents,
+/// OneDrive overlays) and drive icons for the app chrome.
+pub fn shell_icon_png(path: &str, size: i32) -> Option<String> {
+    image_of(path, size, true)
+}
+
+fn image_of(path: &str, size: i32, icon_only: bool) -> Option<String> {
     use windows::Win32::Foundation::SIZE;
     use windows::Win32::UI::Shell::{
-        IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_BIGGERSIZEOK,
+        IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF, SIIGBF_BIGGERSIZEOK,
+        SIIGBF_ICONONLY,
     };
     COM_INIT.with(|_| {});
     unsafe {
         let wpath = wide(path);
         let factory: IShellItemImageFactory =
             SHCreateItemFromParsingName(PCWSTR(wpath.as_ptr()), None).ok()?;
-        let hbm = factory.GetImage(SIZE { cx: size, cy: size }, SIIGBF_BIGGERSIZEOK).ok()?;
+        let flags = if icon_only {
+            SIIGBF(SIIGBF_BIGGERSIZEOK.0 | SIIGBF_ICONONLY.0)
+        } else {
+            SIIGBF_BIGGERSIZEOK
+        };
+        let hbm = factory.GetImage(SIZE { cx: size, cy: size }, flags).ok()?;
 
         let hdc = GetDC(None);
         let mut header = BITMAPINFOHEADER {
