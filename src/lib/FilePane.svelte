@@ -74,6 +74,51 @@
   const dispTotal = $derived(gview ? gview.total : app.total);
   const totalRows = $derived(Math.ceil(dispTotal / cols));
 
+  // Grouped GRID views (icons/tiles): pixel-based segments - a header band per
+  // group followed by its rows of cells. List (column flow) keeps grouped order
+  // without headers. ponytail: headers in column flow if ever missed.
+  const HDR_H = 40;
+  const ggrid = $derived.by(() => {
+    if (!v.grid || v.flow === "column" || app.groupKey === "none" || !app.groups.length)
+      return null;
+    let y = 0;
+    const segs = app.groups.map((g) => {
+      const open = !collapsedGroups.has(g.label);
+      const rowsN = open ? Math.ceil(g.count / cols) : 0;
+      const headerTop = y;
+      const cellsTop = headerTop + HDR_H;
+      y = cellsTop + rowsN * v.rowH + (open ? 6 : 0);
+      return { g, open, rowsN, headerTop, cellsTop };
+    });
+    return { segs, height: y };
+  });
+
+  /** Absolute canvas position of entry i in a grid view (group-aware). */
+  function cellPos(i: number): { x: number; y: number } {
+    if (ggrid) {
+      const segs = ggrid.segs;
+      let lo = 0,
+        hi = segs.length - 1,
+        k = 0;
+      while (lo <= hi) {
+        const m = (lo + hi) >> 1;
+        if (segs[m].g.start <= i) {
+          k = m;
+          lo = m + 1;
+        } else hi = m - 1;
+      }
+      const s = segs[k];
+      const local = i - s.g.start;
+      return {
+        x: 8 + (local % cols) * v.cellW,
+        y: s.cellsTop + Math.floor(local / cols) * v.rowH,
+      };
+    }
+    const r = v.flow === "column" ? i % ipc : Math.floor(i / cols);
+    const c = v.flow === "column" ? Math.floor(i / ipc) : i % cols;
+    return { x: 8 + c * v.cellW, y: r * v.rowH };
+  }
+
   /** Map a display row to a group header or an entry index. */
   function displayItem(d: number): { header?: Group; idx: number } {
     const gv = gview;
@@ -114,12 +159,35 @@
   });
   const visible = $derived.by(() => {
     const out: number[] = [];
+    if (ggrid) {
+      const OV = 200; // px overscan
+      const top = scrollTop - OV;
+      const bot = scrollTop + viewH + OV;
+      for (const s of ggrid.segs) {
+        if (!s.open || s.rowsN === 0) continue;
+        if (s.cellsTop + s.rowsN * v.rowH < top || s.cellsTop > bot) continue;
+        const rF = Math.max(0, Math.floor((top - s.cellsTop) / v.rowH));
+        const rL = Math.min(s.rowsN - 1, Math.floor((bot - s.cellsTop) / v.rowH));
+        for (let r = rF; r <= rL; r++) {
+          for (let c = 0; c < cols; c++) {
+            const i = s.g.start + r * cols + c;
+            if (i < s.g.start + s.g.count) out.push(i);
+          }
+        }
+      }
+      return out;
+    }
     for (let i = range.first; i < range.last; i++) out.push(i);
     return out;
   });
 
   // Entry-index span behind the visible display rows (identical when ungrouped).
   const entrySpan = $derived.by(() => {
+    if (ggrid) {
+      return visible.length
+        ? { first: visible[0], last: visible[visible.length - 1] + 1 }
+        : { first: 0, last: 0 };
+    }
     if (!gview) return range;
     let min = Number.MAX_SAFE_INTEGER,
       max = -1;
@@ -157,6 +225,15 @@
   hooks.getScroll = () => scroller?.scrollTop ?? 0;
   hooks.scrollToIndex = (i) => {
     if (!scroller) return;
+    if (ggrid) {
+      const s = ggrid.segs.find(({ g }) => i >= g.start && i < g.start + g.count);
+      if (!s) return;
+      const top = s.open ? s.cellsTop + Math.floor((i - s.g.start) / cols) * v.rowH : s.headerTop;
+      const h = s.open ? v.rowH : HDR_H;
+      if (top < scroller.scrollTop) scroller.scrollTop = top;
+      else if (top + h > scroller.scrollTop + viewH) scroller.scrollTop = top + h - viewH;
+      return;
+    }
     if (v.flow === "column") {
       const left = Math.floor(i / ipc) * v.cellW;
       if (left < scroller.scrollLeft) scroller.scrollLeft = left;
@@ -452,6 +529,20 @@
         const it = displayItem(d);
         if (!it.header && it.idx >= 0 && it.idx < app.total) sel.add(it.idx);
       }
+    } else if (ggrid) {
+      const cFirst = Math.max(0, Math.floor((m.x - 8) / v.cellW));
+      const cLast = Math.min(cols - 1, Math.floor((m.x + m.w - 8) / v.cellW));
+      for (const s of ggrid.segs) {
+        if (!s.open || s.rowsN === 0) continue;
+        const rFirst = Math.max(0, Math.floor((m.y - s.cellsTop) / v.rowH));
+        const rLast = Math.min(s.rowsN - 1, Math.floor((m.y + m.h - s.cellsTop) / v.rowH));
+        for (let r = rFirst; r <= rLast; r++) {
+          for (let c = cFirst; c <= cLast; c++) {
+            const i = s.g.start + r * cols + c;
+            if (i < s.g.start + s.g.count) sel.add(i);
+          }
+        }
+      }
     } else {
       const cellW = v.cellW;
       const rFirst = Math.max(0, Math.floor(m.y / v.rowH));
@@ -571,10 +662,29 @@
     {/if}
     <div
       class="canvas"
-      style={v.flow === "column"
-        ? `height:${ipc * v.rowH}px; width:${cols * v.cellW + 16}px`
-        : `height:${totalRows * v.rowH}px`}
+      style={ggrid
+        ? `height:${ggrid.height}px`
+        : v.flow === "column"
+          ? `height:${ipc * v.rowH}px; width:${cols * v.cellW + 16}px`
+          : `height:${totalRows * v.rowH}px`}
     >
+      {#if ggrid}
+        {#each ggrid.segs as s (s.g.label)}
+          {#if s.headerTop + HDR_H > scrollTop - 200 && s.headerTop < scrollTop + viewH + 200}
+            <div
+              class="grouphdr"
+              style="transform: translateY({s.headerTop}px); height:{HDR_H}px"
+              role="button"
+              tabindex="-1"
+              onmousedown={() => toggleGroup(s.g.label)}
+            >
+              <span class="glyph gchev">{collapsedGroups.has(s.g.label) ? "" : ""}</span>
+              <span class="ghlabel">{s.g.label}</span>
+              <span class="ghcount">({s.g.count})</span>
+            </div>
+          {/if}
+        {/each}
+      {/if}
       {#each visible as d (app.version + ":" + app.view + ":" + d)}
         {@const item = displayItem(d)}
         {@const i = item.idx}
@@ -639,8 +749,7 @@
             {/if}
           </div>
         {:else}
-          {@const r = v.flow === "column" ? i % ipc : Math.floor(i / cols)}
-          {@const c = v.flow === "column" ? Math.floor(i / ipc) : i % cols}
+          {@const pos = cellPos(i)}
           <div
             class="gcell"
             class:vert={v.vertical}
@@ -648,7 +757,7 @@
             class:selected={isSelected(i)}
             class:drophover={dropIdx === i}
             data-idx={i}
-            style="transform: translate({8 + c * v.cellW}px, {r * v.rowH}px); width:{v.cellW - 6}px; height:{v.rowH - 6}px"
+            style="transform: translate({pos.x}px, {pos.y}px); width:{v.cellW - 6}px; height:{v.rowH - 6}px"
             onmousedown={(ev) => { if (e) { rowMouseDown(i, ev); armDrag(ev); } }}
             ondblclick={() => e && app.renaming !== i && openEntry(i)}
             oncontextmenu={(ev) => e && onContext(ev, i)}
