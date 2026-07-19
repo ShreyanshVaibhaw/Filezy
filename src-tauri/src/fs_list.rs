@@ -63,12 +63,15 @@ pub fn list(dir: &str) -> Result<Vec<Entry>, String> {
             let ft = ((data.ftLastWriteTime.dwHighDateTime as u64) << 32)
                 | data.ftLastWriteTime.dwLowDateTime as u64;
             let modified = ft.saturating_sub(FILETIME_UNIX_EPOCH) / 10_000; // ms since unix epoch
+            let ct = ((data.ftCreationTime.dwHighDateTime as u64) << 32)
+                | data.ftCreationTime.dwLowDateTime as u64;
+            let created = ct.saturating_sub(FILETIME_UNIX_EPOCH) / 10_000;
             let ext = if is_dir {
                 String::new()
             } else {
                 name.rsplit_once('.').map(|(_, e)| e.to_lowercase()).unwrap_or_default()
             };
-            entries.push(Entry { name, is_dir, size, modified, ext, hidden, parent: None });
+            entries.push(Entry { name, is_dir, size, modified, created, ext, hidden, parent: None });
         }
         if unsafe { FindNextFileW(handle, &mut data) }.is_err() {
             break;

@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
     app, sel, sortBy, setGroup, refresh, copySel, paste, del, newFolder, startRename, toggleHidden,
-    THEMES, setTheme,
+    THEMES, setTheme, setView,
     selectAll, loadNewItems, newFile, newItems, extMeta,
   } from "./store.svelte";
 
@@ -31,6 +31,11 @@
     ["modified", "Date modified"],
     ["type", "Type"],
     ["size", "Size"],
+    ["created", "Date created"],
+    ["author", "Authors"],
+    ["category", "Categories"],
+    ["tags", "Tags"],
+    ["title", "Title"],
   ] as const;
 </script>
 
@@ -131,7 +136,7 @@
       {/each}
     {:else if openMenu === "view"}
       {#each [["icons_xl", "Extra large icons"], ["icons_l", "Large icons"], ["icons_m", "Medium icons"], ["icons_s", "Small icons"], ["list", "List"], ["details", "Details"], ["tiles", "Tiles"]] as [vkey, vlabel] (vkey)}
-        <button class="menu-item" onclick={() => { openMenu = ""; app.view = vkey; }}>
+        <button class="menu-item" onclick={() => { openMenu = ""; setView(vkey); }}>
           <span class="check">{app.view === vkey ? "●" : ""}</span> {vlabel}
         </button>
       {/each}

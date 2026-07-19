@@ -6,6 +6,7 @@ export interface Entry {
   is_dir: boolean;
   size: number;
   modified: number;
+  created: number;
   ext: string;
   hidden: boolean;
   parent?: string; // set on search results
@@ -111,6 +112,65 @@ export const hooks: {
 
 const CHUNK = 256;
 const pending = new Set<string>();
+
+// ---- per-folder view/sort preferences (Explorer folder view settings) ----
+
+interface FolderPrefs {
+  s: string;
+  a: boolean;
+  v: string;
+  g: string;
+}
+const DEFAULT_PREFS: FolderPrefs = { s: "name", a: true, v: "details", g: "none" };
+let folderPrefs: Record<string, FolderPrefs> = JSON.parse(
+  localStorage.getItem("folderPrefs") ?? "{}",
+);
+// True while the current grouping came from date-sorting, not a user choice.
+let groupAuto = false;
+
+function prefKey(p: string): string {
+  return p.replace(/\\+$/, "").toLowerCase();
+}
+
+function savePrefs() {
+  if (!app.path || app.path.startsWith("::")) return;
+  // Auto date-grouping is derived from the sort, so it is stored as "none".
+  folderPrefs[prefKey(app.path)] = {
+    s: app.sortKey,
+    a: app.asc,
+    v: app.view,
+    g: groupAuto ? "none" : app.groupKey,
+  };
+  const keys = Object.keys(folderPrefs);
+  // ponytail: drop the oldest insertion when the map grows unbounded
+  if (keys.length > 500) delete folderPrefs[keys[0]];
+  localStorage.setItem("folderPrefs", JSON.stringify(folderPrefs));
+}
+
+function isDateKey(k: string): boolean {
+  return k === "modified" || k === "created";
+}
+
+/// Apply a folder's saved prefs (or the fixed defaults) to the app state.
+/// Returns without touching the backend; callers list/group afterwards.
+function applyPrefs(p: string) {
+  const prefs = folderPrefs[prefKey(p)] ?? DEFAULT_PREFS;
+  app.sortKey = prefs.s;
+  app.asc = prefs.a;
+  app.view = prefs.v;
+  groupAuto = false;
+  app.groupKey = prefs.g;
+  // Explorer behavior: date-sorted folders group by date automatically.
+  if (prefs.g === "none" && isDateKey(prefs.s)) {
+    app.groupKey = prefs.s;
+    groupAuto = true;
+  }
+}
+
+export function setView(v: string) {
+  app.view = v;
+  savePrefs();
+}
 
 // Virtual locations (no backend listing).
 export const THIS_PC = "::ThisPC";
@@ -233,6 +293,7 @@ export async function navigate(p: string, push = true) {
     return;
   }
   try {
+    applyPrefs(p);
     const res = await invoke<{ path: string; total: number }>("open_dir", {
       path: p,
       sortKey: app.sortKey,
@@ -362,17 +423,32 @@ export async function sortBy(key: string, asc?: boolean) {
   }
   app.sortKey = key;
   app.asc = asc;
-  if (app.groupKey !== "none") {
-    // Explorer keeps grouping and re-sorts within each group.
-    app.groups = await invoke<Group[]>("set_group", {
-      key: app.groupKey,
-      offsetMin: tzOffsetMin(),
-      sortKey: key,
-      asc,
-    });
-  } else {
-    await invoke("set_sort", { sortKey: key, asc });
+  // Explorer behavior: sorting by a date field groups by its date buckets;
+  // moving to a non-date sort drops that automatic grouping again.
+  if (isDateKey(key) && (app.groupKey === "none" || groupAuto)) {
+    app.groupKey = key;
+    groupAuto = true;
+  } else if (groupAuto && !isDateKey(key)) {
+    app.groupKey = "none";
+    groupAuto = false;
   }
+  try {
+    if (app.groupKey !== "none") {
+      // Explorer keeps grouping and re-sorts within each group.
+      app.groups = await invoke<Group[]>("set_group", {
+        key: app.groupKey,
+        offsetMin: tzOffsetMin(),
+        sortKey: key,
+        asc,
+      });
+    } else {
+      app.groups = [];
+      await invoke("set_sort", { sortKey: key, asc });
+    }
+  } catch (e) {
+    app.status = String(e); // e.g. property sort over the size cap
+  }
+  savePrefs();
   app.version++;
   rows.length = 0;
   rows.length = app.total;
@@ -387,6 +463,7 @@ function tzOffsetMin(): number {
 
 export async function setGroup(key: string) {
   app.groupKey = key;
+  groupAuto = false;
   collapsedGroups.clear();
   app.groups =
     key === "none"
@@ -397,7 +474,10 @@ export async function setGroup(key: string) {
           sortKey: app.sortKey,
           asc: app.asc,
         });
-  if (key === "none") await invoke("set_sort", { sortKey: app.sortKey, asc: app.asc });
+  if (key === "none") {
+    await invoke("set_sort", { sortKey: app.sortKey, asc: app.asc }).catch((e) => (app.status = String(e)));
+  }
+  savePrefs();
   app.version++;
   rows.length = 0;
   rows.length = app.total;
@@ -676,6 +756,6 @@ if (import.meta.env.DEV) {
     app, sel, rows, tabs, navigate, refresh, back, forward, up, sortBy, setFilter,
     selectAll, clearSel, selCount, openEntry, newFolder, del, copySel, paste,
     startRename, commitRename, refreshClipState, newTab, switchTab, closeTab,
-    setGroup, collapsedGroups, loadNewItems, newFile, newItems, invoke, setTheme,
+    setGroup, collapsedGroups, loadNewItems, newFile, newItems, invoke, setTheme, setView,
   };
 }

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { app, sel, fmtSizeAuto, selIndices } from "./store.svelte";
+  import { app, sel, fmtSizeAuto, selIndices, setView } from "./store.svelte";
 
   let selSize = $state(0);
   const selN = $derived(app.allSelected ? app.total : sel.size);
@@ -32,10 +32,10 @@
     <span class="stat error">{app.status}</span>
   {/if}
   <div class="fill"></div>
-  <button class="viewtoggle" class:active={app.view === "details"} title="Details view" onclick={() => (app.view = "details")}>
+  <button class="viewtoggle" class:active={app.view === "details"} title="Details view" onclick={() => setView("details")}>
     <span class="glyph">&#xE9D5;</span>
   </button>
-  <button class="viewtoggle" class:active={app.view === "icons_l"} title="Large icons view" onclick={() => (app.view = "icons_l")}>
+  <button class="viewtoggle" class:active={app.view === "icons_l"} title="Large icons view" onclick={() => setView("icons_l")}>
     <span class="glyph">&#xE8A9;</span>
   </button>
 </div>

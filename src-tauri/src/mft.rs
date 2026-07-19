@@ -224,17 +224,17 @@ pub fn search(app: &AppHandle, root: &str, query: &str, gen: u64) -> bool {
         let Some(dir) = index.dir_of(node.parent) else { continue };
         let full = format!("{dir}\\{}", node.name);
         // USN records omit size/mtime; stat the match to fill them (matches are bounded).
-        let (size, modified) = std::fs::metadata(&full)
+        let (size, modified, created) = std::fs::metadata(&full)
             .map(|m| {
-                let mtime = m
-                    .modified()
-                    .ok()
-                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_millis() as u64)
-                    .unwrap_or(0);
-                (m.len(), mtime)
+                let ms = |t: std::io::Result<std::time::SystemTime>| {
+                    t.ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_millis() as u64)
+                        .unwrap_or(0)
+                };
+                (m.len(), ms(m.modified()), ms(m.created()))
             })
-            .unwrap_or((0, 0));
+            .unwrap_or((0, 0, 0));
         let ext = if node.is_dir {
             String::new()
         } else {
@@ -245,6 +245,7 @@ pub fn search(app: &AppHandle, root: &str, query: &str, gen: u64) -> bool {
             is_dir: node.is_dir,
             size,
             modified,
+            created,
             ext,
             hidden: node.hidden,
             parent: Some(dir),

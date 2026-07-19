@@ -8,6 +8,7 @@ mod mft;
 mod newmenu;
 mod ops;
 mod pins;
+mod props;
 mod recent;
 mod search;
 mod shellmenu;
@@ -24,6 +25,7 @@ pub struct Entry {
     pub is_dir: bool,
     pub size: u64,
     pub modified: u64,
+    pub created: u64,
     pub ext: String,
     pub hidden: bool,
     /// Set only on search results: the directory containing this entry.
@@ -84,6 +86,7 @@ fn entry_cmp(a: &Entry, b: &Entry, key: &str, asc: bool) -> std::cmp::Ordering {
     b.is_dir.cmp(&a.is_dir).then_with(|| {
         let ord = match key {
             "modified" => a.modified.cmp(&b.modified),
+            "created" => a.created.cmp(&b.created),
             "size" => a.size.cmp(&b.size),
             "type" => cmp_name(&a.ext, &b.ext).then_with(|| cmp_name(&a.name, &b.name)),
             _ => cmp_name(&a.name, &b.name),
@@ -94,6 +97,58 @@ fn entry_cmp(a: &Entry, b: &Entry, key: &str, asc: bool) -> std::cmp::Ordering {
 
 fn sort_entries(entries: &mut [Entry], key: &str, asc: bool) {
     entries.sort_by(|a, b| entry_cmp(a, b, key, asc));
+}
+
+/// Sort by a document property (Author/Title/Tags/Category): read the property
+/// for every entry (cached), folders first, blanks last within the direction.
+fn sort_by_prop(entries: &mut [Entry], dir: &str, p: props::Prop, asc: bool) {
+    use std::cmp::Ordering;
+    let base = dir.trim_end_matches('\\');
+    let keyed: Vec<Option<String>> = entries
+        .iter()
+        .map(|e| {
+            if e.is_dir {
+                return None;
+            }
+            let parent = e.parent.as_deref().unwrap_or(base);
+            props::prop_of(&format!("{}\\{}", parent.trim_end_matches('\\'), e.name), p)
+        })
+        .collect();
+    let mut idx: Vec<usize> = (0..entries.len()).collect();
+    idx.sort_by(|&x, &y| {
+        let (a, b) = (&entries[x], &entries[y]);
+        b.is_dir.cmp(&a.is_dir).then_with(|| {
+            let ord = match (&keyed[x], &keyed[y]) {
+                (Some(va), Some(vb)) => cmp_name(va, vb),
+                (Some(_), None) => Ordering::Less,
+                (None, Some(_)) => Ordering::Greater,
+                (None, None) => Ordering::Equal,
+            }
+            .then_with(|| cmp_name(&a.name, &b.name));
+            if asc { ord } else { ord.reverse() }
+        })
+    });
+    let mut sorted = Vec::with_capacity(entries.len());
+    for i in &idx {
+        sorted.push(entries[*i].clone());
+    }
+    entries.clone_from_slice(&sorted);
+}
+
+/// Property sorts stat every file; cap so a 100k system folder can't hang the sort.
+const PROP_SORT_MAX: usize = 20_000;
+
+fn apply_sort(listing: &mut Listing, key: &str, asc: bool) -> Result<(), String> {
+    if let Some(p) = props::key_of(key) {
+        if listing.entries.len() > PROP_SORT_MAX {
+            return Err("Too many items to sort by document properties.".into());
+        }
+        let dir = listing.path.clone();
+        sort_by_prop(&mut listing.entries, &dir, p, asc);
+    } else {
+        sort_entries(&mut listing.entries, key, asc);
+    }
+    Ok(())
 }
 
 /// Explorer-style natural sort: case-insensitive, digit runs compare numerically
@@ -152,10 +207,13 @@ fn open_dir(
     if !show_hidden {
         entries.retain(|e| !e.hidden);
     }
-    sort_entries(&mut entries, &sort_key, asc);
     let total = entries.len();
-    *state.listing.lock().unwrap() =
-        Listing { path: norm.clone(), entries, view: None, filter: String::new() };
+    let mut listing = Listing { path: norm.clone(), entries, view: None, filter: String::new() };
+    // A failing property sort (too many items) falls back to name order.
+    if apply_sort(&mut listing, &sort_key, asc).is_err() {
+        sort_entries(&mut listing.entries, "name", true);
+    }
+    *state.listing.lock().unwrap() = listing;
     watch::watch(&app, &state, &norm);
     Ok(OpenResult { path: norm, total })
 }
@@ -175,6 +233,20 @@ pub struct Group {
     pub count: usize,
 }
 
+/// Days-since-unix-epoch -> (year, month, day). Howard Hinnant's civil_from_days.
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = (if mp < 10 { mp + 3 } else { mp - 9 }) as u32;
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
 /// (rank, label) bucket for an entry under a grouping key, matching Explorer's buckets.
 /// `tz_off_ms` shifts UTC timestamps to the user's local time so date buckets fall on
 /// calendar-day boundaries (passed from the frontend, DST-correct for the current date).
@@ -190,18 +262,34 @@ fn group_bucket(e: &Entry, key: &str, now_ms: u64, tz_off_ms: i64) -> (u32, Stri
                 _ => (4, "Other".into()),
             }
         }
-        "modified" => {
+        "modified" | "created" => {
             const DAY: i64 = 86_400_000;
+            let stamp = if key == "created" { e.created } else { e.modified };
             let now_day = (now_ms as i64 + tz_off_ms).div_euclid(DAY);
-            let mod_day = (e.modified as i64 + tz_off_ms).div_euclid(DAY);
-            let days = (now_day - mod_day).max(0);
-            match days {
-                0 => (0, "Today".into()),
-                1 => (1, "Yesterday".into()),
-                2..=6 => (2, "Earlier this week".into()),
-                7..=29 => (3, "Earlier this month".into()),
-                30..=364 => (4, "Earlier this year".into()),
-                _ => (5, "A long time ago".into()),
+            let mod_day = (stamp as i64 + tz_off_ms).div_euclid(DAY).min(now_day);
+            // Explorer's buckets: Today, Yesterday, Earlier this week, Last week,
+            // Earlier this month, Last month, Earlier this year, A long time ago.
+            let weekday = (now_day + 4).rem_euclid(7); // 0 = Sunday (1970-01-01 was a Thursday)
+            let week_start = now_day - (weekday + 6) % 7; // weeks start Monday
+            let (ny, nm, _) = civil_from_days(now_day);
+            let (my, mm, _) = civil_from_days(mod_day);
+            let last_month = if nm == 1 { (ny - 1, 12) } else { (ny, nm - 1) };
+            if mod_day == now_day {
+                (0, "Today".into())
+            } else if mod_day == now_day - 1 {
+                (1, "Yesterday".into())
+            } else if mod_day >= week_start {
+                (2, "Earlier this week".into())
+            } else if mod_day >= week_start - 7 {
+                (3, "Last week".into())
+            } else if (my, mm) == (ny, nm) {
+                (4, "Earlier this month".into())
+            } else if (my, mm) == last_month {
+                (5, "Last month".into())
+            } else if my == ny {
+                (6, "Earlier this year".into())
+            } else {
+                (7, "A long time ago".into())
             }
         }
         "size" => {
@@ -276,11 +364,13 @@ fn set_group(
     groups
 }
 
+// Async: property sorts read a property per file and must not run on the main thread.
 #[tauri::command]
-fn set_sort(sort_key: String, asc: bool, state: State<'_, AppState>) {
+async fn set_sort(sort_key: String, asc: bool, state: State<'_, AppState>) -> Result<(), String> {
     let mut listing = state.listing.lock().unwrap();
-    sort_entries(&mut listing.entries, &sort_key, asc);
+    apply_sort(&mut listing, &sort_key, asc)?;
     listing.rebuild_view();
+    Ok(())
 }
 
 #[tauri::command]
