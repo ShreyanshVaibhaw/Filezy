@@ -22,8 +22,25 @@
   let ctx = $state<{ x: number; y: number; path: string } | null>(null);
   let ctxItems = $state<ShellItem[] | null>(null);
   let openSub = $state(-1);
+  let ctxSeq = 0;
 
-  async function onContext(ev: MouseEvent, path: string) {
+  // Rendered natively and instantly; shell duplicates of these are dropped.
+  const NATIVE_VERBS = new Set(["open", "opennewwindow", "properties", "pintohome", "unpinfromhome"]);
+  function filterExtras(items: ShellItem[]): ShellItem[] {
+    const out: ShellItem[] = [];
+    for (const it of items) {
+      if (it.sep) {
+        if (out.length && !out[out.length - 1].sep) out.push(it);
+        continue;
+      }
+      if (NATIVE_VERBS.has((it.verb ?? "").toLowerCase())) continue;
+      out.push(it);
+    }
+    while (out.length && out[out.length - 1].sep) out.pop();
+    return out;
+  }
+
+  function onContext(ev: MouseEvent, path: string) {
     ev.preventDefault();
     ctx = {
       x: Math.min(ev.clientX, window.innerWidth - 300),
@@ -32,12 +49,16 @@
     };
     ctxItems = null;
     openSub = -1;
-    try {
-      // dir "" = absolute-path item: the drive itself, not its contents.
-      ctxItems = await invoke<ShellItem[]>("shell_menu", { dir: "", names: [path] });
-    } catch {
-      ctxItems = [];
-    }
+    const seq = ++ctxSeq;
+    // dir "" = absolute-path item: the drive itself, not its contents.
+    // Native entries show instantly; extension entries stream in when ready.
+    invoke<ShellItem[]>("shell_menu", { dir: "", names: [path] })
+      .then((items) => {
+        if (seq === ctxSeq && ctx) ctxItems = filterExtras(items);
+      })
+      .catch(() => {
+        if (seq === ctxSeq) ctxItems = [];
+      });
   }
 
   async function shellInvoke(it: ShellItem) {
@@ -84,9 +105,20 @@
 
 {#if ctx}
   <div class="menu drivemenu" style="left:{ctx.x}px; top:{ctx.y}px">
+    <button class="menu-item" onclick={() => { const p = ctx!.path; ctx = null; navigate(p); }}>
+      <span class="glyph">&#xE8E5;</span> Open
+    </button>
+    <button class="menu-item" onclick={() => { const p = ctx!.path; ctx = null; pinAdd(p); }}>
+      <span class="glyph">&#xE840;</span> Pin to Quick access
+    </button>
+    <button class="menu-item" onclick={() => { const p = ctx!.path; ctx = null; invoke("show_properties_path", { path: p }).catch((e) => (app.status = String(e))); }}>
+      <span class="glyph">&#xE90F;</span> Properties
+    </button>
     {#if ctxItems === null}
+      <div class="menu-sep"></div>
       <div class="loading">Loading…</div>
-    {:else}
+    {:else if ctxItems.length}
+      <div class="menu-sep"></div>
       <div class="dscroll">
         {#each ctxItems as it, i (i)}
           {#if it.sep}

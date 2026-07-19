@@ -4,7 +4,7 @@
     openEntry, sortBy, hooks, commitRename, copySel, paste, del, newFolder, refresh,
     startRename, selectAll, isSelected, clearSel, selIndices, refreshClipState,
     requestThumb, thumbOf, entryPath, collapsedGroups, loadNewItems, newFile, newItems,
-    extMeta, pinAdd, pinRemove, displayName, newTab,
+    extMeta, pinAdd, pinRemove, isPinned, displayName, newTab,
   } from "./store.svelte";
   import type { Entry } from "./store.svelte";
   import { invoke } from "@tauri-apps/api/core";
@@ -209,10 +209,37 @@
 
   let ctx = $state<{ x: number; y: number; onRow: boolean } | null>(null);
   let ctxItems = $state<ShellItem[] | null>(null);
-  let shellFailed = $state(false);
   let openSub = $state(-1);
+  let ctxSeq = 0;
 
-  async function onContext(ev: MouseEvent, i: number | null) {
+  // Verbs we render natively and instantly; the shell copy of them is dropped
+  // so only extension entries (7-Zip, Open with X, ...) stream in below.
+  const NATIVE_VERBS = new Set([
+    "open", "opennewwindow", "cut", "copy", "paste", "delete", "rename",
+    "properties", "openas", "pintohome", "unpinfromhome", "copyaspath",
+  ]);
+  function filterExtras(items: ShellItem[]): ShellItem[] {
+    const out: ShellItem[] = [];
+    for (const it of items) {
+      if (it.sep) {
+        if (out.length && !out[out.length - 1].sep) out.push(it);
+        continue;
+      }
+      if (NATIVE_VERBS.has((it.verb ?? "").toLowerCase())) continue;
+      out.push(it);
+    }
+    while (out.length && out[out.length - 1].sep) out.pop();
+    return out;
+  }
+
+  function firstSel(): number | undefined {
+    if (app.allSelected) return app.total ? 0 : undefined;
+    let min = -1;
+    for (const k of sel) if (min < 0 || k < min) min = k;
+    return min < 0 ? undefined : min;
+  }
+
+  function onContext(ev: MouseEvent, i: number | null) {
     ev.preventDefault();
     if (i !== null && !isSelected(i)) {
       clearSel();
@@ -223,19 +250,19 @@
     const y = Math.min(ev.clientY, window.innerHeight - 420);
     ctx = { x, y, onRow: i !== null };
     ctxItems = null;
-    shellFailed = false;
     openSub = -1;
+    const seq = ++ctxSeq;
     if (i === null) {
       // Blank area: our own Win11-style menu (shell background verbs need Explorer's view host).
-      shellFailed = true;
       ctxItems = [];
       blankNewOpen = false;
       loadNewItems();
       return;
     }
-    // Build the shell menu against the folder the items actually live in. Search
-    // results carry their own parent, so app.path would be the wrong directory;
-    // key off the right-clicked item's folder and only include items from it.
+    // The native menu shows instantly; shell-extension entries stream in when
+    // QueryContextMenu (which loads every extension DLL) finishes.
+    // Build against the folder the items actually live in: search results carry
+    // their own parent, so app.path would be the wrong directory.
     const anchor = rows[i];
     const dir = anchor?.parent ?? app.path;
     // ponytail: shell menu built for at most 100 items; huge selections get the first 100
@@ -244,12 +271,13 @@
       .filter((e) => e && (e.parent ?? app.path) === dir)
       .slice(0, 100)
       .map((e) => e!.name);
-    try {
-      ctxItems = await invoke<ShellItem[]>("shell_menu", { dir, names });
-    } catch {
-      shellFailed = true;
-      ctxItems = [];
-    }
+    invoke<ShellItem[]>("shell_menu", { dir, names })
+      .then((items) => {
+        if (seq === ctxSeq && ctx) ctxItems = filterExtras(items);
+      })
+      .catch(() => {
+        if (seq === ctxSeq) ctxItems = [];
+      });
   }
 
   // Standard verbs run through our native implementations; only third-party
@@ -691,17 +719,71 @@
       </div>
       <div class="menu-sep"></div>
     {/if}
-    {#if ctxItems === null}
-      <div class="menuload">Loading…</div>
-    {:else if shellFailed || ctxItems.length === 0}
-      {#if ctx.onRow}
-        <button class="menu-item" onclick={() => { const i = app.allSelected ? 0 : [...sel][0]; ctx = null; if (i !== undefined) openEntry(i); }}>
-          <span class="glyph">&#xE8E5;</span> Open
+    {#if ctx.onRow}
+      {@const fi = firstSel()}
+      {@const fe = fi !== undefined ? rows[fi] : undefined}
+      <button class="menu-item" onclick={() => { ctx = null; if (fi !== undefined) openEntry(fi); }}>
+        <span class="glyph">&#xE8E5;</span> Open
+      </button>
+      {#if fe && !fe.is_dir}
+        <button class="menu-item" onclick={() => { ctx = null; invoke("open_with", { index: fi }).catch((e) => (app.status = String(e))); }}>
+          <span class="glyph">&#xE7AC;</span> Open with
         </button>
-      {:else}
-        <button class="menu-item" onclick={() => { ctx = null; refresh(); }}>
-          <span class="glyph">&#xE72C;</span> Refresh
-        </button>
+      {/if}
+      {#if fe?.is_dir}
+        {#if isPinned(entryPath(fe))}
+          <button class="menu-item" onclick={() => { ctx = null; pinRemove(entryPath(fe)); }}>
+            <span class="glyph">&#xE77A;</span> Unpin from Quick access
+          </button>
+        {:else}
+          <button class="menu-item" onclick={() => { ctx = null; pinAdd(entryPath(fe)); }}>
+            <span class="glyph">&#xE840;</span> Pin to Quick access
+          </button>
+        {/if}
+      {/if}
+      <button class="menu-item" onclick={() => { ctx = null; invoke("copy_as_path", { indices: selIndices() }).then(refreshClipState).catch((e) => (app.status = String(e))); }}>
+        <span class="glyph">&#xE8C8;</span> Copy as path
+      </button>
+      <button class="menu-item" onclick={() => { ctx = null; if (fi !== undefined) invoke("show_properties", { index: fi }).catch((e) => (app.status = String(e))); }}>
+        <span class="glyph">&#xE90F;</span> Properties
+      </button>
+      {#if ctxItems === null}
+        <div class="menu-sep"></div>
+        <div class="menuload">Loading…</div>
+      {:else if ctxItems.length}
+        <div class="menu-sep"></div>
+        <div class="scrollwrap">
+          {#each ctxItems as it, idx (idx)}
+            {#if it.sep}
+              <div class="menu-sep"></div>
+            {:else}
+              <div class="subwrap" role="none" onmouseenter={() => (openSub = it.sub ? idx : -1)}>
+                <button class="menu-item wide" disabled={it.disabled} onclick={() => !it.sub && shellInvoke(it)}>
+                  <span class="mtext">{it.text}</span>
+                  {#if it.sub}<span class="glyph subchev">&#xE76C;</span>{/if}
+                </button>
+                {#if it.sub && openSub === idx}
+                  <div class="menu submenu">
+                    {#each it.sub as s, sidx (sidx)}
+                      {#if s.sep}
+                        <div class="menu-sep"></div>
+                      {:else}
+                        <button class="menu-item wide" disabled={s.disabled} onclick={() => shellInvoke(s)}>
+                          <span class="mtext">{s.text}</span>
+                        </button>
+                      {/if}
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          {/each}
+        </div>
+      {/if}
+    {:else}
+      <button class="menu-item" onclick={() => { ctx = null; refresh(); }}>
+        <span class="glyph">&#xE72C;</span> Refresh
+      </button>
         <button class="menu-item" disabled={!app.canPaste} onclick={() => { ctx = null; paste(); }}>
           <span class="glyph">&#xE77F;</span> Paste
         </button>
@@ -741,35 +823,6 @@
         <button class="menu-item" onclick={() => { ctx = null; selectAll(); }}>
           <span class="glyph">&#xE8B3;</span> Select all
         </button>
-      {/if}
-    {:else}
-      <div class="scrollwrap">
-        {#each ctxItems as it, idx (idx)}
-          {#if it.sep}
-            <div class="menu-sep"></div>
-          {:else}
-            <div class="subwrap" role="none" onmouseenter={() => (openSub = it.sub ? idx : -1)}>
-              <button class="menu-item wide" disabled={it.disabled} onclick={() => !it.sub && shellInvoke(it)}>
-                <span class="mtext">{it.text}</span>
-                {#if it.sub}<span class="glyph subchev">&#xE76C;</span>{/if}
-              </button>
-              {#if it.sub && openSub === idx}
-                <div class="menu submenu">
-                  {#each it.sub as s, sidx (sidx)}
-                    {#if s.sep}
-                      <div class="menu-sep"></div>
-                    {:else}
-                      <button class="menu-item wide" disabled={s.disabled} onclick={() => shellInvoke(s)}>
-                        <span class="mtext">{s.text}</span>
-                      </button>
-                    {/if}
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          {/if}
-        {/each}
-      </div>
     {/if}
   </div>
 {/if}

@@ -23,6 +23,9 @@
     app.home = await invoke<string>("home_dir");
     loadPins();
     newTab(); // lands on the Home page, like Explorer
+    // Warm the shell-extension DLLs in the background so the first real
+    // right-click doesn't pay the multi-second cold QueryContextMenu cost.
+    setTimeout(() => invoke("shell_menu", { dir: app.home, names: [] }).catch(() => {}), 2500);
     invoke<typeof app.drives>("drives").then((d) => (app.drives = d));
     invoke<typeof app.specials>("special_dirs").then((s) => (app.specials = s));
     const un1 = await listen<string>("fs-changed", (ev) => {

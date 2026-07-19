@@ -95,6 +95,23 @@ impl Default for ShellMenu {
                 };
                 match req {
                     Req::Build { dir, names, reply } => {
+                        // Coalesce: builds cost seconds (extension DLLs); when the user
+                        // right-clicks again before the last build finished, only the
+                        // newest request matters. Non-build requests pulled out while
+                        // draining are handled right after.
+                        let (mut dir, mut names, mut reply) = (dir, names, reply);
+                        let mut deferred = Vec::new();
+                        while let Ok(next) = rx.try_recv() {
+                            match next {
+                                Req::Build { dir: d, names: n, reply: r } => {
+                                    let _ = reply.send(Err("superseded".into()));
+                                    dir = d;
+                                    names = n;
+                                    reply = r;
+                                }
+                                other => deferred.push(other),
+                            }
+                        }
                         if let Some((_, hmenu)) = current.take() {
                             unsafe { let _ = DestroyMenu(hmenu); }
                         }
@@ -106,19 +123,26 @@ impl Default for ShellMenu {
                             }
                             Err(e) => reply.send(Err(e)),
                         };
-                    }
-                    Req::Invoke { id, reply } => {
-                        let res = match &current {
-                            Some((icm, _)) => {
-                                // Canonical verb first (survives shell-extension hooks), offset fallback.
-                                match verb_of(icm, id) {
-                                    Some(verb) => invoke_verb(icm, &verb).or_else(|_| invoke_offset(icm, id)),
-                                    None => invoke_offset(icm, id),
+                        for other in deferred {
+                            match other {
+                                Req::Build { .. } => unreachable!(),
+                                Req::Invoke { id, reply } => {
+                                    let _ = reply.send(do_invoke(&current, id));
+                                }
+                                Req::Properties { path, reply } => {
+                                    let _ = reply.send(show_properties(&path));
+                                }
+                                Req::Drag { paths, reply } => {
+                                    let _ = reply.send(do_drag(&paths));
+                                }
+                                Req::FileOp { op, reply } => {
+                                    let _ = reply.send(file_op(&op));
                                 }
                             }
-                            None => Err("no active menu".into()),
-                        };
-                        let _ = reply.send(res);
+                        }
+                    }
+                    Req::Invoke { id, reply } => {
+                        let _ = reply.send(do_invoke(&current, id));
                     }
                     Req::Properties { path, reply } => {
                         let _ = reply.send(show_properties(&path));
@@ -226,6 +250,17 @@ fn file_op(op: &FileOp) -> Result<(), String> {
             Err(e) if e.code().0 == USER_CANCELLED => Ok(()),
             Err(e) => Err(format!("{} ({:#x})", e.message(), e.code().0)),
         }
+    }
+}
+
+/// Canonical verb first (survives shell-extension hooks), offset fallback.
+fn do_invoke(current: &Option<(IContextMenu, HMENU)>, id: u32) -> Result<(), String> {
+    match current {
+        Some((icm, _)) => match verb_of(icm, id) {
+            Some(verb) => invoke_verb(icm, &verb).or_else(|_| invoke_offset(icm, id)),
+            None => invoke_offset(icm, id),
+        },
+        None => Err("no active menu".into()),
     }
 }
 
