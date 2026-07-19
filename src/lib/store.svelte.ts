@@ -64,6 +64,7 @@ export const app = $state({
   drives: [] as Drive[],
   specials: [] as [string, string][],
   pins: [] as string[],
+  onedrive: "",
 });
 
 export const tabs = $state<Tab[]>([]);

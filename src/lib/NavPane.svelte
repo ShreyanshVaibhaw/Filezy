@@ -39,6 +39,7 @@
     return app.path.replace(/\\$/, "").toLowerCase() === p.replace(/\\$/, "").toLowerCase();
   }
 
+  const folderGlyph = String.fromCharCode(0xe8b7);
   let pinCtx = $state<{ x: number; y: number; path: string } | null>(null);
   function onPinContext(ev: MouseEvent, path: string) {
     ev.preventDefault();
@@ -120,6 +121,11 @@
       <span class="glyph pin">&#xE840;</span>
     </button>
   {/each}
+
+  {#if app.onedrive}
+    <div class="sep"></div>
+    {@render treeNode(app.onedrive, "OneDrive", folderGlyph, 0)}
+  {/if}
 
   <div class="sep"></div>
 

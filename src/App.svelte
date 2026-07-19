@@ -28,6 +28,7 @@
     setTimeout(() => invoke("shell_menu", { dir: app.home, names: [] }).catch(() => {}), 2500);
     invoke<typeof app.drives>("drives").then((d) => (app.drives = d));
     invoke<typeof app.specials>("special_dirs").then((s) => (app.specials = s));
+    invoke<string | null>("onedrive_dir").then((p) => (app.onedrive = p ?? ""));
     const un1 = await listen<string>("fs-changed", (ev) => {
       if (ev.payload === app.path) refresh();
     });
@@ -53,6 +54,12 @@
       return;
     }
     if (ev.altKey && (k === "p" || k === "P")) { app.previewPane = !app.previewPane; ev.preventDefault(); return; }
+    if (ev.altKey && k === "Enter") {
+      const first = selIndices()[0];
+      if (first !== undefined) invoke("show_properties", { index: first }).catch(() => {});
+      ev.preventDefault();
+      return;
+    }
     if (ev.altKey && k === "ArrowLeft") { back(); ev.preventDefault(); }
     else if (ev.altKey && k === "ArrowRight") { forward(); ev.preventDefault(); }
     else if ((ev.altKey && k === "ArrowUp") || k === "Backspace") { up(); ev.preventDefault(); }

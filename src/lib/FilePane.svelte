@@ -1032,6 +1032,10 @@
         <button class="menu-item" onclick={() => { ctx = null; selectAll(); }}>
           <span class="glyph">&#xE8B3;</span> Select all
         </button>
+        <div class="menu-sep"></div>
+        <button class="menu-item" onclick={() => { ctx = null; invoke("open_terminal", { dir: app.path }).catch((e) => (app.status = String(e))); }}>
+          <span class="glyph">&#xE756;</span> Open in Terminal
+        </button>
     {/if}
   </div>
 {/if}

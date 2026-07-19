@@ -715,6 +715,29 @@ fn home_dir() -> String {
     std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".into())
 }
 
+/// The user's OneDrive root, if any (nav-pane section like Explorer's).
+#[tauri::command]
+fn onedrive_dir() -> Option<String> {
+    let p = std::env::var("OneDrive").ok()?;
+    std::path::Path::new(&p).is_dir().then_some(p)
+}
+
+/// Open a terminal in `dir`: Windows Terminal when available, else cmd.
+#[tauri::command]
+fn open_terminal(dir: String) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+    if std::process::Command::new("wt.exe").arg("-d").arg(&dir).spawn().is_ok() {
+        return Ok(());
+    }
+    std::process::Command::new("cmd.exe")
+        .args(["/K", "cd", "/d", &dir])
+        .creation_flags(CREATE_NEW_CONSOLE)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 /// Visible subdirectory names of a folder, for the nav-pane tree (lazy expansion).
 #[tauri::command]
 fn list_dirs(path: String) -> Vec<String> {
@@ -763,6 +786,8 @@ fn main() {
             get_pins,
             set_pins,
             path_thumb,
+            onedrive_dir,
+            open_terminal,
             ext_meta,
             path_icon,
             thumb,
