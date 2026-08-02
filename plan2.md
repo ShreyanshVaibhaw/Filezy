@@ -1,6 +1,10 @@
 # Plan 2: Settings
 
-Status (2026-08-02): all seven phases done.
+Status (2026-08-02): all seven phases done, plus in-app updates (Phase 8, added after the fact).
+Phase 8: `tauri-plugin-updater` + `tauri-plugin-process`, signed with a minisign key kept in `%USERPROFILE%\.tauri` (never in the repo; losing it means no installed copy can be updated again).
+The endpoint is `releases/latest/download/latest.json`, so each release carries only its own manifest, built by `npm run release:manifest`.
+Settings > About gained a Check for updates row (idle / checking / found / downloading with a progress bar / ready / error) and an `is_installed` command gates it: a copy run from a folder is told it cannot update itself, since the NSIS bundle drops an `uninstall.exe` beside an installed copy and only an installed copy can be replaced.
+Constraint to resolve: the GitHub repo is private, so release assets need authentication and the updater cannot fetch them. Making the repo public (or hosting `latest.json` and the installer somewhere public) is what turns this on; no code change is needed either way.
 Phase 7: About card with version and a two-click "Reset all settings"; virtual pages get their own tab icons (house / PC / gear, and the bin's real shell icon) instead of the folder icon every tab used to show; Escape leaves the Settings page; cross-window settings sync through the `storage` event.
 Cross-window sync verified for real with two processes: window 1 picked Catppuccin Mocha and window 2's captured pixels went from #272727 to #181825 on their own. Note that a second window started by Ctrl+N inherits the CDP port argument and cannot claim it, so window 2 is only observable by screenshot, not over CDP.
 Phase 6: shell extension entries. A master switch that also skips the `shell_menu` call and the startup warm-up, plus a learned list of every extension entry seen so far (normalized label, since `ShellItem.id` is rebuilt per right-click), each with its own switch, and "Forget this list". E2E on this machine: 20 entries learned from one right-click, WinRAR switched off vanished from the real menu and stayed gone across a reload, master switch off left only the four native entries with no loading row.

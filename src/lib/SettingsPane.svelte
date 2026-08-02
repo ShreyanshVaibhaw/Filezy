@@ -6,6 +6,7 @@
     menuOn, setMenuOn, resetMenu, setExtraOn, forgetExtras, resetAll,
   } from "./settings.svelte";
   import { MENU_GROUPS } from "./menuitems";
+  import { updater, checkForUpdates, downloadAndInstall, restartApp } from "./updater.svelte";
   import { toggleHidden, clearFolderPrefs, folderPrefsCount, HOME, THIS_PC } from "./store.svelte";
   import Toggle from "./Toggle.svelte";
 
@@ -299,6 +300,51 @@
           </div>
           <span class="version">{version ? "Version " + version : ""}</span>
         </div>
+
+        <div class="row">
+          <span class="glyph rowicon">&#xE896;</span>
+          <div class="rowlabel">
+            <div class="rowname">Updates</div>
+            <div class="rowdesc">
+              {#if !updater.installed}
+                This copy runs from a folder rather than an installation, so it cannot update itself.
+              {:else if updater.phase === "checking"}
+                Checking for updates…
+              {:else if updater.phase === "none"}
+                Filezy is up to date
+              {:else if updater.phase === "found"}
+                Version {updater.version} is available
+              {:else if updater.phase === "downloading"}
+                Downloading… {updater.percent}%
+              {:else if updater.phase === "ready"}
+                Update installed. Restart to finish.
+              {:else if updater.phase === "error"}
+                {updater.message}
+              {:else}
+                Updates are downloaded and installed from inside the app
+              {/if}
+            </div>
+          </div>
+          {#if updater.phase === "found"}
+            <button class="btn accentbtn" onclick={downloadAndInstall}>Download and install</button>
+          {:else if updater.phase === "ready"}
+            <button class="btn accentbtn" onclick={restartApp}>Restart now</button>
+          {:else}
+            <button
+              class="btn"
+              disabled={!updater.installed || updater.phase === "checking" || updater.phase === "downloading"}
+              onclick={checkForUpdates}
+            >
+              Check for updates
+            </button>
+          {/if}
+        </div>
+        {#if updater.phase === "downloading"}
+          <div class="progress"><span style="width:{updater.percent}%"></span></div>
+        {/if}
+        {#if updater.phase === "found" && updater.notes}
+          <div class="rowdesc notes">{updater.notes}</div>
+        {/if}
         <div class="row">
           <span class="glyph rowicon">&#xE777;</span>
           <div class="rowlabel">
@@ -580,5 +626,27 @@
   .btn.danger {
     border-color: var(--close-hover);
     color: var(--close-hover);
+  }
+  .btn.accentbtn {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--menu-bg);
+  }
+  .progress {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--surface);
+    overflow: hidden;
+    margin: 0 0 4px;
+  }
+  .progress span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    transition: width 120ms linear;
+  }
+  .notes {
+    margin: 0 0 8px 2px;
+    white-space: pre-wrap;
   }
 </style>

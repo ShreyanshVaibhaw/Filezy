@@ -8,10 +8,13 @@
     "build": "vite build",
     "preview": "vite preview",
     "check:menuids": "node scripts/check-menuids.mjs",
+    "release:manifest": "node scripts/make-latest-json.mjs",
     "tauri": "tauri"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2"
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "^2.10.1"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5",

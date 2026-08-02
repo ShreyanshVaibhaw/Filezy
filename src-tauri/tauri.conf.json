@@ -27,6 +27,18 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
-    "icon": ["icons/icon.ico"]
+    "icon": ["icons/icon.ico"],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ2NTc1MjVDOEM0RkEyNzkKUldSNW9rK01YRkpYUnZFbkpRc0xVMTVuc0QycE9haG40N1Z0TGVZcDFBMWNmVVQ1ei8yOFJ0R1cK",
+      "endpoints": [
+        "https://github.com/ShreyanshVaibhaw/Filezy/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

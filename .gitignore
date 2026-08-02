@@ -2,3 +2,7 @@
 /dist
 /src-tauri/target
 *.log
+# Built per release and attached to the GitHub release, never committed.
+/latest.json
+# Update signing keys live in %USERPROFILE%\.tauri and must never be committed.
+*.key

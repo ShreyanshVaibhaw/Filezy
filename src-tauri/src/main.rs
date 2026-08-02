@@ -775,6 +775,18 @@ fn new_window() -> Result<(), String> {
     std::process::Command::new(exe).spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
+/// True when this copy was put here by the installer rather than run in place.
+/// The NSIS bundle always drops an uninstall.exe beside the app, and only an
+/// installed copy can be replaced by an update.
+#[tauri::command]
+fn is_installed() -> bool {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join("uninstall.exe")))
+        .map(|p| p.exists())
+        .unwrap_or(false)
+}
+
 /// Open a terminal in `dir`: Windows Terminal when available, else cmd.
 #[tauri::command]
 fn open_terminal(dir: String) -> Result<(), String> {
@@ -807,6 +819,8 @@ fn list_dirs(path: String) -> Vec<String> {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(AppState::default())
         .manage(shellmenu::ShellMenu::default())
         .invoke_handler(tauri::generate_handler![
@@ -842,6 +856,7 @@ fn main() {
             onedrive_dir,
             open_terminal,
             new_window,
+            is_installed,
             delete_paths,
             move_path,
             recycle_list,
