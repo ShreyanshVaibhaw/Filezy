@@ -15,7 +15,7 @@
   import {
     app, sel, tabs, navigate, refresh, back, forward, up, del, copySel, paste,
     newFolder, selectAll, startRename, openEntry, hooks, selCount, selIndices, clearSel,
-    newTab, closeTab, switchTab, searchUpdate, loadPins, reopenClosedTab,
+    newTab, closeTab, switchTab, searchUpdate, loadPins, reopenClosedTab, undo,
     THIS_PC, HOME, RECYCLE,
   } from "./lib/store.svelte";
 
@@ -72,6 +72,7 @@
     else if (ev.ctrlKey && (k === "c" || k === "C")) copySel(false);
     else if (ev.ctrlKey && (k === "x" || k === "X")) copySel(true);
     else if (ev.ctrlKey && (k === "v" || k === "V")) paste();
+    else if (ev.ctrlKey && (k === "z" || k === "Z")) { undo(); ev.preventDefault(); }
     else if (ev.ctrlKey && (k === "l" || k === "L")) { addressEdit?.focus(); ev.preventDefault(); }
     else if (k === "F5") { refresh(); ev.preventDefault(); }
     else if (k === "F2") startRename();

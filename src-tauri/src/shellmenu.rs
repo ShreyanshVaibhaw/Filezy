@@ -55,12 +55,20 @@ pub enum FileOp {
     Delete { paths: Vec<String> },
 }
 
+/// What an IFileOperation actually did, per item - fuels Ctrl+Z undo.
+#[derive(Clone, serde::Serialize)]
+pub struct OpRecord {
+    pub kind: String, // "copy" | "move" | "rename" | "delete"
+    pub src: String,
+    pub dst: String,
+}
+
 enum Req {
     Build { dir: String, names: Vec<String>, reply: mpsc::Sender<Result<Vec<Item>, String>> },
     Invoke { id: u32, reply: mpsc::Sender<Result<(), String>> },
     Properties { path: String, reply: mpsc::Sender<Result<(), String>> },
     Drag { paths: Vec<String>, reply: mpsc::Sender<Result<(), String>> },
-    FileOp { op: FileOp, reply: mpsc::Sender<Result<(), String>> },
+    FileOp { op: FileOp, reply: mpsc::Sender<Result<Vec<OpRecord>, String>> },
 }
 
 #[derive(Clone)]
@@ -181,10 +189,193 @@ impl ShellMenu {
         self.tx.send(Req::Drag { paths, reply: rtx }).map_err(|e| e.to_string())?;
         rrx.recv().map_err(|e| e.to_string())?
     }
-    pub fn file_op(&self, op: FileOp) -> Result<(), String> {
+    pub fn file_op(&self, op: FileOp) -> Result<Vec<OpRecord>, String> {
         let (rtx, rrx) = mpsc::channel();
         self.tx.send(Req::FileOp { op, reply: rtx }).map_err(|e| e.to_string())?;
         rrx.recv().map_err(|e| e.to_string())?
+    }
+}
+
+/// Progress sink: collects the real source/destination of every performed item.
+#[windows::core::implement(windows::Win32::UI::Shell::IFileOperationProgressSink)]
+struct OpSink(std::sync::Arc<std::sync::Mutex<Vec<OpRecord>>>);
+
+fn sink_path(it: windows_core::Ref<windows::Win32::UI::Shell::IShellItem>) -> String {
+    use windows::Win32::UI::Shell::SIGDN_FILESYSPATH;
+    let Some(item) = it.as_ref() else { return String::new() };
+    unsafe {
+        item.GetDisplayName(SIGDN_FILESYSPATH)
+            .ok()
+            .map(|p| {
+                let s = p.to_string().unwrap_or_default();
+                windows::Win32::System::Com::CoTaskMemFree(Some(p.0 as *const _));
+                s
+            })
+            .unwrap_or_default()
+    }
+}
+
+/// Fallback destination path: dest folder + explicit name (or the source's basename).
+fn sink_dest(
+    dest: windows_core::Ref<windows::Win32::UI::Shell::IShellItem>,
+    name: &windows_core::PCWSTR,
+    src_path: &str,
+) -> String {
+    let folder = sink_path(dest);
+    if folder.is_empty() {
+        return String::new();
+    }
+    let leaf = unsafe {
+        if !name.is_null() && !name.as_wide().is_empty() {
+            name.to_string().unwrap_or_default()
+        } else {
+            // No rename: keep the source's file name.
+            src_path.rsplit(['\\', '/']).next().unwrap_or_default().to_string()
+        }
+    };
+    if leaf.is_empty() {
+        return String::new();
+    }
+    format!("{}\\{}", folder.trim_end_matches('\\'), leaf)
+}
+
+impl OpSink {
+    fn push(&self, kind: &str, src: String, dst: String, hr: windows_core::HRESULT) {
+        if hr.is_ok() && (!src.is_empty() || !dst.is_empty()) {
+            self.0.lock().unwrap().push(OpRecord { kind: kind.into(), src, dst });
+        }
+    }
+}
+
+#[allow(non_snake_case)]
+impl windows::Win32::UI::Shell::IFileOperationProgressSink_Impl for OpSink_Impl {
+    fn StartOperations(&self) -> windows_core::Result<()> {
+        Ok(())
+    }
+    fn FinishOperations(&self, _hr: windows_core::HRESULT) -> windows_core::Result<()> {
+        Ok(())
+    }
+    fn PreRenameItem(
+        &self,
+        _f: u32,
+        _i: windows_core::Ref<windows::Win32::UI::Shell::IShellItem>,
+        _n: &windows_core::PCWSTR,
+    ) -> windows_core::Result<()> {
+        Ok(())
+    }
+    fn PostRenameItem(
+        &self,
+        _f: u32,
+        item: windows_core::Ref<windows::Win32::UI::Shell::IShellItem>,
+        _n: &windows_core::PCWSTR,
+        hr: windows_core::HRESULT,
+        new_item: windows_core::Ref<windows::Win32::UI::Shell::IShellItem>,
+    ) -> windows_core::Result<()> {
+        self.push("rename", sink_path(item), sink_path(new_item), hr);
+        Ok(())
+    }
+    fn PreMoveItem(
+        &self,
+        _f: u32,
+        _i: windows_core::Ref<windows::Win32::UI::Shell::IShellItem>,
+        _d: windows_core::Ref<windows::Win32::UI::Shell::IShellItem>,
+        _n: &windows_core::PCWSTR,
+    ) -> windows_core::Result<()> {
+        Ok(())
+    }
+    fn PostMoveItem(
+        &self,
+        _f: u32,
+        item: windows_core::Ref<windows::Win32::UI::Shell::IShellItem>,
+        dest: windows_core::Ref<windows::Win32::UI::Shell::IShellItem>,
+        name: &windows_core::PCWSTR,
+        hr: windows_core::HRESULT,
+        new_item: windows_core::Ref<windows::Win32::UI::Shell::IShellItem>,
+    ) -> windows_core::Result<()> {
+        let src = sink_path(item);
+        let dst = match sink_path(new_item) {
+            s if !s.is_empty() => s,
+            _ => sink_dest(dest, name, &src),
+        };
+        self.push("move", src, dst, hr);
+        Ok(())
+    }
+    fn PreCopyItem(
+        &self,
+        _f: u32,
+        _i: windows_core::Ref<windows::Win32::UI::Shell::IShellItem>,
+        _d: windows_core::Ref<windows::Win32::UI::Shell::IShellItem>,
+        _n: &windows_core::PCWSTR,
+    ) -> windows_core::Result<()> {
+        Ok(())
+    }
+    fn PostCopyItem(
+        &self,
+        _f: u32,
+        item: windows_core::Ref<windows::Win32::UI::Shell::IShellItem>,
+        dest: windows_core::Ref<windows::Win32::UI::Shell::IShellItem>,
+        name: &windows_core::PCWSTR,
+        hr: windows_core::HRESULT,
+        new_item: windows_core::Ref<windows::Win32::UI::Shell::IShellItem>,
+    ) -> windows_core::Result<()> {
+        // Prefer the shell's new item; fall back to dest-folder\name (the shell
+        // often passes a null psiNewlyCreated).
+        let src = sink_path(item);
+        let dst = match sink_path(new_item) {
+            s if !s.is_empty() => s,
+            _ => sink_dest(dest, name, &src),
+        };
+        self.push("copy", src, dst, hr);
+        Ok(())
+    }
+    fn PreDeleteItem(
+        &self,
+        _f: u32,
+        _i: windows_core::Ref<windows::Win32::UI::Shell::IShellItem>,
+    ) -> windows_core::Result<()> {
+        Ok(())
+    }
+    fn PostDeleteItem(
+        &self,
+        _f: u32,
+        item: windows_core::Ref<windows::Win32::UI::Shell::IShellItem>,
+        hr: windows_core::HRESULT,
+        _new_item: windows_core::Ref<windows::Win32::UI::Shell::IShellItem>,
+    ) -> windows_core::Result<()> {
+        self.push("delete", sink_path(item), String::new(), hr);
+        Ok(())
+    }
+    fn PreNewItem(
+        &self,
+        _f: u32,
+        _d: windows_core::Ref<windows::Win32::UI::Shell::IShellItem>,
+        _n: &windows_core::PCWSTR,
+    ) -> windows_core::Result<()> {
+        Ok(())
+    }
+    fn PostNewItem(
+        &self,
+        _f: u32,
+        _d: windows_core::Ref<windows::Win32::UI::Shell::IShellItem>,
+        _n: &windows_core::PCWSTR,
+        _t: &windows_core::PCWSTR,
+        _attrs: u32,
+        _hr: windows_core::HRESULT,
+        _new_item: windows_core::Ref<windows::Win32::UI::Shell::IShellItem>,
+    ) -> windows_core::Result<()> {
+        Ok(())
+    }
+    fn UpdateProgress(&self, _total: u32, _sofar: u32) -> windows_core::Result<()> {
+        Ok(())
+    }
+    fn ResetTimer(&self) -> windows_core::Result<()> {
+        Ok(())
+    }
+    fn PauseTimer(&self) -> windows_core::Result<()> {
+        Ok(())
+    }
+    fn ResumeTimer(&self) -> windows_core::Result<()> {
+        Ok(())
     }
 }
 
@@ -192,7 +383,7 @@ impl ShellMenu {
 /// (Replace/Skip/Compare), recycle-bin delete, and undo registration.
 /// Must run on the pumped STA thread (the dialogs are COM UI).
 /// ponytail: one op at a time on this thread; a long paste queues later menu builds behind it
-fn file_op(op: &FileOp) -> Result<(), String> {
+fn file_op(op: &FileOp) -> Result<Vec<OpRecord>, String> {
     use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
     use windows::Win32::UI::Shell::{
         FileOperation, IFileOperation, IShellItem, SHCreateItemFromParsingName,
@@ -213,6 +404,11 @@ fn file_op(op: &FileOp) -> Result<(), String> {
     unsafe {
         let fo: IFileOperation = CoCreateInstance(&FileOperation, None, CLSCTX_INPROC_SERVER)
             .map_err(|e| e.message().to_string())?;
+        // Record what actually happens (real destination names) for undo.
+        let records = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink: windows::Win32::UI::Shell::IFileOperationProgressSink =
+            OpSink(records.clone()).into();
+        let cookie = fo.Advise(&sink).unwrap_or(0);
         match op {
             FileOp::Paste { srcs, dest, cut } => {
                 let dest_item = item(dest)?;
@@ -237,7 +433,14 @@ fn file_op(op: &FileOp) -> Result<(), String> {
                 }
             }
             FileOp::Delete { paths } => {
-                fo.SetOperationFlags(FOF_ALLOWUNDO).map_err(|e| e.message().to_string())?;
+                // FOF_NOCONFIRMATION: without an owner window the shell can't show
+                // its confirm dialog and would otherwise silently abort the delete.
+                // Recycle stays reversible (recycle bin + our Ctrl+Z), and
+                // FOFX_RECYCLEONDELETE forces recycle even for large files.
+                const FOF_NOCONFIRMATION: FILEOPERATION_FLAGS = FILEOPERATION_FLAGS(0x10);
+                const FOFX_RECYCLEONDELETE: FILEOPERATION_FLAGS = FILEOPERATION_FLAGS(0x0008_0000);
+                fo.SetOperationFlags(FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOFX_RECYCLEONDELETE)
+                    .map_err(|e| e.message().to_string())?;
                 for p in paths {
                     fo.DeleteItem(&item(p)?, None).map_err(|e| e.message().to_string())?;
                 }
@@ -245,9 +448,16 @@ fn file_op(op: &FileOp) -> Result<(), String> {
         }
         // COPYENGINE_E_USER_CANCELLED: Cancel in the progress dialog is not an error.
         const USER_CANCELLED: i32 = 0x8027_0000u32 as i32;
-        match fo.PerformOperations() {
-            Ok(()) => Ok(()),
-            Err(e) if e.code().0 == USER_CANCELLED => Ok(()),
+        let res = fo.PerformOperations();
+        if cookie != 0 {
+            let _ = fo.Unadvise(cookie);
+        }
+        match res {
+            // Cancelled mid-way still returns what DID happen, so it stays undoable.
+            Ok(()) => Ok(std::mem::take(&mut *records.lock().unwrap())),
+            Err(e) if e.code().0 == USER_CANCELLED => {
+                Ok(std::mem::take(&mut *records.lock().unwrap()))
+            }
             Err(e) => Err(format!("{} ({:#x})", e.message(), e.code().0)),
         }
     }

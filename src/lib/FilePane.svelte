@@ -4,9 +4,9 @@
     openEntry, sortBy, hooks, commitRename, copySel, paste, del, newFolder, refresh,
     startRename, selectAll, isSelected, clearSel, selIndices, refreshClipState,
     requestThumb, thumbOf, entryPath, collapsedGroups, loadNewItems, newFile, newItems,
-    extMeta, pinAdd, pinRemove, isPinned, displayName, newTab,
+    extMeta, pinAdd, pinRemove, isPinned, displayName, newTab, pushUndo,
   } from "./store.svelte";
-  import type { Entry } from "./store.svelte";
+  import type { Entry, OpRecord } from "./store.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { onMount } from "svelte";
@@ -680,7 +680,7 @@
     const e = idx >= 0 ? rows[idx] : undefined;
     const dest = e ? entryPath(e) : app.path;
     try {
-      await invoke("drop_paths", { paths, dest });
+      pushUndo(await invoke<OpRecord[]>("drop_paths", { paths, dest }));
     } catch (err) {
       app.status = String(err);
     }

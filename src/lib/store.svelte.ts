@@ -716,10 +716,52 @@ export async function copySel(cut = false) {
   refreshClipState();
 }
 
+// ---- undo (Ctrl+Z) ----
+// Each performed operation batch records what actually happened (real
+// destination names from the IFileOperation sink); undo inverts the batch.
+export interface OpRecord {
+  kind: string; // "copy" | "move" | "rename" | "delete" | "new"
+  src: string;
+  dst: string;
+}
+const undoStack: OpRecord[][] = [];
+export function pushUndo(records: OpRecord[]) {
+  if (!records.length) return;
+  undoStack.push(records);
+  if (undoStack.length > 20) undoStack.shift();
+}
+
+export async function undo() {
+  const recs = undoStack.pop();
+  if (!recs) {
+    app.status = "Nothing to undo";
+    return;
+  }
+  try {
+    // Deleted items come back from the recycle bin (matched by name).
+    const deleted = recs
+      .filter((r) => r.kind === "delete")
+      .map((r) => r.src.split("\\").pop()!)
+      .filter(Boolean);
+    if (deleted.length) await invoke("recycle_restore", { names: deleted });
+    // Created copies / New items go to the recycle bin (still recoverable).
+    const created = recs.filter((r) => r.kind === "copy" || r.kind === "new").map((r) => r.dst);
+    if (created.length) await invoke("delete_paths", { paths: created });
+    // Moves and renames go straight back.
+    for (const r of recs.filter((r) => r.kind === "move" || r.kind === "rename")) {
+      await invoke("move_path", { from: r.dst, to: r.src });
+    }
+    app.status = "Undone";
+  } catch (e) {
+    app.status = "Undo: " + String(e);
+  }
+  refresh();
+}
+
 export async function paste() {
   if (!app.canPaste) return;
   try {
-    await invoke("clip_paste", { dest: app.path });
+    pushUndo(await invoke<OpRecord[]>("clip_paste", { dest: app.path }));
   } catch (e) {
     app.status = String(e);
   }
@@ -729,7 +771,7 @@ export async function paste() {
 export async function del() {
   if (!selCount()) return;
   try {
-    await invoke("delete_items", { indices: selIndices() });
+    pushUndo(await invoke<OpRecord[]>("delete_items", { indices: selIndices() }));
   } catch (e) {
     app.status = String(e);
   }
@@ -739,6 +781,7 @@ export async function del() {
 export async function newFolder() {
   try {
     const name = await invoke<string>("create_folder", { dir: app.path });
+    pushUndo([{ kind: "new", src: "", dst: joinPath(app.path, name) }]);
     await refresh();
     const idx = await invoke<number | null>("find_index", { name });
     if (idx != null) {
@@ -775,6 +818,7 @@ export async function newFile(ext: string) {
   try {
     const name = await invoke<string | null>("create_new", { dir: app.path, ext });
     if (!name) return; // command-driven type: a wizard was launched instead
+    pushUndo([{ kind: "new", src: "", dst: joinPath(app.path, name) }]);
     await refresh();
     const idx = await invoke<number | null>("find_index", { name });
     if (idx != null) {
@@ -794,7 +838,9 @@ export async function commitRename(index: number, newName: string) {
   const e = rows[index];
   if (!e || !newName.trim() || newName === e.name) return;
   try {
+    const oldPath = entryPath(e);
     await invoke("rename_item", { index, newName });
+    pushUndo([{ kind: "rename", src: oldPath, dst: joinPath(e.parent ?? app.path, newName.trim()) }]);
     await refresh();
     const idx = await invoke<number | null>("find_index", { name: newName.trim() });
     if (idx != null) {
@@ -816,12 +862,13 @@ export function selectAll() {
   app.allSelected = true;
 }
 
-// Dev-only E2E hook: lets automated tests drive the app over CDP.
-if (import.meta.env.DEV) {
+// E2E hook: lets automated tests drive the app over CDP (harmless local debug affordance).
+{
   (globalThis as any).__e2e = {
     app, sel, rows, tabs, navigate, refresh, back, forward, up, sortBy, setFilter,
     selectAll, clearSel, selCount, openEntry, newFolder, del, copySel, paste,
     startRename, commitRename, refreshClipState, newTab, switchTab, closeTab,
     setGroup, collapsedGroups, loadNewItems, newFile, newItems, invoke, setTheme, setView,
+    undo, pushUndo,
   };
 }

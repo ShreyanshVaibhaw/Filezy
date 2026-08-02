@@ -433,11 +433,14 @@ fn clip_copy(indices: Vec<usize>, cut: bool, state: State<'_, AppState>) -> Resu
 }
 
 #[tauri::command]
-async fn clip_paste(dest: String, menu: State<'_, shellmenu::ShellMenu>) -> Result<(), String> {
-    let Some((paths, cut)) = clip::get_files() else { return Ok(()) };
+async fn clip_paste(
+    dest: String,
+    menu: State<'_, shellmenu::ShellMenu>,
+) -> Result<Vec<shellmenu::OpRecord>, String> {
+    let Some((paths, cut)) = clip::get_files() else { return Ok(vec![]) };
     let srcs: Vec<String> = paths.iter().map(|p| p.to_string_lossy().to_string()).collect();
     let menu = menu.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    let records = tauri::async_runtime::spawn_blocking(move || {
         menu.file_op(shellmenu::FileOp::Paste { srcs, dest, cut })
     })
     .await
@@ -445,7 +448,7 @@ async fn clip_paste(dest: String, menu: State<'_, shellmenu::ShellMenu>) -> Resu
     if cut {
         clip::clear(); // Explorer semantics: a cut can only be pasted once
     }
-    Ok(())
+    Ok(records)
 }
 
 #[tauri::command]
@@ -511,7 +514,7 @@ async fn drop_paths(
     paths: Vec<String>,
     dest: String,
     menu: State<'_, shellmenu::ShellMenu>,
-) -> Result<(), String> {
+) -> Result<Vec<shellmenu::OpRecord>, String> {
     let dest = fs_list::normalize(&dest)?;
     let dest_path = PathBuf::from(&dest);
     // Dropping items onto their own folder is a no-op, not a self-copy.
@@ -520,7 +523,7 @@ async fn drop_paths(
         .filter(|p| std::path::Path::new(p).parent() != Some(dest_path.as_path()))
         .collect();
     if srcs.is_empty() {
-        return Ok(());
+        return Ok(vec![]);
     }
     // Explorer drop semantics: same volume moves, cross volume copies;
     // Ctrl held forces a copy, Shift held forces a move.
@@ -556,7 +559,7 @@ async fn delete_items(
     indices: Vec<usize>,
     state: State<'_, AppState>,
     menu: State<'_, shellmenu::ShellMenu>,
-) -> Result<(), String> {
+) -> Result<Vec<shellmenu::OpRecord>, String> {
     let (_, paths) = selected_paths(&state, &indices);
     let paths: Vec<String> = paths.iter().map(|p| p.to_string_lossy().to_string()).collect();
     let menu = menu.inner().clone();
@@ -741,6 +744,30 @@ async fn recycle_empty() -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(recycle::empty).await.map_err(|e| e.to_string())?
 }
 
+/// Undo helper: delete created copies (to the recycle bin, so it's reversible).
+#[tauri::command]
+async fn delete_paths(
+    paths: Vec<String>,
+    menu: State<'_, shellmenu::ShellMenu>,
+) -> Result<(), String> {
+    let menu = menu.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        menu.file_op(shellmenu::FileOp::Delete { paths })
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    Ok(())
+}
+
+/// Undo helper: put a moved/renamed item back exactly where it was.
+#[tauri::command]
+fn move_path(from: String, to: String) -> Result<(), String> {
+    if std::path::Path::new(&to).exists() {
+        return Err("Can't undo: an item with the original name already exists.".into());
+    }
+    std::fs::rename(&from, &to).map_err(|e| e.to_string())
+}
+
 /// Ctrl+N: another instance of this app.
 #[tauri::command]
 fn new_window() -> Result<(), String> {
@@ -815,6 +842,8 @@ fn main() {
             onedrive_dir,
             open_terminal,
             new_window,
+            delete_paths,
+            move_path,
             recycle_list,
             recycle_restore,
             recycle_empty,
