@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { app, navigate, back, forward, up, refresh, setFilter, folderName, joinPath, THIS_PC, HOME, RECYCLE } from "./store.svelte";
+  import { app, navigate, back, forward, up, refresh, setFilter, folderName, joinPath, THIS_PC, HOME, RECYCLE, SETTINGS } from "./store.svelte";
 
   let editing = $state(false);
   let editValue = $state("");
@@ -18,6 +18,7 @@
     if (app.path === THIS_PC) return [{ name: "This PC", path: THIS_PC }];
     if (app.path === HOME) return [{ name: "Home", path: HOME }];
     if (app.path === RECYCLE) return [{ name: "Recycle Bin", path: RECYCLE }];
+    if (app.path === SETTINGS) return [{ name: "Settings", path: SETTINGS }];
     const parts = app.path.replace(/\\$/, "").split("\\");
     const out: { name: string; path: string }[] = [];
     let acc = "";

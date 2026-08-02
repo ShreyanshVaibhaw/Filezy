@@ -1,5 +1,6 @@
 <script lang="ts">
   import { app, navigate, folderName, pinRemove, shellIcon, THIS_PC, HOME, RECYCLE, RECYCLE_GUID } from "./store.svelte";
+  import { menuOn } from "./settings.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
 
@@ -160,7 +161,7 @@
   </button>
 </div>
 
-{#if pinCtx}
+{#if pinCtx && menuOn("nav.unpin")}
   <div class="menu" style="left:{pinCtx.x}px; top:{pinCtx.y}px">
     <button
       class="menu-item"

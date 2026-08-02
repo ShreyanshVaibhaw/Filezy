@@ -11,13 +11,15 @@
   import PreviewPane from "./lib/PreviewPane.svelte";
   import HomePane from "./lib/HomePane.svelte";
   import RecyclePane from "./lib/RecyclePane.svelte";
+  import SettingsPane from "./lib/SettingsPane.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
   import {
     app, sel, tabs, navigate, refresh, back, forward, up, del, copySel, paste,
     newFolder, selectAll, startRename, openEntry, hooks, selCount, selIndices, clearSel,
     newTab, closeTab, switchTab, searchUpdate, loadPins, reopenClosedTab, undo,
-    THIS_PC, HOME, RECYCLE,
+    THIS_PC, HOME, RECYCLE, SETTINGS,
   } from "./lib/store.svelte";
+  import { settings, setSetting } from "./lib/settings.svelte";
 
   let addressEdit: { focus: () => void } | undefined = $state();
 
@@ -27,7 +29,10 @@
     newTab(); // lands on the Home page, like Explorer
     // Warm the shell-extension DLLs in the background so the first real
     // right-click doesn't pay the multi-second cold QueryContextMenu cost.
-    setTimeout(() => invoke("shell_menu", { dir: app.home, names: [] }).catch(() => {}), 2500);
+    // Pointless when extension entries are switched off in Settings.
+    if (settings.shellExtras) {
+      setTimeout(() => invoke("shell_menu", { dir: app.home, names: [] }).catch(() => {}), 2500);
+    }
     invoke<typeof app.drives>("drives").then((d) => (app.drives = d));
     invoke<typeof app.specials>("special_dirs").then((s) => (app.specials = s));
     invoke<string | null>("onedrive_dir").then((p) => (app.onedrive = p ?? ""));
@@ -57,13 +62,14 @@
       ev.preventDefault();
       return;
     }
-    if (ev.altKey && (k === "p" || k === "P")) { app.previewPane = !app.previewPane; ev.preventDefault(); return; }
+    if (ev.altKey && (k === "p" || k === "P")) { setSetting("previewPane", !settings.previewPane); ev.preventDefault(); return; }
     if (ev.altKey && k === "Enter") {
       const first = selIndices()[0];
       if (first !== undefined) invoke("show_properties", { index: first }).catch(() => {});
       ev.preventDefault();
       return;
     }
+    if (k === "Escape" && app.path === SETTINGS) { back(); ev.preventDefault(); return; }
     if (ev.altKey && k === "ArrowLeft") { back(); ev.preventDefault(); }
     else if (ev.altKey && k === "ArrowRight") { forward(); ev.preventDefault(); }
     else if ((ev.altKey && k === "ArrowUp") || k === "Backspace") { up(); ev.preventDefault(); }
@@ -123,10 +129,12 @@
         <HomePane />
       {:else if app.path === RECYCLE}
         <RecyclePane />
+      {:else if app.path === SETTINGS}
+        <SettingsPane />
       {:else}
         <div class="filerow">
           <FilePane />
-          {#if app.previewPane}
+          {#if settings.previewPane}
             <PreviewPane />
           {/if}
         </div>

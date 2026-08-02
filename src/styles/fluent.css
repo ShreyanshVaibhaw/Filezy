@@ -159,3 +159,11 @@ input {
   background: var(--stroke);
   margin: 4px 2px;
 }
+/* Switching context-menu entries off in Settings can leave separators stranded.
+   Collapsing them here beats an {#if} around every one of them. Svelte's block
+   anchors are comment nodes, which these selectors ignore. */
+.menu-sep:first-child,
+.menu-sep:last-child,
+.menu-sep + .menu-sep {
+  display: none;
+}

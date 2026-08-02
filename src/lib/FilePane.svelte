@@ -7,6 +7,7 @@
     extMeta, pinAdd, pinRemove, isPinned, displayName, newTab, pushUndo,
   } from "./store.svelte";
   import type { Entry, OpRecord } from "./store.svelte";
+  import { settings, menuOn, anyMenuOn, extraOn, rememberExtras } from "./settings.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { onMount } from "svelte";
@@ -51,7 +52,7 @@
   // Compact view tightens the row-based views (details/list), like Explorer's.
   const v = $derived.by(() => {
     const base = VIEWS[app.view] ?? VIEWS.details;
-    if (!app.compact) return base;
+    if (!settings.compact) return base;
     if (app.view === "details") return { ...base, rowH: 28 };
     if (app.view === "list") return { ...base, rowH: 24 };
     return base;
@@ -379,7 +380,10 @@
       out.push(it);
     }
     while (out.length && out[out.length - 1].sep) out.pop();
-    return out;
+    // Everything the shell offered is switchable in Settings, whether or not
+    // it is currently switched on.
+    rememberExtras(out.filter((it) => !it.sep).map((it) => it.text));
+    return out.filter((it) => it.sep || extraOn(it.text));
   }
 
   function firstSel(): number | undefined {
@@ -389,8 +393,17 @@
     return min < 0 ? undefined : min;
   }
 
+  // The four icons in the top strip of the item menu.
+  const STRIP_IDS = ["file.cut", "file.copy", "file.rename", "file.delete"];
+  const ROW_IDS = [...STRIP_IDS, "file.open", "file.openwith", "file.pin", "file.copypath", "file.properties"];
+  const BLANK_IDS = ["blank.refresh", "blank.paste", "blank.new", "blank.selectall", "blank.terminal"];
+
   function onContext(ev: MouseEvent, i: number | null) {
     ev.preventDefault();
+    // Nothing left to show: don't open an empty box. Shell extensions can still
+    // fill the item menu, so only the blank menu is fully suppressed here.
+    if (i === null && !anyMenuOn(BLANK_IDS)) return;
+    if (i !== null && !anyMenuOn(ROW_IDS) && !settings.shellExtras) return;
     if (i !== null && !isSelected(i)) {
       clearSel();
       sel.add(i);
@@ -407,6 +420,11 @@
       ctxItems = [];
       blankNewOpen = false;
       loadNewItems();
+      return;
+    }
+    if (!settings.shellExtras) {
+      // Extensions switched off entirely: skip the multi-second shell call.
+      ctxItems = [];
       return;
     }
     // The native menu shows instantly; shell-extension entries stream in when
@@ -516,7 +534,7 @@
   }
 
   // Column reorder (drag a metadata header onto another; live-swaps as you move).
-  let colDrag: { key: MetaKey; startX: number; moved: boolean } | null = null;
+  let colDrag = $state<{ key: MetaKey; startX: number; moved: boolean } | null>(null);
   let suppressSort = false;
   function startColDrag(key: MetaKey, ev: MouseEvent) {
     if (ev.button !== 0) return;
@@ -926,27 +944,37 @@
 
 {#if ctx}
   <div class="menu ctxmenu" style="left:{ctx.x}px; top:{ctx.y}px">
-    {#if ctx.onRow}
+    {#if ctx.onRow && anyMenuOn(STRIP_IDS)}
       <div class="strip">
-        <button title="Cut" onclick={() => { ctx = null; copySel(true); }}><span class="glyph">&#xE8C6;</span></button>
-        <button title="Copy" onclick={() => { ctx = null; copySel(false); }}><span class="glyph">&#xE8C8;</span></button>
-        <button title="Rename" onclick={() => { ctx = null; startRename(); }}><span class="glyph">&#xE8AC;</span></button>
-        <button title="Delete" onclick={() => { ctx = null; del(); }}><span class="glyph">&#xE74D;</span></button>
+        {#if menuOn("file.cut")}
+          <button title="Cut" onclick={() => { ctx = null; copySel(true); }}><span class="glyph">&#xE8C6;</span></button>
+        {/if}
+        {#if menuOn("file.copy")}
+          <button title="Copy" onclick={() => { ctx = null; copySel(false); }}><span class="glyph">&#xE8C8;</span></button>
+        {/if}
+        {#if menuOn("file.rename")}
+          <button title="Rename" onclick={() => { ctx = null; startRename(); }}><span class="glyph">&#xE8AC;</span></button>
+        {/if}
+        {#if menuOn("file.delete")}
+          <button title="Delete" onclick={() => { ctx = null; del(); }}><span class="glyph">&#xE74D;</span></button>
+        {/if}
       </div>
       <div class="menu-sep"></div>
     {/if}
     {#if ctx.onRow}
       {@const fi = firstSel()}
       {@const fe = fi !== undefined ? rows[fi] : undefined}
-      <button class="menu-item" onclick={() => { ctx = null; if (fi !== undefined) openEntry(fi); }}>
-        <span class="glyph">&#xE8E5;</span> Open
-      </button>
-      {#if fe && !fe.is_dir}
+      {#if menuOn("file.open")}
+        <button class="menu-item" onclick={() => { ctx = null; if (fi !== undefined) openEntry(fi); }}>
+          <span class="glyph">&#xE8E5;</span> Open
+        </button>
+      {/if}
+      {#if fe && !fe.is_dir && menuOn("file.openwith")}
         <button class="menu-item" onclick={() => { ctx = null; invoke("open_with", { index: fi }).catch((e) => (app.status = String(e))); }}>
           <span class="glyph">&#xE7AC;</span> Open with
         </button>
       {/if}
-      {#if fe?.is_dir}
+      {#if fe?.is_dir && menuOn("file.pin")}
         {#if isPinned(entryPath(fe))}
           <button class="menu-item" onclick={() => { ctx = null; pinRemove(entryPath(fe)); }}>
             <span class="glyph">&#xE77A;</span> Unpin from Quick access
@@ -957,12 +985,16 @@
           </button>
         {/if}
       {/if}
-      <button class="menu-item" onclick={() => { ctx = null; invoke("copy_as_path", { indices: selIndices() }).then(refreshClipState).catch((e) => (app.status = String(e))); }}>
-        <span class="glyph">&#xE8C8;</span> Copy as path
-      </button>
-      <button class="menu-item" onclick={() => { ctx = null; if (fi !== undefined) invoke("show_properties", { index: fi }).catch((e) => (app.status = String(e))); }}>
-        <span class="glyph">&#xE90F;</span> Properties
-      </button>
+      {#if menuOn("file.copypath")}
+        <button class="menu-item" onclick={() => { ctx = null; invoke("copy_as_path", { indices: selIndices() }).then(refreshClipState).catch((e) => (app.status = String(e))); }}>
+          <span class="glyph">&#xE8C8;</span> Copy as path
+        </button>
+      {/if}
+      {#if menuOn("file.properties")}
+        <button class="menu-item" onclick={() => { ctx = null; if (fi !== undefined) invoke("show_properties", { index: fi }).catch((e) => (app.status = String(e))); }}>
+          <span class="glyph">&#xE90F;</span> Properties
+        </button>
+      {/if}
       {#if ctxItems === null}
         <div class="menu-sep"></div>
         <div class="menuload">Loading…</div>
@@ -997,12 +1029,17 @@
         </div>
       {/if}
     {:else}
-      <button class="menu-item" onclick={() => { ctx = null; refresh(); }}>
-        <span class="glyph">&#xE72C;</span> Refresh
-      </button>
+      {#if menuOn("blank.refresh")}
+        <button class="menu-item" onclick={() => { ctx = null; refresh(); }}>
+          <span class="glyph">&#xE72C;</span> Refresh
+        </button>
+      {/if}
+      {#if menuOn("blank.paste")}
         <button class="menu-item" disabled={!app.canPaste} onclick={() => { ctx = null; paste(); }}>
           <span class="glyph">&#xE77F;</span> Paste
         </button>
+      {/if}
+      {#if menuOn("blank.new")}
         <div class="menu-sep"></div>
         <div class="subwrap" role="none" onmouseenter={() => (blankNewOpen = true)} onmouseleave={() => (blankNewOpen = false)}>
           <button class="menu-item wide">
@@ -1036,13 +1073,18 @@
             </div>
           {/if}
         </div>
+      {/if}
+      {#if menuOn("blank.selectall")}
         <button class="menu-item" onclick={() => { ctx = null; selectAll(); }}>
           <span class="glyph">&#xE8B3;</span> Select all
         </button>
+      {/if}
+      {#if menuOn("blank.terminal")}
         <div class="menu-sep"></div>
         <button class="menu-item" onclick={() => { ctx = null; invoke("open_terminal", { dir: app.path }).catch((e) => (app.status = String(e))); }}>
           <span class="glyph">&#xE756;</span> Open in Terminal
         </button>
+      {/if}
     {/if}
   </div>
 {/if}

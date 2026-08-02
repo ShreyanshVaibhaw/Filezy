@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
+import { settings, setSetting, setTheme } from "./settings.svelte";
 
 export interface Entry {
   name: string;
@@ -43,12 +44,6 @@ export const app = $state({
   sortKey: "name",
   asc: true,
   view: "details",
-  previewPane: false,
-  // ponytail: session-only view toggles; persist in a settings file if missed
-  showHidden: false,
-  showExt: true,
-  theme: "system",
-  compact: localStorage.getItem("compact") === "1",
   filter: "",
   searching: false,
   groupKey: "none",
@@ -142,10 +137,22 @@ interface FolderPrefs {
   v: string;
   g: string;
 }
-const DEFAULT_PREFS: FolderPrefs = { s: "name", a: true, v: "details", g: "none" };
+/// Fallback view for a folder the user has never customized, from Settings.
+function defaultPrefs(): FolderPrefs {
+  return { s: settings.defaultSort, a: settings.defaultAsc, v: settings.defaultView, g: "none" };
+}
 let folderPrefs: Record<string, FolderPrefs> = JSON.parse(
   localStorage.getItem("folderPrefs") ?? "{}",
 );
+
+/// Explorer's "Reset Folders": every folder falls back to the configured default.
+export function clearFolderPrefs() {
+  folderPrefs = {};
+  localStorage.removeItem("folderPrefs");
+}
+export function folderPrefsCount(): number {
+  return Object.keys(folderPrefs).length;
+}
 // True while the current grouping came from date-sorting, not a user choice.
 let groupAuto = false;
 
@@ -175,7 +182,7 @@ function isDateKey(k: string): boolean {
 /// Apply a folder's saved prefs (or the fixed defaults) to the app state.
 /// Returns without touching the backend; callers list/group afterwards.
 function applyPrefs(p: string) {
-  const prefs = folderPrefs[prefKey(p)] ?? DEFAULT_PREFS;
+  const prefs = folderPrefs[prefKey(p)] ?? defaultPrefs();
   app.sortKey = prefs.s;
   app.asc = prefs.a;
   app.view = prefs.v;
@@ -193,11 +200,6 @@ export function setView(v: string) {
   savePrefs();
 }
 
-export function toggleCompact() {
-  app.compact = !app.compact;
-  localStorage.setItem("compact", app.compact ? "1" : "0");
-}
-
 // Reopen-closed-tab stack (Ctrl+Shift+T), session-only.
 const closedTabs: string[] = [];
 export function reopenClosedTab() {
@@ -209,6 +211,7 @@ export function reopenClosedTab() {
 export const THIS_PC = "::ThisPC";
 export const HOME = "::Home";
 export const RECYCLE = "::RecycleBin";
+export const SETTINGS = "::Settings";
 // Shell GUID of the bin itself, for its real icon.
 export const RECYCLE_GUID = "::{645FF040-5081-101B-9F08-00AA002F954E}";
 
@@ -232,6 +235,7 @@ export function folderName(p: string): string {
   if (p === THIS_PC) return "This PC";
   if (p === HOME) return "Home";
   if (p === RECYCLE) return "Recycle Bin";
+  if (p === SETTINGS) return "Settings";
   const t = p.replace(/\\$/, "");
   const i = t.lastIndexOf("\\");
   return i < 0 ? p : t.slice(i + 1) || p;
@@ -247,39 +251,15 @@ export function entryPath(e: Entry): string {
 
 /// Name as shown in the panes: extension stripped when "File name extensions" is off.
 export function displayName(e: Entry): string {
-  if (app.showExt || e.is_dir || !e.ext) return e.name;
+  if (settings.showExt || e.is_dir || !e.ext) return e.name;
   const cut = e.name.length - e.ext.length - 1;
   return cut > 0 ? e.name.slice(0, cut) : e.name;
 }
 
 export function toggleHidden() {
-  app.showHidden = !app.showHidden;
+  setSetting("showHidden", !settings.showHidden);
   refresh();
 }
-
-// ---- themes ----
-
-export const THEMES: [string, string][] = [
-  ["system", "System"],
-  ["win11-dark", "Windows 11 Dark"],
-  ["win11-light", "Windows 11 Light"],
-  ["catppuccin-mocha", "Catppuccin Mocha"],
-  ["catppuccin-latte", "Catppuccin Latte"],
-  ["dracula", "Dracula"],
-  ["nord", "Nord"],
-  ["tokyo-night", "Tokyo Night"],
-  ["gruvbox-dark", "Gruvbox Dark"],
-];
-
-export function setTheme(id: string) {
-  app.theme = id;
-  if (id === "system") delete document.documentElement.dataset.theme;
-  else document.documentElement.dataset.theme = id;
-  localStorage.setItem("theme", id);
-}
-
-// Apply the persisted theme once at startup.
-setTheme(localStorage.getItem("theme") ?? "system");
 
 // ---- Quick Access pins ----
 
@@ -321,8 +301,10 @@ function loadVirtual(p: string) {
   }
 }
 
-export async function navigate(p: string, push = true) {
-  if (p === THIS_PC || p === HOME || p === RECYCLE) {
+/// Returns false when the folder could not be opened (caller may fall back).
+export async function navigate(p: string, push = true): Promise<boolean> {
+  // Any "::" path is a virtual page with no backend listing, like refresh/up/setFilter treat it.
+  if (p.startsWith("::")) {
     const t = activeTab();
     if (t) {
       if (push) {
@@ -340,7 +322,7 @@ export async function navigate(p: string, push = true) {
     resetRows(0);
     loadVirtual(p);
     refreshClipState();
-    return;
+    return true;
   }
   try {
     applyPrefs(p);
@@ -348,7 +330,7 @@ export async function navigate(p: string, push = true) {
       path: p,
       sortKey: app.sortKey,
       asc: app.asc,
-      showHidden: app.showHidden,
+      showHidden: settings.showHidden,
     });
     const t = activeTab();
     if (t) {
@@ -368,8 +350,10 @@ export async function navigate(p: string, push = true) {
     await reapplyGroup();
     hooks.scrollTo?.(0);
     refreshClipState();
+    return true;
   } catch (e) {
     app.status = String(e);
+    return false;
   }
 }
 
@@ -384,7 +368,7 @@ export async function refresh(keepScroll = true) {
     path: app.path,
     sortKey: app.sortKey,
     asc: app.asc,
-    showHidden: app.showHidden,
+    showHidden: settings.showHidden,
   });
   app.filter = "";
   resetRows(res.total);
@@ -425,8 +409,12 @@ export function newTab(path?: string) {
   const id = nextTabId++;
   tabs.push({ id, path: "", hist: [], histIdx: -1, scroll: 0 });
   app.activeTab = id;
-  // Explorer opens new tabs on the Home page.
-  navigate(path ?? HOME);
+  // New tabs open on the configured start page; a start folder that has since
+  // been deleted or unmounted falls back to Home instead of an error page.
+  const target = path ?? (settings.startPage || HOME);
+  navigate(target).then((ok) => {
+    if (!ok) navigate(HOME, false);
+  });
 }
 
 export function switchTab(id: number) {
@@ -869,6 +857,6 @@ export function selectAll() {
     selectAll, clearSel, selCount, openEntry, newFolder, del, copySel, paste,
     startRename, commitRename, refreshClipState, newTab, switchTab, closeTab,
     setGroup, collapsedGroups, loadNewItems, newFile, newItems, invoke, setTheme, setView,
-    undo, pushUndo,
+    undo, pushUndo, settings, setSetting,
   };
 }

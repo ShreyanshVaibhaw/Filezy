@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "check:menuids": "node scripts/check-menuids.mjs",
     "tauri": "tauri"
   },
   "dependencies": {

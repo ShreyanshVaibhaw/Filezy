@@ -1,9 +1,9 @@
 <script lang="ts">
   import {
     app, sel, sortBy, setGroup, refresh, copySel, paste, del, newFolder, startRename, toggleHidden,
-    THEMES, setTheme, setView, toggleCompact,
-    selectAll, loadNewItems, newFile, newItems, extMeta,
+    setView, selectAll, loadNewItems, newFile, newItems, extMeta, navigate, SETTINGS,
   } from "./store.svelte";
+  import { THEMES, setTheme, toggleCompact, settings, setSetting } from "./settings.svelte";
 
   let openMenu = $state<"" | "new" | "sort" | "view" | "more">("");
   let themeSubOpen = $state(false);
@@ -87,6 +87,10 @@
   <button class="cbtn" onclick={(e) => toggle("more", e)} title="See more">
     <span class="glyph">&#xE712;</span>
   </button>
+
+  <button class="cbtn gear" class:active={app.path === SETTINGS} onclick={() => navigate(SETTINGS)} title="Settings">
+    <span class="glyph">&#xE713;</span>
+  </button>
 </div>
 
 {#if openMenu}
@@ -141,18 +145,18 @@
         </button>
       {/each}
       <button class="menu-item" onclick={() => { openMenu = ""; toggleCompact(); }}>
-        <span class="check">{app.compact ? "●" : ""}</span> Compact view
+        <span class="check">{settings.compact ? "●" : ""}</span> Compact view
       </button>
       <div class="menu-sep"></div>
-      <button class="menu-item" onclick={() => { openMenu = ""; app.previewPane = !app.previewPane; }}>
-        <span class="check">{app.previewPane ? "●" : ""}</span> Preview pane
+      <button class="menu-item" onclick={() => { openMenu = ""; setSetting("previewPane", !settings.previewPane); }}>
+        <span class="check">{settings.previewPane ? "●" : ""}</span> Preview pane
       </button>
       <div class="menu-sep"></div>
       <button class="menu-item" onclick={() => { openMenu = ""; toggleHidden(); }}>
-        <span class="check">{app.showHidden ? "●" : ""}</span> Hidden items
+        <span class="check">{settings.showHidden ? "●" : ""}</span> Hidden items
       </button>
-      <button class="menu-item" onclick={() => { openMenu = ""; app.showExt = !app.showExt; }}>
-        <span class="check">{app.showExt ? "●" : ""}</span> File name extensions
+      <button class="menu-item" onclick={() => { openMenu = ""; setSetting("showExt", !settings.showExt); }}>
+        <span class="check">{settings.showExt ? "●" : ""}</span> File name extensions
       </button>
       <div class="menu-sep"></div>
       <div class="subwrap" role="none" onmouseenter={() => (themeSubOpen = true)} onmouseleave={() => (themeSubOpen = false)}>
@@ -165,7 +169,7 @@
           <div class="menu submenu">
             {#each THEMES as [tid, tlabel] (tid)}
               <button class="menu-item" onclick={() => { openMenu = ""; setTheme(tid); }}>
-                <span class="check">{app.theme === tid ? "●" : ""}</span> {tlabel}
+                <span class="check">{settings.theme === tid ? "●" : ""}</span> {tlabel}
               </button>
             {/each}
           </div>
@@ -177,6 +181,10 @@
       </button>
       <button class="menu-item" onclick={() => { openMenu = ""; refresh(); }}>
         <span class="glyph">&#xE72C;</span> Refresh
+      </button>
+      <div class="menu-sep"></div>
+      <button class="menu-item" onclick={() => { openMenu = ""; navigate(SETTINGS); }}>
+        <span class="glyph">&#xE713;</span> Settings
       </button>
     {/if}
   </div>
@@ -219,6 +227,15 @@
   }
   .cbtn:hover:not(:disabled) {
     background: var(--hover);
+  }
+  .gear {
+    margin-left: auto;
+  }
+  .gear.active {
+    background: var(--sel);
+  }
+  .gear.active .glyph {
+    color: var(--accent);
   }
   .divider {
     width: 1px;

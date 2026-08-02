@@ -2,8 +2,10 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import {
     app, tabs, extMeta, folderName, newTab, switchTab, closeTab,
-    duplicateTab, closeOtherTabs, closeTabsRight,
+    duplicateTab, closeOtherTabs, closeTabsRight, shellIcon,
+    HOME, THIS_PC, RECYCLE, SETTINGS, RECYCLE_GUID,
   } from "./store.svelte";
+  import { menuOn, anyMenuOn } from "./settings.svelte";
 
   const win = getCurrentWindow();
   let maximized = $state(false);
@@ -12,12 +14,23 @@
 
   const folderIcon = $derived(extMeta.get("//dir")?.icon ?? null);
 
+  // Virtual pages get their own icon in the tab strip, like Explorer's Home tab.
+  const VIRTUAL_GLYPHS: Record<string, string> = {
+    "": "\uE80F",
+    [HOME]: "\uE80F",
+    [THIS_PC]: "\uE977",
+    [SETTINGS]: "\uE713",
+  };
+
   // Drag a tab horizontally to reorder, like Explorer/browsers.
   let drag = $state<{ id: number; x: number; moved: boolean } | null>(null);
+
+  const TAB_IDS = ["tab.duplicate", "tab.close", "tab.closeothers", "tab.closeright"];
 
   let tabCtx = $state<{ x: number; y: number; id: number } | null>(null);
   function onTabContext(e: MouseEvent, id: number) {
     e.preventDefault();
+    if (!anyMenuOn(TAB_IDS)) return;
     tabCtx = { x: e.clientX, y: e.clientY, id };
   }
 
@@ -55,19 +68,27 @@
 
 {#if tabCtx}
   <div class="menu" style="left:{tabCtx.x}px; top:{tabCtx.y}px">
-    <button class="menu-item" onclick={() => { duplicateTab(tabCtx!.id); tabCtx = null; }}>
-      <span class="glyph">&#xE8C8;</span> Duplicate tab
-    </button>
-    <div class="menu-sep"></div>
-    <button class="menu-item" onclick={() => { closeTab(tabCtx!.id); tabCtx = null; }}>
-      <span class="glyph">&#xE8BB;</span> Close tab
-    </button>
-    <button class="menu-item" disabled={tabs.length < 2} onclick={() => { closeOtherTabs(tabCtx!.id); tabCtx = null; }}>
-      Close other tabs
-    </button>
-    <button class="menu-item" disabled={tabs.findIndex((t) => t.id === tabCtx!.id) === tabs.length - 1} onclick={() => { closeTabsRight(tabCtx!.id); tabCtx = null; }}>
-      Close tabs to the right
-    </button>
+    {#if menuOn("tab.duplicate")}
+      <button class="menu-item" onclick={() => { duplicateTab(tabCtx!.id); tabCtx = null; }}>
+        <span class="glyph">&#xE8C8;</span> Duplicate tab
+      </button>
+      <div class="menu-sep"></div>
+    {/if}
+    {#if menuOn("tab.close")}
+      <button class="menu-item" onclick={() => { closeTab(tabCtx!.id); tabCtx = null; }}>
+        <span class="glyph">&#xE8BB;</span> Close tab
+      </button>
+    {/if}
+    {#if menuOn("tab.closeothers")}
+      <button class="menu-item" disabled={tabs.length < 2} onclick={() => { closeOtherTabs(tabCtx!.id); tabCtx = null; }}>
+        Close other tabs
+      </button>
+    {/if}
+    {#if menuOn("tab.closeright")}
+      <button class="menu-item" disabled={tabs.findIndex((t) => t.id === tabCtx!.id) === tabs.length - 1} onclick={() => { closeTabsRight(tabCtx!.id); tabCtx = null; }}>
+        Close tabs to the right
+      </button>
+    {/if}
   </div>
 {/if}
 
@@ -82,7 +103,11 @@
       onmousedown={(e) => tabDown(e, t.id)}
       oncontextmenu={(e) => onTabContext(e, t.id)}
     >
-      {#if folderIcon}
+      {#if t.path === RECYCLE && shellIcon(RECYCLE_GUID, 48)}
+        <img src={shellIcon(RECYCLE_GUID, 48)} alt="" width="16" height="16" />
+      {:else if VIRTUAL_GLYPHS[t.path] || t.path === RECYCLE}
+        <span class="glyph tabglyph">{VIRTUAL_GLYPHS[t.path] ?? "\uE74D"}</span>
+      {:else if folderIcon}
         <img src={folderIcon} alt="" width="16" height="16" />
       {:else}
         <span class="glyph tabglyph">&#xE8B7;</span>

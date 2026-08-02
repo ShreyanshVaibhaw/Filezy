@@ -1,6 +1,7 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { app, navigate, pinAdd, pinRemove, shellIcon } from "./store.svelte";
+  import { settings, menuOn, anyMenuOn, extraOn, rememberExtras } from "./settings.svelte";
 
   interface ShellItem {
     id: number;
@@ -37,11 +38,15 @@
       out.push(it);
     }
     while (out.length && out[out.length - 1].sep) out.pop();
-    return out;
+    rememberExtras(out.filter((it) => !it.sep).map((it) => it.text));
+    return out.filter((it) => it.sep || extraOn(it.text));
   }
+
+  const DRIVE_IDS = ["drive.open", "drive.pin", "drive.properties"];
 
   function onContext(ev: MouseEvent, path: string) {
     ev.preventDefault();
+    if (!anyMenuOn(DRIVE_IDS) && !settings.shellExtras) return;
     ctx = {
       x: Math.min(ev.clientX, window.innerWidth - 300),
       y: Math.min(ev.clientY, window.innerHeight - 420),
@@ -50,6 +55,10 @@
     ctxItems = null;
     openSub = -1;
     const seq = ++ctxSeq;
+    if (!settings.shellExtras) {
+      ctxItems = [];
+      return;
+    }
     // dir "" = absolute-path item: the drive itself, not its contents.
     // Native entries show instantly; extension entries stream in when ready.
     invoke<ShellItem[]>("shell_menu", { dir: "", names: [path] })
@@ -109,15 +118,21 @@
 
 {#if ctx}
   <div class="menu drivemenu" style="left:{ctx.x}px; top:{ctx.y}px">
-    <button class="menu-item" onclick={() => { const p = ctx!.path; ctx = null; navigate(p); }}>
-      <span class="glyph">&#xE8E5;</span> Open
-    </button>
-    <button class="menu-item" onclick={() => { const p = ctx!.path; ctx = null; pinAdd(p); }}>
-      <span class="glyph">&#xE840;</span> Pin to Quick access
-    </button>
-    <button class="menu-item" onclick={() => { const p = ctx!.path; ctx = null; invoke("show_properties_path", { path: p }).catch((e) => (app.status = String(e))); }}>
-      <span class="glyph">&#xE90F;</span> Properties
-    </button>
+    {#if menuOn("drive.open")}
+      <button class="menu-item" onclick={() => { const p = ctx!.path; ctx = null; navigate(p); }}>
+        <span class="glyph">&#xE8E5;</span> Open
+      </button>
+    {/if}
+    {#if menuOn("drive.pin")}
+      <button class="menu-item" onclick={() => { const p = ctx!.path; ctx = null; pinAdd(p); }}>
+        <span class="glyph">&#xE840;</span> Pin to Quick access
+      </button>
+    {/if}
+    {#if menuOn("drive.properties")}
+      <button class="menu-item" onclick={() => { const p = ctx!.path; ctx = null; invoke("show_properties_path", { path: p }).catch((e) => (app.status = String(e))); }}>
+        <span class="glyph">&#xE90F;</span> Properties
+      </button>
+    {/if}
     {#if ctxItems === null}
       <div class="menu-sep"></div>
       <div class="loading">Loading…</div>
