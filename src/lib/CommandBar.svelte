@@ -1,17 +1,43 @@
 <script lang="ts">
+  import { menuKeys } from "./menukeys";
   import {
-    app, sel, sortBy, setGroup, refresh, copySel, paste, del, newFolder, startRename, toggleHidden,
-    setView, selectAll, loadNewItems, newFile, newItems, extMeta, navigate, SETTINGS,
+    app, sel, sortBy, setGroup, refresh, toggleHidden, setView, selectAll, loadNewItems, newItems,
+    extMeta, navigate, can, SETTINGS, THIS_PC, NETWORK, loadDrives, applyFilter, setSearchScope, clearSearchHistory, startSearch, clearSearch,
+    type SearchScope,
   } from "./store.svelte";
-  import { THEMES, setTheme, toggleCompact, settings, setSetting } from "./settings.svelte";
+  import ShellItems from "./ShellItems.svelte";
+  import type { ShellItem } from "./shellmenu";
+  import { filterOf } from "./searchquery";
+  import { extractAll, extractTarget } from "./archive.svelte";
+  import { baseName, isArchive } from "./paths";
+  import { copySel, paste, del, newFolder, newFile, startRename, shareSel } from "./ops.svelte";
+  import { invoke } from "@tauri-apps/api/core";
+  import { selectNone, invertSelection } from "./selection.svelte";
+  import { THEMES, setTheme, toggleCompact, settings, setSetting, showPane } from "./settings.svelte";
 
-  let openMenu = $state<"" | "new" | "sort" | "view" | "more">("");
+  let openMenu = $state<"" | "new" | "sort" | "view" | "more" | "search">("");
   let themeSubOpen = $state(false);
   let menuX = $state(0);
   let menuY = $state(0);
 
   const selN = $derived(app.allSelected ? app.total : sel.size);
   const hasSel = $derived(selN > 0);
+
+  // Share works for files only, as in Explorer: count the folders in the selection.
+  let filesOnly = $state(false);
+  let shareSeq = 0;
+  $effect(() => {
+    void selN;
+    void app.rev;
+    const seq = ++shareSeq;
+    if (!selN) {
+      filesOnly = false;
+      return;
+    }
+    invoke<{ count: number; files: number }>("selection_stats", { sel: app.allSelected ? { rev: app.rev, all: true } : { rev: app.rev, idx: [...sel] } })
+      .then((s) => seq === shareSeq && (filesOnly = s.files === s.count))
+      .catch(() => {});
+  });
 
   function toggle(id: typeof openMenu, ev: MouseEvent) {
     if (openMenu === id) {
@@ -24,6 +50,77 @@
     openMenu = id;
     themeSubOpen = false;
     if (id === "new") loadNewItems();
+  }
+
+  // ---- Search options (Explorer's Search tab) ----
+  const SCOPES: [SearchScope, string][] = [
+    ["folder", "Current folder"],
+    ["subfolders", "All subfolders"],
+    ["drive", "This drive"],
+    ["all", "All drives"],
+  ];
+  const DATES: [string, string][] = [
+    ["today", "Today"], ["yesterday", "Yesterday"], ["this week", "This week"], ["last week", "Last week"],
+    ["this month", "This month"], ["last month", "Last month"], ["this year", "This year"], ["last year", "Last year"],
+  ];
+  const KINDS: [string, string][] = [
+    ["document", "Document"], ["folder", "Folder"], ["picture", "Picture"], ["video", "Video"], ["music", "Music"],
+    ["archive", "Archive"], ["program", "Program"], ["text", "Text"],
+  ];
+  const SIZES: [string, string][] = [
+    ["empty", "Empty (0 KB)"], ["tiny", "Tiny (0 - 16 KB)"], ["small", "Small (16 KB - 1 MB)"], ["medium", "Medium (1 - 128 MB)"],
+    ["large", "Large (128 MB - 1 GB)"], ["huge", "Huge (1 - 4 GB)"], ["gigantic", "Gigantic (> 4 GB)"],
+  ];
+  const searching = $derived(!!app.search || !!app.filter.trim());
+  // The archive Extract all would act on: the one shown, or the one selected.
+  const extractFrom = $derived(extractTarget());
+
+  /// Windows' Map Network Drive dialog; the drives show the new one at once.
+  async function mapDrive() {
+    if (await invoke<boolean>("map_drive").catch((e) => ((app.status = String(e)), false))) await loadDrives();
+  }
+  const inArchive = $derived(isArchive(app.path));
+
+  /// The Search options menu as menu entries (ShellItems draws the submenus);
+  /// each entry's id indexes its action. Filters edit the query text, so the
+  /// search box always shows the whole search.
+  let actions: (() => void)[] = [];
+  function searchMenu(): ShellItem[] {
+    actions = [];
+    const q = app.filter;
+    const base = { verb: null, sep: false, disabled: false, sub: null };
+    const entry = (text: string, act: () => void, checked?: boolean): ShellItem => {
+      actions.push(act);
+      return { ...base, id: actions.length - 1, text, checked };
+    };
+    const sub = (text: string, items: ShellItem[]): ShellItem => ({ ...base, id: -1, text, sub: items });
+    const sep: ShellItem = { ...base, id: -1, text: "", sep: true };
+    const pick = (key: string, options: [string, string][]) =>
+      options.map(([v, label]) => entry(label, () => applyFilter(key, filterOf(q, key) === v ? null : v), filterOf(q, key) === v));
+    const recent = settings.searchHistory.slice(0, 10);
+    return [
+      ...SCOPES.map(([s, label]) => entry(label, () => setSearchScope(s), app.searchScope === s)),
+      sep,
+      sub("Date modified", pick("datemodified", DATES)),
+      sub("Kind", pick("kind", KINDS)),
+      sub("Size", pick("size", SIZES)),
+      sub("Date created", pick("datecreated", DATES)),
+      entry("Clear filters", () => applyFilter("*", null)),
+      sep,
+      sub(
+        "Recent searches",
+        recent.length
+          ? recent.map((h) => entry(h, () => { app.filter = h; startSearch(h, true); }))
+          : [{ ...base, id: -1, text: "No recent searches", disabled: true }],
+      ),
+      entry("Clear search history", clearSearchHistory),
+      sep,
+      entry("Close search", () => { app.filter = ""; clearSearch(); }),
+    ];
+  }
+  function runSearchItem(it: ShellItem) {
+    openMenu = "";
+    actions[it.id]?.();
   }
 
   const sortItems = [
@@ -42,7 +139,7 @@
 <svelte:window onmousedown={(e) => { if (!(e.target as HTMLElement).closest(".menu, .cbtn")) openMenu = ""; }} />
 
 <div class="commandbar">
-  <button class="cbtn labeled" onclick={(e) => toggle("new", e)}>
+  <button class="cbtn labeled" disabled={!can("new")} onclick={(e) => toggle("new", e)}>
     <span class="glyph accent">&#xE710;</span>
     <span>New</span>
     <span class="glyph chev">&#xE70D;</span>
@@ -50,22 +147,28 @@
 
   <div class="divider"></div>
 
-  <button class="cbtn" disabled={!hasSel} onclick={() => copySel(true)} title="Cut (Ctrl+X)">
+  <button class="cbtn" disabled={!hasSel || !can("change")} onclick={() => copySel(true)} title="Cut (Ctrl+X)" aria-label="Cut (Ctrl+X)">
     <span class="glyph">&#xE8C6;</span>
   </button>
-  <button class="cbtn" disabled={!hasSel} onclick={() => copySel(false)} title="Copy (Ctrl+C)">
+  <button class="cbtn" disabled={!hasSel || inArchive} onclick={() => copySel(false)} title="Copy (Ctrl+C)" aria-label="Copy (Ctrl+C)">
     <span class="glyph">&#xE8C8;</span>
   </button>
-  <button class="cbtn" disabled={!app.canPaste} onclick={paste} title="Paste (Ctrl+V)">
+  <button class="cbtn" disabled={!app.canPaste || !can("paste")} onclick={paste} title="Paste (Ctrl+V)" aria-label="Paste (Ctrl+V)">
     <span class="glyph">&#xE77F;</span>
   </button>
-  <button class="cbtn" disabled={selN !== 1} onclick={startRename} title="Rename (F2)">
+  <button class="cbtn" disabled={!hasSel || !can("change")} onclick={startRename} title="Rename (F2)" aria-label="Rename (F2)">
     <span class="glyph">&#xE8AC;</span>
   </button>
-  <button class="cbtn" disabled title="Share">
+  <button
+    class="cbtn"
+    disabled={!filesOnly || !can("change")}
+    onclick={shareSel}
+    title={hasSel && !filesOnly ? "Share works for files, not folders" : "Share"}
+    aria-label="Share"
+  >
     <span class="glyph">&#xE72D;</span>
   </button>
-  <button class="cbtn" disabled={!hasSel} onclick={del} title="Delete (Del)">
+  <button class="cbtn" disabled={!hasSel || !can("change")} onclick={() => del()} title="Delete (Del)" aria-label="Delete (Del)">
     <span class="glyph">&#xE74D;</span>
   </button>
 
@@ -81,20 +184,33 @@
     <span>View</span>
     <span class="glyph chev">&#xE70D;</span>
   </button>
+  {#if extractFrom}
+    <button class="cbtn labeled" onclick={() => extractAll(extractFrom)} title="Extract all files from {baseName(extractFrom)}">
+      <span class="glyph">&#xE8B7;</span>
+      <span>Extract all</span>
+    </button>
+  {/if}
+  {#if searching}
+    <button class="cbtn labeled" onclick={(e) => toggle("search", e)}>
+      <span class="glyph">&#xE71C;</span>
+      <span>Search options</span>
+      <span class="glyph chev">&#xE70D;</span>
+    </button>
+  {/if}
 
   <div class="divider"></div>
 
-  <button class="cbtn" onclick={(e) => toggle("more", e)} title="See more">
+  <button class="cbtn" onclick={(e) => toggle("more", e)} title="See more" aria-label="See more">
     <span class="glyph">&#xE712;</span>
   </button>
 
-  <button class="cbtn gear" class:active={app.path === SETTINGS} onclick={() => navigate(SETTINGS)} title="Settings">
+  <button class="cbtn gear" class:active={app.path === SETTINGS} onclick={() => navigate(SETTINGS)} title="Settings" aria-label="Settings">
     <span class="glyph">&#xE713;</span>
   </button>
 </div>
 
 {#if openMenu}
-  <div class="menu" style="left:{menuX}px; top:{menuY}px">
+  <div class="menu" style="left:{menuX}px; top:{menuY}px" use:menuKeys={() => (openMenu = "")}>
     {#if openMenu === "new"}
       <button class="menu-item" onclick={() => { openMenu = ""; newFolder(); }}>
         {#if extMeta.get("//dir")?.icon}
@@ -119,6 +235,8 @@
           {/each}
         </div>
       {/if}
+    {:else if openMenu === "search"}
+      <ShellItems items={searchMenu()} run={runSearchItem} />
     {:else if openMenu === "sort"}
       {#each sortItems as [key, label] (key)}
         <button class="menu-item" onclick={() => { openMenu = ""; sortBy(key, app.sortKey === key ? app.asc : true); }}>
@@ -148,8 +266,11 @@
         <span class="check">{settings.compact ? "●" : ""}</span> Compact view
       </button>
       <div class="menu-sep"></div>
-      <button class="menu-item" onclick={() => { openMenu = ""; setSetting("previewPane", !settings.previewPane); }}>
+      <button class="menu-item" onclick={() => { openMenu = ""; showPane(settings.previewPane ? null : "preview"); }}>
         <span class="check">{settings.previewPane ? "●" : ""}</span> Preview pane
+      </button>
+      <button class="menu-item" onclick={() => { openMenu = ""; showPane(settings.detailsPane ? null : "details"); }}>
+        <span class="check">{settings.detailsPane ? "●" : ""}</span> Details pane
       </button>
       <div class="menu-sep"></div>
       <button class="menu-item" onclick={() => { openMenu = ""; toggleHidden(); }}>
@@ -157,6 +278,9 @@
       </button>
       <button class="menu-item" onclick={() => { openMenu = ""; setSetting("showExt", !settings.showExt); }}>
         <span class="check">{settings.showExt ? "●" : ""}</span> File name extensions
+      </button>
+      <button class="menu-item" onclick={() => { openMenu = ""; setSetting("checkboxes", !settings.checkboxes); }}>
+        <span class="check">{settings.checkboxes ? "●" : ""}</span> Item check boxes
       </button>
       <div class="menu-sep"></div>
       <div class="subwrap" role="none" onmouseenter={() => (themeSubOpen = true)} onmouseleave={() => (themeSubOpen = false)}>
@@ -166,7 +290,7 @@
           <span class="glyph subchev">&#xE76C;</span>
         </button>
         {#if themeSubOpen}
-          <div class="menu submenu">
+          <div class="menu submenu" use:menuKeys={() => (themeSubOpen = false)}>
             {#each THEMES as [tid, tlabel] (tid)}
               <button class="menu-item" onclick={() => { openMenu = ""; setTheme(tid); }}>
                 <span class="check">{settings.theme === tid ? "●" : ""}</span> {tlabel}
@@ -176,12 +300,27 @@
         {/if}
       </div>
     {:else if openMenu === "more"}
-      <button class="menu-item" onclick={() => { openMenu = ""; selectAll(); }}>
+      <button class="menu-item" disabled={!can("select")} onclick={() => { openMenu = ""; selectAll(); }}>
         <span class="glyph">&#xE8B3;</span> Select all
+      </button>
+      <button class="menu-item" disabled={!can("select")} onclick={() => { openMenu = ""; selectNone(); }}>
+        <span class="glyph">&#xE8E6;</span> Select none
+      </button>
+      <button class="menu-item" disabled={!can("select")} onclick={() => { openMenu = ""; invertSelection(); }}>
+        <span class="glyph">&#xE8B6;</span> Invert selection
       </button>
       <button class="menu-item" onclick={() => { openMenu = ""; refresh(); }}>
         <span class="glyph">&#xE72C;</span> Refresh
       </button>
+      {#if app.path === THIS_PC || app.path === NETWORK}
+        <div class="menu-sep"></div>
+        <button class="menu-item" onclick={() => { openMenu = ""; mapDrive(); }}>
+          <span class="glyph">&#xE8CE;</span> Map network drive...
+        </button>
+        <button class="menu-item" onclick={() => { openMenu = ""; invoke("disconnect_drive", { path: null }).then(loadDrives).catch((e) => (app.status = String(e))); }}>
+          <span class="glyph">&#xE8CD;</span> Disconnect network drive...
+        </button>
+      {/if}
       <div class="menu-sep"></div>
       <button class="menu-item" onclick={() => { openMenu = ""; navigate(SETTINGS); }}>
         <span class="glyph">&#xE713;</span> Settings

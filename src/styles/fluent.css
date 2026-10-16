@@ -118,6 +118,54 @@ input {
   outline: none;
 }
 
+/* Keyboard focus: visible only when the keyboard put it there. Lists and the
+   tree draw their own item-level rings. */
+:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: -2px;
+}
+.menu-item:focus-visible {
+  outline: none;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--text-2);
+}
+input:focus-visible {
+  outline: none;
+}
+
+/* The destination under a drag (set by src/lib/drag.ts). */
+[data-drop-on] {
+  background: var(--sel-hover) !important;
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* Windows high contrast: system colors for edges and focus. Selected items
+   use Highlight in each component's own styles, where specificity allows. */
+@media (forced-colors: active) {
+  .menu,
+  .addressbox,
+  .searchbox,
+  .notice {
+    border: 1px solid CanvasText;
+  }
+  :focus-visible,
+  .scroller:focus-visible .focused,
+  [data-drop-on] {
+    outline: 2px solid Highlight;
+  }
+}
+
 /* Shared dropdown menu look (Win11 flyout) */
 .menu {
   position: fixed;

@@ -1,11 +1,14 @@
 <script lang="ts">
+  import { menuKeys } from "./menukeys";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import {
     app, tabs, extMeta, folderName, newTab, switchTab, closeTab,
-    duplicateTab, closeOtherTabs, closeTabsRight, shellIcon,
+    duplicateTab, closeOtherTabs, closeTabsRight, moveTabToWindow, shellIcon,
     HOME, THIS_PC, RECYCLE, SETTINGS, RECYCLE_GUID,
   } from "./store.svelte";
   import { menuOn, anyMenuOn } from "./settings.svelte";
+  import { dropHover } from "./drag";
+  import { isVirtual } from "./paths";
 
   const win = getCurrentWindow();
   let maximized = $state(false);
@@ -25,13 +28,33 @@
   // Drag a tab horizontally to reorder, like Explorer/browsers.
   let drag = $state<{ id: number; x: number; moved: boolean } | null>(null);
 
-  const TAB_IDS = ["tab.duplicate", "tab.close", "tab.closeothers", "tab.closeright"];
+  const TAB_IDS = ["tab.duplicate", "tab.movewindow", "tab.close", "tab.closeothers", "tab.closeright"];
 
   let tabCtx = $state<{ x: number; y: number; id: number } | null>(null);
   function onTabContext(e: MouseEvent, id: number) {
     e.preventDefault();
     if (!anyMenuOn(TAB_IDS)) return;
     tabCtx = { x: e.clientX, y: e.clientY, id };
+  }
+
+  /// Left/Right/Home/End move between tabs and switch to them; Delete closes one.
+  function tabKeys(e: KeyboardEvent) {
+    const i = tabs.findIndex((t) => t.id === app.activeTab);
+    let next = -1;
+    if (e.key === "ArrowRight") next = (i + 1) % tabs.length;
+    else if (e.key === "ArrowLeft") next = (i - 1 + tabs.length) % tabs.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = tabs.length - 1;
+    else if (e.key === "Delete") {
+      closeTab(app.activeTab);
+    } else return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (next >= 0) {
+      const id = tabs[next].id;
+      switchTab(id);
+      queueMicrotask(() => document.querySelector<HTMLElement>(`[data-tab="${id}"]`)?.focus());
+    }
   }
 
   function tabDown(e: MouseEvent, id: number) {
@@ -67,11 +90,18 @@
 />
 
 {#if tabCtx}
-  <div class="menu" style="left:{tabCtx.x}px; top:{tabCtx.y}px">
+  <div class="menu" style="left:{tabCtx.x}px; top:{tabCtx.y}px" use:menuKeys={() => (tabCtx = null)}>
     {#if menuOn("tab.duplicate")}
       <button class="menu-item" onclick={() => { duplicateTab(tabCtx!.id); tabCtx = null; }}>
         <span class="glyph">&#xE8C8;</span> Duplicate tab
       </button>
+    {/if}
+    {#if menuOn("tab.movewindow")}
+      <button class="menu-item" disabled={tabs.length < 2} onclick={() => { moveTabToWindow(tabCtx!.id); tabCtx = null; }}>
+        <span class="glyph">&#xE737;</span> Move to new window
+      </button>
+    {/if}
+    {#if menuOn("tab.duplicate") || menuOn("tab.movewindow")}
       <div class="menu-sep"></div>
     {/if}
     {#if menuOn("tab.close")}
@@ -93,13 +123,18 @@
 {/if}
 
 <div class="titlebar" data-tauri-drag-region>
+  <div class="tabs" role="tablist" aria-label="Tabs" tabindex="-1" onkeydown={tabKeys}>
   {#each tabs as t (t.id)}
     <div
       class="tab"
       class:active={t.id === app.activeTab}
       role="tab"
-      tabindex="-1"
+      tabindex={t.id === app.activeTab ? 0 : -1}
       aria-selected={t.id === app.activeTab}
+      data-tab={t.id}
+      data-drop={t.path && !isVirtual(t.path) ? t.path : undefined}
+      data-drop-label={t.path ? folderName(t.path) : undefined}
+      use:dropHover={() => switchTab(t.id)}
       onmousedown={(e) => tabDown(e, t.id)}
       oncontextmenu={(e) => onTabContext(e, t.id)}
     >
@@ -113,23 +148,24 @@
         <span class="glyph tabglyph">&#xE8B7;</span>
       {/if}
       <span class="tabname">{t.path ? folderName(t.path) : "Home"}</span>
-      <button class="tabclose" onclick={(e) => { e.stopPropagation(); closeTab(t.id); }} title="Close tab (Ctrl+W)">
+      <button class="tabclose" tabindex="-1" onclick={(e) => { e.stopPropagation(); closeTab(t.id); }} title="Close tab (Ctrl+W)" aria-label="Close tab (Ctrl+W)">
         <span class="glyph">&#xE8BB;</span>
       </button>
     </div>
   {/each}
-  <button class="newtab" title="New tab (Ctrl+T)" onclick={() => newTab()}>
+  </div>
+  <button class="newtab" title="New tab (Ctrl+T)" aria-label="New tab (Ctrl+T)" onclick={() => newTab()}>
     <span class="glyph">&#xE710;</span>
   </button>
   <div class="spacer" data-tauri-drag-region></div>
   <div class="caption">
-    <button class="cap" onclick={() => win.minimize()} title="Minimize">
+    <button class="cap" tabindex="-1" onclick={() => win.minimize()} title="Minimize" aria-label="Minimize">
       <span class="glyph">&#xE921;</span>
     </button>
-    <button class="cap" onclick={() => win.toggleMaximize()} title={maximized ? "Restore" : "Maximize"}>
+    <button class="cap" tabindex="-1" onclick={() => win.toggleMaximize()} title={maximized ? "Restore" : "Maximize"} aria-label={maximized ? "Restore" : "Maximize"}>
       <span class="glyph">{maximized ? "" : ""}</span>
     </button>
-    <button class="cap close" onclick={() => win.close()} title="Close">
+    <button class="cap close" tabindex="-1" onclick={() => win.close()} title="Close" aria-label="Close">
       <span class="glyph">&#xE8BB;</span>
     </button>
   </div>
@@ -143,6 +179,20 @@
     padding-left: 8px;
     flex-shrink: 0;
     overflow: hidden;
+  }
+  .tabs {
+    display: flex;
+    align-items: flex-end;
+    min-width: 0;
+    flex-shrink: 1;
+    height: 100%;
+  }
+  .tabs:focus {
+    outline: none;
+  }
+  .tab:focus-visible {
+    outline: 1px solid var(--text-2);
+    outline-offset: -2px;
   }
   .tab {
     height: 32px;
@@ -232,5 +282,15 @@
   .cap.close:hover {
     background: var(--close-hover);
     color: #fff;
+  }
+  @media (forced-colors: active) {
+    .tab.active {
+      forced-color-adjust: none;
+      background: Highlight;
+      color: HighlightText;
+    }
+    .tab.active * {
+      color: HighlightText;
+    }
   }
 </style>

@@ -1,6 +1,11 @@
 <script lang="ts">
-  // Win11 toggle switch. Keyboard-operable because it is a real button.
-  let { checked = false, onchange }: { checked?: boolean; onchange: (v: boolean) => void } = $props();
+  // Win11 toggle switch. Keyboard-operable because it is a real button; `label`
+  // names it for screen readers, since the visible text sits elsewhere in the row.
+  let {
+    checked = false,
+    label,
+    onchange,
+  }: { checked?: boolean; label: string; onchange: (v: boolean) => void } = $props();
 </script>
 
 <button
@@ -8,6 +13,7 @@
   class:on={checked}
   role="switch"
   aria-checked={checked}
+  aria-label={label}
   onclick={() => onchange(!checked)}
 >
   <span class="knob"></span>

@@ -6,3 +6,7 @@
 /latest.json
 # Update signing keys live in %USERPROFILE%\.tauri and must never be committed.
 *.key
+# Planning notes stay local and are never pushed (see AGENTS.md).
+/blueprint.md
+/plan*.md
+/docs/

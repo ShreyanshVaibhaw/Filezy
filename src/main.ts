@@ -1,5 +1,6 @@
 import { mount } from "svelte";
 import App from "./App.svelte";
+import "./lib/e2e";
 import "./styles/fluent.css";
 import "./styles/themes.css";
 

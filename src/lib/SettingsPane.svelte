@@ -7,8 +7,21 @@
   } from "./settings.svelte";
   import { MENU_GROUPS } from "./menuitems";
   import { updater, checkForUpdates, downloadAndInstall, restartApp } from "./updater.svelte";
-  import { toggleHidden, clearFolderPrefs, folderPrefsCount, HOME, THIS_PC } from "./store.svelte";
+  import { toggleHidden, clearFolderPrefs, folderPrefsCount, refresh, clearRecent, app, HOME, THIS_PC } from "./store.svelte";
+  import { invoke } from "@tauri-apps/api/core";
   import Toggle from "./Toggle.svelte";
+
+  // "Open in Filezy" in Explorer's folder menus: the registry says whether it's there.
+  let explorerEntry = $state(false);
+  invoke<boolean>("explorer_entry").then((v) => (explorerEntry = v)).catch(() => {});
+  async function setExplorerEntry(on: boolean) {
+    try {
+      await invoke("set_explorer_entry", { on });
+    } catch (e) {
+      app.status = String(e);
+    }
+    explorerEntry = await invoke<boolean>("explorer_entry").catch(() => false);
+  }
 
   const CATEGORIES = [
     { id: "appearance", label: "Appearance", glyph: "" },
@@ -82,6 +95,18 @@
     clearFolderPrefs();
     clearArmed = false;
   }
+
+  // Clearing Recent files also asks once; it removes Windows' Recent items list.
+  let recentArmed = $state(false);
+  let recentCleared = $state(-1);
+  async function clearRecentFiles() {
+    if (!recentArmed) {
+      recentArmed = true;
+      return;
+    }
+    recentArmed = false;
+    recentCleared = await clearRecent();
+  }
 </script>
 
 <div class="settings">
@@ -133,7 +158,7 @@
             <div class="rowname">Compact view</div>
             <div class="rowdesc">Tighter row spacing in Details and List views</div>
           </div>
-          <Toggle checked={settings.compact} onchange={(v) => setSetting("compact", v)} />
+          <Toggle label="Compact view" checked={settings.compact} onchange={(v) => setSetting("compact", v)} />
         </div>
         <div class="row">
           <span class="glyph rowicon">&#xE890;</span>
@@ -141,7 +166,7 @@
             <div class="rowname">Preview pane</div>
             <div class="rowdesc">Show a preview of the selected file (Alt+P)</div>
           </div>
-          <Toggle checked={settings.previewPane} onchange={(v) => setSetting("previewPane", v)} />
+          <Toggle label="Preview pane" checked={settings.previewPane} onchange={(v) => setSetting("previewPane", v)} />
         </div>
       {:else if cat === "files"}
         <h2 class="section">Display</h2>
@@ -151,7 +176,7 @@
             <div class="rowname">Show hidden items</div>
             <div class="rowdesc">Include files and folders marked hidden by Windows</div>
           </div>
-          <Toggle checked={settings.showHidden} onchange={toggleHidden} />
+          <Toggle label="Show hidden items" checked={settings.showHidden} onchange={toggleHidden} />
         </div>
         <div class="row">
           <span class="glyph rowicon">&#xE7C3;</span>
@@ -159,7 +184,27 @@
             <div class="rowname">File name extensions</div>
             <div class="rowdesc">Show the extension after each file name</div>
           </div>
-          <Toggle checked={settings.showExt} onchange={(v) => setSetting("showExt", v)} />
+          <Toggle label="File name extensions" checked={settings.showExt} onchange={(v) => setSetting("showExt", v)} />
+        </div>
+        <div class="row">
+          <span class="glyph rowicon">&#xE73A;</span>
+          <div class="rowlabel">
+            <div class="rowname">Item check boxes</div>
+            <div class="rowdesc">Select items with check boxes as well as clicks</div>
+          </div>
+          <Toggle label="Item check boxes" checked={settings.checkboxes} onchange={(v) => setSetting("checkboxes", v)} />
+        </div>
+        <div class="row">
+          <span class="glyph rowicon">&#xE72E;</span>
+          <div class="rowlabel">
+            <div class="rowname">Show protected operating system files</div>
+            <div class="rowdesc">Files Windows marks as both hidden and system, such as desktop.ini. Needs hidden items on.</div>
+          </div>
+          <Toggle
+            label="Show protected operating system files"
+            checked={settings.showProtected}
+            onchange={(v) => { setSetting("showProtected", v); refresh(); }}
+          />
         </div>
 
         <h2 class="section">Default folder view</h2>
@@ -187,7 +232,7 @@
           <div class="rowlabel">
             <div class="rowname">Ascending order</div>
           </div>
-          <Toggle checked={settings.defaultAsc} onchange={(v) => setSetting("defaultAsc", v)} />
+          <Toggle label="Ascending order" checked={settings.defaultAsc} onchange={(v) => setSetting("defaultAsc", v)} />
         </div>
         <div class="row">
           <span class="glyph rowicon">&#xE72C;</span>
@@ -196,7 +241,9 @@
             <div class="rowdesc">
               {clearedCount >= 0
                 ? `Cleared ${clearedCount} saved folder view${clearedCount === 1 ? "" : "s"}`
-                : `${folderPrefsCount()} folders have their own saved view and sort`}
+                : folderPrefsCount() === 1
+                  ? "1 folder has its own saved view and sort"
+                  : `${folderPrefsCount()} folders have their own saved view and sort`}
             </div>
           </div>
           <button class="btn" class:danger={clearArmed} onclick={clearFolders}>
@@ -204,7 +251,41 @@
           </button>
         </div>
 
+        <h2 class="section">Privacy</h2>
+        <div class="row">
+          <span class="glyph rowicon">&#xE81C;</span>
+          <div class="rowlabel">
+            <div class="rowname">Clear recent files</div>
+            <div class="rowdesc">
+              {recentCleared >= 0
+                ? `Cleared ${recentCleared} recent ${recentCleared === 1 ? "entry" : "entries"}`
+                : "The list of files you opened lately, which Home, Explorer and Start show. The files themselves stay."}
+            </div>
+          </div>
+          <button class="btn" class:danger={recentArmed} onclick={clearRecentFiles}>
+            {recentArmed ? "Click again to clear" : "Clear"}
+          </button>
+        </div>
+
+        <h2 class="section">Windows integration</h2>
+        <div class="row">
+          <span class="glyph rowicon">&#xE8DA;</span>
+          <div class="rowlabel">
+            <div class="rowname">Open in Filezy from File Explorer</div>
+            <div class="rowdesc">Adds "Open in Filezy" to Explorer's right-click menu for folders and drives. Explorer stays your file manager; turning this off, or uninstalling Filezy, takes the entry out.</div>
+          </div>
+          <Toggle label="Open in Filezy from File Explorer" checked={explorerEntry} onchange={setExplorerEntry} />
+        </div>
+
         <h2 class="section">Startup</h2>
+        <div class="row">
+          <span class="glyph rowicon">&#xE7C4;</span>
+          <div class="rowlabel">
+            <div class="rowname">Reopen tabs from last time</div>
+            <div class="rowdesc">When Filezy starts without a folder to open, it brings back the tabs of the window you used last</div>
+          </div>
+          <Toggle label="Reopen tabs from last time" checked={settings.restoreTabs} onchange={(v) => setSetting("restoreTabs", v)} />
+        </div>
         <div class="row">
           <span class="glyph rowicon">&#xE80F;</span>
           <div class="rowlabel">
@@ -243,7 +324,7 @@
             <div class="row compactrow">
               <span class="glyph rowicon">{it.glyph}</span>
               <div class="rowlabel"><div class="rowname">{it.label}</div></div>
-              <Toggle checked={menuOn(it.id)} onchange={(v) => setMenuOn(it.id, v)} />
+              <Toggle label={it.label} checked={menuOn(it.id)} onchange={(v) => setMenuOn(it.id, v)} />
             </div>
           {/each}
         {/each}
@@ -266,7 +347,7 @@
             <div class="rowname">Show entries from other apps</div>
             <div class="rowdesc">Turning this off also skips loading their handlers, so menus open faster</div>
           </div>
-          <Toggle checked={settings.shellExtras} onchange={(v) => setSetting("shellExtras", v)} />
+          <Toggle label="Show entries from other apps" checked={settings.shellExtras} onchange={(v) => setSetting("shellExtras", v)} />
         </div>
         {#if settings.shellExtras}
           {#if seenSorted.length}
@@ -275,6 +356,7 @@
                 <span class="glyph rowicon">&#xE7B8;</span>
                 <div class="rowlabel"><div class="rowname">{name}</div></div>
                 <Toggle
+                  label={name}
                   checked={!settings.hiddenExtras.includes(name)}
                   onchange={(v) => setExtraOn(name, v)}
                 />

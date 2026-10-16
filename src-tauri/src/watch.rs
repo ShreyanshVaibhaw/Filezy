@@ -1,25 +1,47 @@
-use crate::AppState;
+use crate::{paths, AppState};
 use notify::{RecursiveMode, Watcher};
 use std::path::Path;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
-/// Watch `path`, replacing any previous watcher. Changes are debounced and
-/// emitted as a single "fs-changed" event carrying the watched path.
-pub fn watch(app: &AppHandle, state: &AppState, path: &str) {
+/// Watch `path` (a display path), replacing any previous watcher. Changes are
+/// debounced and emitted as one "fs-changed" event carrying the path. Watcher
+/// errors (buffer overflow, the folder itself vanishing) also emit, so the view
+/// refreshes and finds out instead of silently going stale.
+/// Returns false when Windows won't report changes for this location.
+pub fn watch(app: &AppHandle, state: &AppState, path: &str) -> bool {
     let mut guard = state.watcher.lock().unwrap();
     *guard = None; // drop previous watcher; its channel closes, its thread exits
 
+    // Inside an archive, the archive file is what changes: watch its folder
+    // for changes to that one file. A library changes in any of its folders.
+    let (dirs, only) = match crate::archive::split(path) {
+        Some((file, _)) => match paths::parent(file) {
+            Some(dir) => (vec![dir], Some(paths::to_native(file).to_lowercase())),
+            None => return false,
+        },
+        None if crate::library::is_library(path) => match crate::library::folders(path) {
+            Ok(folders) if !folders.is_empty() => (folders, None),
+            _ => return false,
+        },
+        None => (vec![path.to_string()], None),
+    };
     let (tx, rx) = std::sync::mpsc::channel::<()>();
     let Ok(mut watcher) = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-        if res.is_ok() {
+        let ours = match (&only, &res) {
+            (Some(file), Ok(ev)) => ev.paths.iter().any(|p| p.to_string_lossy().to_lowercase() == *file),
+            _ => true,
+        };
+        if ours {
             let _ = tx.send(());
         }
     }) else {
-        return;
+        return false;
     };
-    if watcher.watch(Path::new(path), RecursiveMode::NonRecursive).is_err() {
-        return;
+    for dir in &dirs {
+        if watcher.watch(Path::new(&paths::to_native(dir)), RecursiveMode::NonRecursive).is_err() {
+            return false;
+        }
     }
 
     let app = app.clone();
@@ -42,4 +64,5 @@ pub fn watch(app: &AppHandle, state: &AppState, path: &str) {
     });
 
     *guard = Some(watcher);
+    true
 }

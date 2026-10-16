@@ -26,7 +26,8 @@ fn resolve_lnk(link: &IShellLinkW, lnk_path: &str) -> Option<String> {
         let pf: IPersistFile = link.cast().ok()?;
         let w = wide(lnk_path);
         pf.Load(PCWSTR(w.as_ptr()), STGM_READ).ok()?;
-        let mut buf = [0u16; 260];
+        // Room for extended-length targets, not just MAX_PATH.
+        let mut buf = vec![0u16; 32_768];
         // No Resolve(): it can pop UI or hit the network for dead links.
         link.GetPath(&mut buf, std::ptr::null_mut(), 0).ok()?;
         let len = buf.iter().position(|&c| c == 0)?;
@@ -37,27 +38,62 @@ fn resolve_lnk(link: &IShellLinkW, lnk_path: &str) -> Option<String> {
     }
 }
 
-pub fn list(max: usize) -> Vec<RecentFile> {
-    COM_INIT.with(|_| {});
-    let Ok(appdata) = std::env::var("APPDATA") else { return Vec::new() };
-    let dir = std::path::Path::new(&appdata).join("Microsoft\\Windows\\Recent");
-    let Ok(rd) = std::fs::read_dir(&dir) else { return Vec::new() };
-    let link: IShellLinkW =
-        match unsafe { CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER) } {
-            Ok(l) => l,
-            Err(_) => return Vec::new(),
-        };
+/// Windows' Recent items folder for this account. Only its own .lnk files
+/// are Recent files; the jump-list folders inside it are other apps' lists.
+fn dir() -> Option<std::path::PathBuf> {
+    Some(std::path::Path::new(&std::env::var("APPDATA").ok()?).join("Microsoft\\Windows\\Recent"))
+}
 
-    // Newest shortcuts first, so we resolve as few .lnk files as possible.
+/// The shortcuts in Recent items, newest first.
+fn shortcuts() -> Vec<(std::path::PathBuf, std::time::SystemTime)> {
+    let Some(Ok(rd)) = dir().map(std::fs::read_dir) else { return Vec::new() };
     let mut lnks: Vec<(std::path::PathBuf, std::time::SystemTime)> = rd
         .flatten()
-        .filter(|e| e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("lnk")))
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_file()) && e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("lnk")))
         .filter_map(|e| {
             let t = e.metadata().ok()?.modified().ok()?;
             Some((e.path(), t))
         })
         .collect();
     lnks.sort_by(|a, b| b.1.cmp(&a.1));
+    lnks
+}
+
+fn shell_link() -> Option<IShellLinkW> {
+    COM_INIT.with(|_| {});
+    unsafe { CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER) }.ok()
+}
+
+/// Take these files off Recent files: delete the shortcuts in Recent items
+/// that point at them, and nothing else. Returns how many went.
+pub fn remove(paths: &[String]) -> Result<usize, String> {
+    let link = shell_link().ok_or("Windows' shortcut reader isn't available.")?;
+    let mut n = 0;
+    for (lnk, _) in shortcuts() {
+        let Some(target) = resolve_lnk(&link, &lnk.to_string_lossy()) else { continue };
+        let target = target.trim_end_matches('\\').to_lowercase();
+        if paths.iter().any(|p| p.trim_end_matches('\\').to_lowercase() == target) {
+            std::fs::remove_file(&lnk).map_err(|e| e.to_string())?;
+            n += 1;
+        }
+    }
+    Ok(n)
+}
+
+/// Clear Recent files: delete every shortcut in Recent items. Jump lists and
+/// everything else stay. Returns how many went.
+pub fn clear() -> Result<usize, String> {
+    let lnks = shortcuts();
+    for (lnk, _) in &lnks {
+        std::fs::remove_file(lnk).map_err(|e| e.to_string())?;
+    }
+    Ok(lnks.len())
+}
+
+pub fn list(max: usize) -> Vec<RecentFile> {
+    let Some(link) = shell_link() else { return Vec::new() };
+    // Newest shortcuts first, so we resolve as few .lnk files as possible.
+    let lnks = shortcuts();
 
     let mut out = Vec::new();
     for (lnk, t) in lnks {

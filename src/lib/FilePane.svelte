@@ -1,25 +1,25 @@
 <script lang="ts">
+  import { menuKeys, fitMenu } from "./menukeys";
+  import { COLUMNS, colDef, columnsFor, saveColumns, SEARCH_KEY, attrLetters, type Col, type ColKey } from "./columns";
   import {
-    app, rows, sel, ensureRange, requestMeta, iconOf, typeOf, fmtDate, fmtSizeKB,
-    openEntry, sortBy, hooks, commitRename, copySel, paste, del, newFolder, refresh,
-    startRename, selectAll, isSelected, clearSel, selIndices, refreshClipState,
-    requestThumb, thumbOf, entryPath, collapsedGroups, loadNewItems, newFile, newItems,
-    extMeta, pinAdd, pinRemove, isPinned, displayName, newTab, pushUndo,
+    app, rows, sel, ensureRange, requestMeta, requestProps, propOf, iconOf, typeOf, fmtDate, fmtSizeKB,
+    openEntry, sortBy, hooks, refresh, selectAll, isSelected, clearSel, withSel, firstSel,
+    refreshClipState, requestThumb, thumbOf, entryPath, collapsedGroups, loadNewItems, newItems,
+    extMeta, isPinned, isCut, displayName, newTab, isHidden, can, up, folderName,
+    requestStatus, statusOf, cloudStateOf, isKept, isFavorite, setFavorite,
   } from "./store.svelte";
-  import type { Entry, OpRecord } from "./store.svelte";
-  import { settings, menuOn, anyMenuOn, extraOn, rememberExtras } from "./settings.svelte";
+  import {
+    commitRename, copySel, paste, del, newFolder, newFile, startRename, openInNewTabs,
+    openInNewWindow, openFileLocation, createShortcuts, pasteShortcuts, shareSel, propertiesSel, pinSelected,
+  } from "./ops.svelte";
+  import { selectRange, toggleRow, focusedRow, openSelection } from "./selection.svelte";
+  import type { Entry } from "./store.svelte";
+  import { settings, menuOn, anyMenuOn } from "./settings.svelte";
+  import ShellItems from "./ShellItems.svelte";
+  import { filterExtras, followMenu, OUR_VERBS, type ShellItem, type ShellMenu } from "./shellmenu";
   import { invoke } from "@tauri-apps/api/core";
-  import { getCurrentWebview } from "@tauri-apps/api/webview";
-  import { onMount } from "svelte";
-
-  interface ShellItem {
-    id: number;
-    text: string;
-    verb: string | null;
-    sep: boolean;
-    disabled: boolean;
-    sub: ShellItem[] | null;
-  }
+  import { displayPath, isArchive, isArchiveName, isServer, isVirtual } from "./paths";
+  import { compressSel, extractAll, extractSelected } from "./archive.svelte";
 
   // View geometry. vertical = icon above label (icon grids); tile = icon left, two text lines.
   interface ViewDef {
@@ -42,6 +42,17 @@
   };
 
   const HEADER = 40;
+
+  // Loading feedback only when a folder takes long enough to notice.
+  let slowLoad = $state(false);
+  $effect(() => {
+    if (!app.loading) {
+      slowLoad = false;
+      return;
+    }
+    const timer = setTimeout(() => (slowLoad = true), 300);
+    return () => clearTimeout(timer);
+  });
 
   let scroller: HTMLDivElement | undefined = $state();
   let scrollTop = $state(0);
@@ -271,13 +282,34 @@
       const e = rows[i];
       if (!e) continue;
       requestMeta(e);
-      if (v.icon >= 32) requestThumb(i, e, v.icon);
+      if (v.icon >= 32) requestThumb(e, v.icon);
+      if (!v.grid) requestProps(e, propCols);
+      if (!v.grid && statusCol) requestStatus(e);
     }
   });
   $effect(() => {
     hooks.gridCols = v.flow === "column" ? 1 : cols;
-    hooks.hStep = v.flow === "column" ? (glist ? glist.ipcG : ipc) : 1;
+    // Left/Right move between items only where items sit side by side.
+    hooks.hStep = v.flow === "column" ? (glist ? glist.ipcG : ipc) : v.grid ? 1 : 0;
+    // Page Up/Down move by what fits on screen.
+    hooks.pageSize = v.flow === "column"
+      ? Math.max(1, Math.floor(gridW / v.cellW)) * ipc
+      : Math.max(1, Math.floor(viewH / v.rowH) - 1) * cols;
   });
+
+  /// Shift+F10 and the menu key: the item menu at the focused row, or the
+  /// folder menu when nothing is selected.
+  hooks.contextMenu = () => {
+    dragged = false;
+    const i = focusedRow();
+    const el = i === undefined ? null : document.getElementById(`item-${i}`);
+    const pane = scroller?.getBoundingClientRect();
+    const r = el?.getBoundingClientRect();
+    const at = r
+      ? { clientX: r.left + 28, clientY: r.bottom - 2 } // just below the item, which stays visible
+      : { clientX: (pane?.left ?? 0) + 40, clientY: (pane?.top ?? 0) + 40 };
+    onContext({ ...at, preventDefault() {} }, i !== undefined && app.total ? i : null);
+  };
 
   hooks.scrollTo = (px) => {
     if (scroller) {
@@ -286,6 +318,8 @@
     }
   };
   hooks.getScroll = () => scroller?.scrollTop ?? 0;
+  hooks.visibleRange = () => entrySpan;
+  hooks.visibleCount = () => (v.flow === "column" ? ipc * (Math.ceil(gridW / v.cellW) + 1) : (Math.ceil(viewH / v.rowH) + 6) * cols);
   hooks.scrollToIndex = (i) => {
     if (!scroller) return;
     if (glist) {
@@ -329,6 +363,9 @@
   };
 
   function rowMouseDown(i: number, ev: MouseEvent) {
+    // The list keeps the focus (rows are its active descendant), not the row.
+    ev.preventDefault();
+    scroller?.focus({ preventScroll: true });
     // Middle-click a folder: open it in a new tab (Explorer/browser behavior).
     if (ev.button === 1) {
       const e = rows[i];
@@ -341,65 +378,80 @@
         sel.add(i);
         app.anchor = i;
       }
+      app.focus = i;
       return;
     }
-    if (ev.ctrlKey && !app.allSelected) {
-      if (sel.has(i)) sel.delete(i);
-      else sel.add(i);
-      app.anchor = i;
-    } else if (ev.shiftKey) {
-      clearSel();
-      const [a, b] = [Math.min(app.anchor, i), Math.max(app.anchor, i)];
-      for (let k = a; k <= b; k++) sel.add(k);
+    if (ev.shiftKey) {
+      // Shift selects from the anchor; Ctrl+Shift adds that range.
+      selectRange(app.anchor, i, ev.ctrlKey);
+      app.focus = i;
+    } else if (ev.ctrlKey && isSelected(i)) {
+      // Deselect on release, unless this turns into a Ctrl+drag of the selection.
+      toggleTo = i;
+      app.focus = i;
+    } else if (ev.ctrlKey) {
+      toggleRow(i);
+    } else if (isSelected(i) && selCountNow() > 1) {
+      // Keep the selection for a possible drag; a plain release selects just this one.
+      collapseTo = i;
+      app.focus = i;
     } else {
       clearSel();
       sel.add(i);
       app.anchor = i;
+      app.focus = i;
     }
   }
 
-  let ctx = $state<{ x: number; y: number; onRow: boolean } | null>(null);
+  // A click on one item of a multi-selection collapses to it on release, and a
+  // Ctrl+click on a selected item deselects it on release, unless either became a drag.
+  let collapseTo = -1;
+  let toggleTo = -1;
+  const selCountNow = () => (app.allSelected ? app.total : sel.size);
+  function rowMouseUp() {
+    if (toggleTo >= 0) toggleRow(toggleTo);
+    toggleTo = -1;
+    if (collapseTo < 0) return;
+    clearSel();
+    sel.add(collapseTo);
+    app.anchor = collapseTo;
+    collapseTo = -1;
+  }
+
+  // x, y: where the menu sits; at: where the click was (Windows' own menu opens there).
+  let ctx = $state<{ x: number; y: number; at: { x: number; y: number }; onRow: boolean } | null>(null);
+  // The shell's entries for the item menu: null while loading. ctxNote says why
+  // there are none, when the shell couldn't or wouldn't build them.
   let ctxItems = $state<ShellItem[] | null>(null);
-  let openSub = $state(-1);
+  let ctxNote = $state("");
+  let ctxSession = 0;
   let ctxSeq = 0;
-
-  // Verbs we render natively and instantly; the shell copy of them is dropped
-  // so only extension entries (7-Zip, Open with X, ...) stream in below.
-  const NATIVE_VERBS = new Set([
-    "open", "opennewwindow", "cut", "copy", "paste", "delete", "rename",
-    "properties", "openas", "pintohome", "unpinfromhome", "copyaspath",
-  ]);
-  function filterExtras(items: ShellItem[]): ShellItem[] {
-    const out: ShellItem[] = [];
-    for (const it of items) {
-      if (it.sep) {
-        if (out.length && !out[out.length - 1].sep) out.push(it);
-        continue;
-      }
-      if (NATIVE_VERBS.has((it.verb ?? "").toLowerCase())) continue;
-      out.push(it);
-    }
-    while (out.length && out[out.length - 1].sep) out.pop();
-    // Everything the shell offered is switchable in Settings, whether or not
-    // it is currently switched on.
-    rememberExtras(out.filter((it) => !it.sep).map((it) => it.text));
-    return out.filter((it) => it.sep || extraOn(it.text));
-  }
-
-  function firstSel(): number | undefined {
-    if (app.allSelected) return app.total ? 0 : undefined;
-    let min = -1;
-    for (const k of sel) if (min < 0 || k < min) min = k;
-    return min < 0 ? undefined : min;
-  }
+  // Share is offered only when every selected item is a file, as in Explorer.
+  let ctxFilesOnly = $state(false);
 
   // The four icons in the top strip of the item menu.
   const STRIP_IDS = ["file.cut", "file.copy", "file.rename", "file.delete"];
-  const ROW_IDS = [...STRIP_IDS, "file.open", "file.openwith", "file.pin", "file.copypath", "file.properties"];
-  const BLANK_IDS = ["blank.refresh", "blank.paste", "blank.new", "blank.selectall", "blank.terminal"];
+  const ROW_IDS = [
+    ...STRIP_IDS, "file.open", "file.opennewtab", "file.opennewwindow", "file.openlocation", "file.openwith", "file.extractall",
+    "file.keep", "file.freeup", "file.pin", "file.favorite", "file.compress", "file.copypath", "file.shortcut", "file.share", "file.properties", "file.moreoptions",
+  ];
+  // Inside an archive: look, open and extract; nothing in it changes yet.
+  const inArchive = $derived(isArchive(app.path));
+  const BLANK_IDS = ["blank.refresh", "blank.paste", "blank.pasteshortcut", "blank.new", "blank.selectall", "blank.terminal"];
 
-  function onContext(ev: MouseEvent, i: number | null) {
+  function onContext(ev: { clientX: number; clientY: number; shiftKey?: boolean; preventDefault(): void }, i: number | null) {
     ev.preventDefault();
+    if (dragged) return void (dragged = false);
+    // Shift+right-click: Windows' own menu straight away, as in Explorer.
+    if (ev.shiftKey && i !== null && menuOn("file.moreoptions") && !inArchive) {
+      if (!isSelected(i)) {
+        clearSel();
+        sel.add(i);
+        app.anchor = i;
+        app.focus = i;
+      }
+      return void moreOptions({ x: ev.clientX, y: ev.clientY }, true);
+    }
     // Nothing left to show: don't open an empty box. Shell extensions can still
     // fill the item menu, so only the blank menu is fully suppressed here.
     if (i === null && !anyMenuOn(BLANK_IDS)) return;
@@ -408,15 +460,27 @@
       clearSel();
       sel.add(i);
       app.anchor = i;
+      app.focus = i;
     }
-    const x = Math.min(ev.clientX, window.innerWidth - 300);
-    const y = Math.min(ev.clientY, window.innerHeight - 420);
-    ctx = { x, y, onRow: i !== null };
+    const x = ev.clientX;
+    const y = ev.clientY;
+    ctx = { x, y, at: { x: ev.clientX, y: ev.clientY }, onRow: i !== null };
     ctxItems = null;
-    openSub = -1;
+    ctxNote = "";
     const seq = ++ctxSeq;
-    if (i === null) {
+    if (i !== null) {
+      // One loaded row answers at once; larger selections ask the backend.
+      const one = !app.allSelected && sel.size === 1 ? rows[i] : undefined;
+      ctxFilesOnly = !!one && !one.is_dir;
+      if (!one) {
+        withSel((s) => invoke<{ count: number; files: number }>("selection_stats", { sel: s }))
+          .then((st) => seq === ctxSeq && (ctxFilesOnly = st.files === st.count))
+          .catch(() => {});
+      }
+    }
+    if (i === null || inArchive) {
       // Blank area: our own Win11-style menu (shell background verbs need Explorer's view host).
+      // An archive's entries aren't files the shell can make a menu for.
       ctxItems = [];
       blankNewOpen = false;
       loadNewItems();
@@ -428,24 +492,123 @@
       return;
     }
     // The native menu shows instantly; shell-extension entries stream in when
-    // QueryContextMenu (which loads every extension DLL) finishes.
-    // Build against the folder the items actually live in: search results carry
-    // their own parent, so app.path would be the wrong directory.
-    const anchor = rows[i];
-    const dir = anchor?.parent ?? app.path;
-    // ponytail: shell menu built for at most 100 items; huge selections get the first 100
-    const names = selIndices()
-      .map((k) => rows[k])
-      .filter((e) => e && (e.parent ?? app.path) === dir)
-      .slice(0, 100)
-      .map((e) => e!.name);
-    invoke<ShellItem[]>("shell_menu", { dir, names })
-      .then((items) => {
-        if (seq === ctxSeq && ctx) ctxItems = filterExtras(items);
+    // QueryContextMenu (which loads every extension DLL) finishes. The backend
+    // builds it for every selected item, fetched or not, in any folder.
+    withSel((s) => invoke<ShellMenu>("shell_menu", { sel: s }))
+      .then((m) => {
+        if (seq !== ctxSeq || !ctx) return;
+        ctxSession = m.session;
+        ctxNote = m.note ?? "";
+        ctxItems = filterExtras(m.items, OUR_VERBS);
+        followMenu(m, () => seq === ctxSeq && !!ctx, (items) => (ctxItems = filterExtras(items, OUR_VERBS)));
       })
-      .catch(() => {
-        if (seq === ctxSeq) ctxItems = [];
+      .catch((e) => {
+        if (seq !== ctxSeq) return;
+        // A newer right-click took over the worker; its own result will come.
+        if (String(e) !== "superseded") ctxNote = String(e);
+        ctxItems = [];
       });
+  }
+
+  /// Run a shell verb Filezy implements itself. False when it isn't one.
+  async function runVerb(v: string): Promise<boolean> {
+    const first = firstSel();
+    const fe = first === undefined ? undefined : rows[first];
+    switch (v) {
+      case "open":
+        await openSelection();
+        return true;
+      case "opennewwindow":
+      case "opennewprocess":
+        await openInNewWindow();
+        return true;
+      case "opennewtab":
+        await openInNewTabs();
+        return true;
+      case "cut":
+      case "copy":
+        await copySel(v === "cut");
+        return true;
+      case "copyaspath":
+        await withSel((sel) => invoke("copy_as_path", { sel }));
+        await refreshClipState();
+        return true;
+      case "delete":
+        await del();
+        return true;
+      case "rename":
+        await startRename();
+        return true;
+      // Pin verbs act on Filezy's Quick access, not Explorer's.
+      case "pintohome":
+      case "unpinfromhome":
+        await pinSelected(v === "pintohome");
+        return true;
+      case "properties":
+        await propertiesSel();
+        return true;
+      case "openas":
+        if (fe) await invoke("open_with", { path: entryPath(fe) });
+        return true;
+      case "link":
+        await createShortcuts();
+        return true;
+      case "windows.modernshare":
+        await shareSel();
+        return true;
+      case "makeavailableoffline":
+      case "makeavailableonline":
+        await cloudPin(v === "makeavailableoffline");
+        return true;
+    }
+    return false;
+  }
+
+  /// Add the selected files to Favorites on Home, or take them off.
+  async function favoriteSel(on: boolean) {
+    const items = await withSel((sel) => invoke<{ path: string; is_dir: boolean }[]>("sel_items", { sel })).catch(() => []);
+    await setFavorite(items.filter((it) => !it.is_dir).map((it) => it.path), on);
+  }
+
+  /// Always keep on this device (a toggle) or Free up space, for the selection.
+  /// Windows sets the pin state and the provider does the rest; the folder's
+  /// watcher then shows each item's new Status as it changes.
+  async function cloudPin(keep: boolean) {
+    try {
+      await withSel((sel) => invoke("cloud_pin", { sel, keep }));
+    } catch (e) {
+      app.status = String(e);
+    }
+  }
+
+  /// Windows' own context menu for the selection ("Show more options"), with
+  /// everything extensions add. Built-in commands picked there still run
+  /// Filezy's versions, so undo and the message bar keep working.
+  async function moreOptions(at: { x: number; y: number }, extended = false) {
+    ctx = null;
+    // Closing our menu hands the focus back to the page; let that land first,
+    // or it arrives while Windows' menu is open and closes it.
+    await new Promise((r) => setTimeout(r, 60));
+    const s = window.devicePixelRatio || 1;
+    try {
+      const verb = await withSel((sel) =>
+        invoke<string | null>("shell_menu_native", {
+          sel,
+          x: Math.round(at.x * s),
+          y: Math.round(at.y * s),
+          extended,
+          handled: [...OUR_VERBS].filter((v) => v !== "paste"),
+        }),
+      );
+      if (verb) await runVerb(verb);
+    } catch (e) {
+      app.status = String(e);
+    } finally {
+      setTimeout(() => {
+        refresh();
+        refreshClipState();
+      }, 400);
+    }
   }
 
   // Standard verbs run through our native implementations; only third-party
@@ -453,34 +616,9 @@
   // fail without Explorer's view/site chain).
   async function shellInvoke(it: ShellItem) {
     ctx = null;
-    const v2 = (it.verb ?? "").toLowerCase();
-    const first = selIndices()[0];
     try {
-      if (v2 === "open" && first !== undefined) return openEntry(first);
-      if (v2 === "cut") return void (await copySel(true));
-      if (v2 === "copy") return void (await copySel(false));
-      if (v2 === "copyaspath") {
-        await invoke("copy_as_path", { indices: selIndices() });
-        return refreshClipState();
-      }
-      if (v2 === "delete") return void (await del());
-      if (v2 === "rename") return startRename();
-      // Pin verbs act on OUR Quick Access, not real Explorer's.
-      if (v2 === "pintohome" && first !== undefined) {
-        const e = rows[first];
-        if (e) pinAdd(entryPath(e));
-        return;
-      }
-      if (v2 === "unpinfromhome" && first !== undefined) {
-        const e = rows[first];
-        if (e) pinRemove(entryPath(e));
-        return;
-      }
-      if (v2 === "properties" && first !== undefined)
-        return void (await invoke("show_properties", { index: first }));
-      if (v2 === "openas" && first !== undefined)
-        return void (await invoke("open_with", { index: first }));
-      await invoke("shell_menu_invoke", { id: it.id });
+      if (await runVerb((it.verb ?? "").toLowerCase())) return;
+      await invoke("shell_menu_invoke", { session: ctxSession, id: it.id });
     } catch (e) {
       app.status = String(e);
     } finally {
@@ -492,51 +630,151 @@
   }
 
   // Inline rename
+  // The rename box is recreated whenever the list re-renders (a refresh moves
+  // rows), so the typed text is kept here, tied to the item being renamed.
   let renameValue = $state("");
-  function renameInput(node: HTMLInputElement, name: string) {
-    renameValue = name;
+  let renameKey = "";
+  function renameInput(node: HTMLInputElement, e: Entry) {
+    const key = entryPath(e);
     node.focus();
-    const dot = name.lastIndexOf(".");
-    node.setSelectionRange(0, dot > 0 ? dot : name.length);
+    if (key === renameKey) return;
+    renameKey = key;
+    renameValue = e.name;
+    node.value = e.name;
+    // Like Explorer, select the name without its extension.
+    const dot = e.name.lastIndexOf(".");
+    node.setSelectionRange(0, !e.is_dir && dot > 0 ? dot : e.name.length);
+  }
+  $effect(() => {
+    if (app.renaming < 0) renameKey = "";
+  });
+  /**
+   * Blur commits, like Explorer. Chromium also blurs a box that is merely being
+   * replaced when the list re-renders, so wait a tick: if a fresh box for the same
+   * item has focus by then, the rename is still in progress.
+   */
+  function renameBlur() {
+    const key = renameKey;
+    setTimeout(() => {
+      const active = document.activeElement;
+      if (active instanceof HTMLInputElement && active.classList.contains("rename")) return;
+      // The row is between listings (or scrolled away); its box comes back with the text.
+      if (app.renaming >= 0 && !rows[app.renaming]) return;
+      if (app.renaming >= 0 && renameKey === key) commitRename(app.renaming, renameValue);
+    }, 0);
   }
 
-  // Details columns: Name is fixed leftmost and flexes; the metadata columns
-  // resize and reorder (Explorer keeps Name primary).
-  type MetaKey = "modified" | "type" | "size";
-  const META_LABEL: Record<MetaKey, string> = {
-    modified: "Date modified",
-    type: "Type",
-    size: "Size",
-  };
-  const colW = $state<Record<MetaKey, number>>({ modified: 170, type: 150, size: 110 });
-  let colOrder = $state<MetaKey[]>(["modified", "type", "size"]);
-  const gridCols = $derived(`minmax(200px, 1fr) ${colOrder.map((k) => colW[k] + "px").join(" ")}`);
+  // Details columns: Name is fixed leftmost and flexes; the others are each
+  // folder's own choice (columns.ts), resized, reordered and saved per folder.
+  // Search results keep one layout of their own.
+  const layoutKey = $derived(app.search ? SEARCH_KEY : app.path);
+  let columns = $state<Col[]>([]);
+  $effect(() => {
+    columns = columnsFor(layoutKey, app.cloud);
+  });
+  const gridCols = $derived(`minmax(200px, 1fr) ${columns.map((c) => c.w + "px").join(" ")}`);
+  const propCols = $derived(columns.filter((c) => colDef(c.k).prop).map((c) => c.k));
+  const statusCol = $derived(columns.some((c) => c.k === "status"));
 
-  function cellText(e: Entry, key: MetaKey): string {
-    return key === "modified" ? fmtDate(e.modified) : key === "type" ? typeOf(e) : fmtSizeKB(e);
+  /** Explorer's Status icons, by STORAGE_PROVIDER_STATE: a cloud when only
+   *  online, checks when on this device, arrows while syncing. */
+  function statusIcon(state: number): { glyph: string; tone: string } {
+    switch (state) {
+      case 1: return { glyph: "", tone: "cloud" };
+      case 2: return { glyph: "", tone: "ok" };
+      case 3: return { glyph: "", tone: "ok" };
+      case 7: return { glyph: "", tone: "bad" };
+      case 8: return { glyph: "", tone: "warn" };
+      case 9: return { glyph: "", tone: "bad" };
+      default: return { glyph: "", tone: "cloud" }; // pending, downloading, uploading
+    }
+  }
+  function persistColumns() {
+    if (layoutKey === SEARCH_KEY || !isVirtual(layoutKey)) saveColumns(layoutKey, columns);
+  }
+
+  function cellText(e: Entry, key: ColKey): string {
+    switch (key) {
+      case "modified":
+        return fmtDate(e.modified);
+      case "created":
+        return fmtDate(e.created);
+      case "type":
+        return typeOf(e);
+      case "size":
+        return fmtSizeKB(e);
+      case "location":
+        return displayPath(e.parent ?? app.path);
+      case "attributes":
+        return attrLetters(e.attrs);
+      case "status":
+        return statusOf(e);
+      default:
+        return propOf(e, key);
+    }
+  }
+
+  // Header menu: which columns show, and sizing them to their contents.
+  let hdrMenu = $state<{ x: number; y: number; key: ColKey | null } | null>(null);
+  function headerContext(ev: MouseEvent, key: ColKey | null) {
+    ev.preventDefault();
+    hdrMenu = { x: ev.clientX, y: ev.clientY, key };
+  }
+  function toggleColumn(k: ColKey) {
+    columns = columns.some((c) => c.k === k) ? columns.filter((c) => c.k !== k) : [...columns, { k, w: colDef(k).width }];
+    persistColumns();
+  }
+
+  let measurer: CanvasRenderingContext2D | null = null;
+  /** Widest of the column's texts in the list's font, as Explorer sizes a column to fit. */
+  function fitWidth(k: ColKey): number {
+    measurer ??= document.createElement("canvas").getContext("2d");
+    const cell = scroller?.querySelector(".cell.sub") ?? headerEl;
+    if (!measurer || !cell) return colDef(k).width;
+    measurer.font = getComputedStyle(cell).font;
+    let widest = measurer.measureText(colDef(k).label).width + 16; // room for the sort caret
+    let n = 0;
+    for (const e of rows) {
+      if (!e) continue;
+      // Status also draws its 16px icon and a 6px gap.
+      widest = Math.max(widest, measurer.measureText(cellText(e, k)).width + (k === "status" && statusOf(e) ? 22 : 0));
+      if (++n >= 20_000) break;
+    }
+    return Math.min(800, Math.max(50, Math.ceil(widest) + 24));
+  }
+  function fitColumn(k: ColKey) {
+    columns = columns.map((c) => (c.k === k ? { ...c, w: fitWidth(k) } : c));
+    persistColumns();
+  }
+  function fitAll() {
+    columns = columns.map((c) => ({ ...c, w: fitWidth(c.k) }));
+    persistColumns();
   }
 
   let headerEl: HTMLDivElement | undefined = $state();
 
-  // Column resize (drag the divider at a header's right edge).
-  let drag: { key: MetaKey; startX: number; startW: number } | null = null;
-  function startResize(key: MetaKey, ev: MouseEvent) {
+  // Column resize (drag the divider at a header's right edge; double-click sizes it to fit).
+  let drag: { key: ColKey; startX: number; startW: number } | null = null;
+  function startResize(key: ColKey, ev: MouseEvent) {
     ev.stopPropagation();
     ev.preventDefault();
-    drag = { key, startX: ev.clientX, startW: colW[key] };
+    drag = { key, startX: ev.clientX, startW: columns.find((c) => c.k === key)?.w ?? 100 };
   }
   function onResizeMove(ev: MouseEvent) {
     if (!drag) return;
-    colW[drag.key] = Math.max(60, drag.startW + ev.clientX - drag.startX);
+    const d = drag;
+    const w = Math.max(50, d.startW + ev.clientX - d.startX);
+    columns = columns.map((c) => (c.k === d.key ? { ...c, w } : c));
   }
   function endResize() {
+    if (drag) persistColumns();
     drag = null;
   }
 
   // Column reorder (drag a metadata header onto another; live-swaps as you move).
-  let colDrag = $state<{ key: MetaKey; startX: number; moved: boolean } | null>(null);
+  let colDrag = $state<{ key: ColKey; startX: number; moved: boolean } | null>(null);
   let suppressSort = false;
-  function startColDrag(key: MetaKey, ev: MouseEvent) {
+  function startColDrag(key: ColKey, ev: MouseEvent) {
     if (ev.button !== 0) return;
     colDrag = { key, startX: ev.clientX, moved: false };
   }
@@ -545,8 +783,8 @@
     if (!colDrag.moved && Math.abs(ev.clientX - colDrag.startX) < 5) return;
     colDrag.moved = true;
     const cells = [...headerEl.querySelectorAll<HTMLElement>(".hcell[data-meta]")];
-    const from = colOrder.indexOf(colDrag.key);
-    let to = colOrder.length - 1;
+    const from = columns.findIndex((c) => c.k === colDrag!.key);
+    let to = columns.length - 1;
     for (let idx = 0; idx < cells.length; idx++) {
       const r = cells[idx].getBoundingClientRect();
       if (ev.clientX < r.left + r.width / 2) {
@@ -555,16 +793,20 @@
       }
     }
     if (to !== from) {
-      const next = colOrder.filter((k) => k !== colDrag!.key);
-      next.splice(to, 0, colDrag!.key);
-      colOrder = next;
+      const moving = columns[from];
+      const next = columns.filter((c) => c !== moving);
+      next.splice(to, 0, moving);
+      columns = next;
     }
   }
   function endColDrag() {
-    if (colDrag?.moved) suppressSort = true;
+    if (colDrag?.moved) {
+      suppressSort = true;
+      persistColumns();
+    }
     colDrag = null;
   }
-  function headerClick(key: MetaKey | "name") {
+  function headerClick(key: ColKey | "name") {
     if (suppressSort) {
       suppressSort = false;
       return;
@@ -670,82 +912,67 @@
   let blankNewOpen = $state(false);
 
   // ---- OLE drag out ----
+  // Either button starts a drag; the shell's drop source then follows that
+  // button, and Ctrl or Shift held at any point picks copy or move. Drops come
+  // in through drag.ts.
   let dragArm: { x: number; y: number } | null = null;
+  // A right-drag just ended: its button release must not open the item menu.
+  let dragged = false;
   function armDrag(ev: MouseEvent) {
-    if (ev.button === 0 && !ev.ctrlKey && !ev.shiftKey) dragArm = { x: ev.clientX, y: ev.clientY };
+    dragged = false;
+    if (ev.button === 0 || ev.button === 2) dragArm = { x: ev.clientX, y: ev.clientY };
   }
   function dragMove(ev: MouseEvent) {
     if (!dragArm) return;
     if (Math.abs(ev.clientX - dragArm.x) + Math.abs(ev.clientY - dragArm.y) > 6) {
       dragArm = null;
-      invoke("start_drag", { indices: selIndices() }).catch((e) => (app.status = String(e)));
+      collapseTo = -1;
+      toggleTo = -1;
+      dragged = true;
+      // ponytail: an archive's entries can't be dragged out yet (Extract does it).
+      if (!inArchive) withSel((sel) => invoke("start_drag", { sel })).catch((e) => (app.status = String(e)));
     }
   }
 
-  // ---- native drop in ----
-  let dropIdx = $state(-1);
-  function hitTest(pos: { x: number; y: number }): number {
-    const s = window.devicePixelRatio || 1;
-    const el = document
-      .elementFromPoint(pos.x / s, pos.y / s)
-      ?.closest("[data-idx]") as HTMLElement | null;
-    const i = el ? +el.dataset.idx! : -1;
-    return i >= 0 && rows[i]?.is_dir ? i : -1;
-  }
-  async function handleDrop(paths: string[], pos: { x: number; y: number }) {
-    const idx = hitTest(pos);
-    dropIdx = -1;
-    const e = idx >= 0 ? rows[idx] : undefined;
-    const dest = e ? entryPath(e) : app.path;
-    try {
-      pushUndo(await invoke<OpRecord[]>("drop_paths", { paths, dest }));
-    } catch (err) {
-      app.status = String(err);
-    }
-    refresh();
-  }
-  onMount(() => {
-    let un: (() => void) | undefined;
-    getCurrentWebview()
-      .onDragDropEvent((ev) => {
-        const p = ev.payload as any;
-        if (p.type === "over") dropIdx = hitTest(p.position);
-        else if (p.type === "drop") handleDrop(p.paths, p.position);
-        else dropIdx = -1;
-      })
-      .then((u) => (un = u));
-    return () => un?.();
-  });
+  // Where a drop on the list background goes: the folder shown, if it is one.
+  const backgroundDrop = $derived(!app.search && !isVirtual(app.path) && !isArchive(app.path) ? app.path : undefined);
 </script>
 
 <svelte:window
-  onmousedown={(e) => { if (ctx && !(e.target as HTMLElement).closest(".menu")) ctx = null; }}
+  onmousedown={(e) => {
+    if (!(e.target as HTMLElement).closest(".menu")) {
+      ctx = null;
+      hdrMenu = null;
+    }
+  }}
   onmousemove={(e) => { onResizeMove(e); dragMove(e); colDragMove(e); marqueeMove(e); }}
-  onmouseup={() => { endResize(); dragArm = null; endColDrag(); marqueeEnd(); }}
+  onmouseup={() => { endResize(); dragArm = null; endColDrag(); marqueeEnd(); rowMouseUp(); }}
 />
 
-<div class="pane">
+<div class="pane" data-filelist>
   {#if !v.grid}
     <div class="header" bind:this={headerEl} style="height:{HEADER}px; grid-template-columns:{gridCols}">
-      <button class="hcell" onclick={() => headerClick("name")}>
+      <button class="hcell" onclick={() => headerClick("name")} oncontextmenu={(ev) => headerContext(ev, null)}>
         {#if app.sortKey === "name"}
           <span class="glyph caret">{app.asc ? "" : ""}</span>
         {/if}
         <span class="hlabel">Name</span>
       </button>
-      {#each colOrder as key (key)}
+      {#each columns as c (c.k)}
         <button
           class="hcell"
-          class:coldragging={colDrag?.key === key && colDrag.moved}
-          data-meta={key}
-          onmousedown={(ev) => startColDrag(key, ev)}
-          onclick={() => headerClick(key)}
+          class:right={colDef(c.k).right}
+          class:coldragging={colDrag?.key === c.k && colDrag.moved}
+          data-meta={c.k}
+          onmousedown={(ev) => startColDrag(c.k, ev)}
+          onclick={() => headerClick(c.k)}
+          oncontextmenu={(ev) => headerContext(ev, c.k)}
         >
-          {#if app.sortKey === key}
+          {#if app.sortKey === c.k}
             <span class="glyph caret">{app.asc ? "" : ""}</span>
           {/if}
-          <span class="hlabel">{META_LABEL[key]}</span>
-          <div class="hresize" role="none" onmousedown={(ev) => startResize(key, ev)}></div>
+          <span class="hlabel">{colDef(c.k).label}</span>
+          <div class="hresize" role="none" onmousedown={(ev) => startResize(c.k, ev)} ondblclick={(ev) => { ev.stopPropagation(); fitColumn(c.k); }}></div>
         </button>
       {/each}
     </div>
@@ -760,12 +987,16 @@
     onscroll={() => { scrollTop = scroller!.scrollTop; scrollLeft = scroller!.scrollLeft; }}
     onmousedown={(e) => { if (blankTarget(e)) marqueeStart(e); }}
     oncontextmenu={(e) => { if (blankTarget(e)) onContext(e, null); }}
+    data-drop={backgroundDrop}
+    data-drop-label={backgroundDrop ? folderName(backgroundDrop) : undefined}
+    data-drop-quiet
+    data-drop-scroll
     role="listbox"
-    tabindex="-1"
+    tabindex="0"
+    aria-multiselectable="true"
+    aria-label={folderName(app.search?.root ?? app.path)}
+    aria-activedescendant={app.focus >= entrySpan.first && app.focus < entrySpan.last ? `item-${app.focus}` : undefined}
   >
-    {#if app.total === 0}
-      <div class="emptyfolder">{app.searching ? "Searching…" : "This folder is empty."}</div>
-    {/if}
     <div
       class="canvas"
       style={ggrid
@@ -831,19 +1062,30 @@
           <div
             class="vrow"
             class:selected={isSelected(i)}
-            class:drophover={dropIdx === i}
+            class:focused={app.focus === i}
+            class:cut={!!e && isCut(e)}
+            id={`item-${i}`}
             title={e?.parent ?? ""}
             data-idx={i}
+            data-drop={e?.is_dir ? entryPath(e) : undefined}
+            data-drop-label={e?.is_dir ? displayName(e) : undefined}
             style="transform: translateY({d * v.rowH}px); height:{v.rowH}px; grid-template-columns:{gridCols}"
             onmousedown={(ev) => { if (e) { rowMouseDown(i, ev); armDrag(ev); } }}
             ondblclick={() => e && app.renaming !== i && openEntry(i)}
             oncontextmenu={(ev) => e && onContext(ev, i)}
             role="option"
             aria-selected={isSelected(i)}
+            aria-setsize={app.total}
+            aria-posinset={i + 1}
             tabindex="-1"
           >
             {#if e}
-              <div class="cell name" class:dim={e.hidden}>
+              <div class="cell name" class:dim={isHidden(e)}>
+                {#if settings.checkboxes}
+                  <span class="ck" class:on={isSelected(i)} aria-hidden="true" onmousedown={(ev) => { ev.stopPropagation(); if (ev.button === 0) toggleRow(i); }}>
+                    <span class="glyph">&#xE73E;</span>
+                  </span>
+                {/if}
                 {#if iconOf(e)}
                   <img class="fileicon" src={iconOf(e)} alt="" width="16" height="16" />
                 {:else}
@@ -852,14 +1094,15 @@
                 {#if app.renaming === i}
                   <input
                     class="rename"
-                    use:renameInput={e.name}
+                    use:renameInput={e}
                     bind:value={renameValue}
                     onkeydown={(ev) => {
                       ev.stopPropagation();
                       if (ev.key === "Enter") commitRename(i, renameValue);
                       else if (ev.key === "Escape") app.renaming = -1;
+                      if (ev.key === "Enter" || ev.key === "Escape") scroller?.focus({ preventScroll: true });
                     }}
-                    onblur={() => commitRename(i, renameValue)}
+                    onblur={renameBlur}
                     onmousedown={(ev) => ev.stopPropagation()}
                     ondblclick={(ev) => ev.stopPropagation()}
                     spellcheck="false"
@@ -868,8 +1111,16 @@
                   <span class="fname">{displayName(e)}</span>
                 {/if}
               </div>
-              {#each colOrder as key (key)}
-                <div class="cell sub" class:size={key === "size"}>{cellText(e, key)}</div>
+              {#each columns as c (c.k)}
+                {@const cs = c.k === "status" ? cloudStateOf(e) : null}
+                {#if cs}
+                  {@const icon = statusIcon(cs.state)}
+                  <div class="cell sub status" title={cs.text}>
+                    <span class="glyph {icon.tone}" aria-hidden="true">{icon.glyph}</span>{cs.text}
+                  </div>
+                {:else}
+                  <div class="cell sub" class:size={colDef(c.k).right}>{cellText(e, c.k)}</div>
+                {/if}
               {/each}
             {/if}
           </div>
@@ -880,18 +1131,29 @@
             class:vert={v.vertical}
             class:tile={v.tile}
             class:selected={isSelected(i)}
-            class:drophover={dropIdx === i}
+            class:focused={app.focus === i}
+            class:cut={!!e && isCut(e)}
+            id={`item-${i}`}
             data-idx={i}
+            data-drop={e?.is_dir ? entryPath(e) : undefined}
+            data-drop-label={e?.is_dir ? displayName(e) : undefined}
             style="transform: translate({pos.x}px, {pos.y}px); width:{v.cellW - 6}px; height:{v.rowH - 6}px"
             onmousedown={(ev) => { if (e) { rowMouseDown(i, ev); armDrag(ev); } }}
             ondblclick={() => e && app.renaming !== i && openEntry(i)}
             oncontextmenu={(ev) => e && onContext(ev, i)}
             role="option"
             aria-selected={isSelected(i)}
+            aria-setsize={app.total}
+            aria-posinset={i + 1}
             tabindex="-1"
           >
             {#if e}
               {@const src = v.icon >= 32 ? thumbOf(e, v.icon) : iconOf(e)}
+              {#if settings.checkboxes}
+                <span class="ck corner" class:on={isSelected(i)} aria-hidden="true" onmousedown={(ev) => { ev.stopPropagation(); if (ev.button === 0) toggleRow(i); }}>
+                  <span class="glyph">&#xE73E;</span>
+                </span>
+              {/if}
               <div class="gicon" style={v.vertical ? `height:${v.icon + 8}px` : `width:${v.icon}px`}>
                 {#if src}
                   <img src={src} alt="" style="max-width:{v.icon}px; max-height:{v.icon}px" />
@@ -901,18 +1163,19 @@
                   </span>
                 {/if}
               </div>
-              <div class="glabel" class:dim={e.hidden}>
+              <div class="glabel" class:dim={isHidden(e)}>
                 {#if app.renaming === i}
                   <input
                     class="rename"
-                    use:renameInput={e.name}
+                    use:renameInput={e}
                     bind:value={renameValue}
                     onkeydown={(ev) => {
                       ev.stopPropagation();
                       if (ev.key === "Enter") commitRename(i, renameValue);
                       else if (ev.key === "Escape") app.renaming = -1;
+                      if (ev.key === "Enter" || ev.key === "Escape") scroller?.focus({ preventScroll: true });
                     }}
-                    onblur={() => commitRename(i, renameValue)}
+                    onblur={renameBlur}
                     onmousedown={(ev) => ev.stopPropagation()}
                     ondblclick={(ev) => ev.stopPropagation()}
                     spellcheck="false"
@@ -936,27 +1199,74 @@
         style="left:{marqueeRect.x}px; top:{marqueeRect.y}px; width:{marqueeRect.w}px; height:{marqueeRect.h}px"
       ></div>
     {/if}
-    {#if app.total === 0}
-      <div class="empty">{app.filter ? "No items match your search." : "This folder is empty."}</div>
+    {#if app.error}
+      <div class="state error" role="alert">
+        <span class="glyph sicon">&#xE783;</span>
+        <div class="stext">{app.error}</div>
+        <div class="sbtns">
+          <button class="sbtn" onclick={() => refresh()}>Try again</button>
+          <button class="sbtn" onclick={up}>Go up</button>
+        </div>
+      </div>
+    {:else if app.total === 0 && !app.loading}
+      <div class="state" role="status">
+        {#if app.search}
+          {app.searching
+            ? "Searching…"
+            : app.search.stopped
+              ? "Nothing was found before the search was stopped."
+              : "No items match your search."}
+        {:else if isServer(app.path)}
+          This computer doesn't share any folders, or none you can see.
+        {:else}
+          This folder is empty.
+        {/if}
+      </div>
     {/if}
   </div>
+  {#if slowLoad}
+    <div class="loadbar" role="progressbar" aria-label="Loading folder"><span></span></div>
+  {/if}
 </div>
 
+{#if hdrMenu}
+  <div class="menu hdrmenu" style="left:{hdrMenu.x}px; top:{hdrMenu.y}px" use:menuKeys={() => (hdrMenu = null)} use:fitMenu={hdrMenu}>
+    {#if hdrMenu.key}
+      <button class="menu-item" onclick={() => { const k = hdrMenu?.key; hdrMenu = null; if (k) fitColumn(k); }}>
+        <span class="glyph"></span> Size column to fit
+      </button>
+    {/if}
+    <button class="menu-item" onclick={() => { hdrMenu = null; fitAll(); }}>
+      <span class="glyph"></span> Size all columns to fit
+    </button>
+    <div class="menu-sep"></div>
+    <button class="menu-item" role="menuitemcheckbox" aria-checked="true" disabled>
+      <span class="glyph">&#xE73E;</span> Name
+    </button>
+    {#each COLUMNS as d (d.key)}
+      {@const on = columns.some((c) => c.k === d.key)}
+      <button class="menu-item" role="menuitemcheckbox" aria-checked={on} onclick={() => { hdrMenu = null; toggleColumn(d.key); }}>
+        <span class="glyph">{on ? "\uE73E" : ""}</span> {d.label}
+      </button>
+    {/each}
+  </div>
+{/if}
+
 {#if ctx}
-  <div class="menu ctxmenu" style="left:{ctx.x}px; top:{ctx.y}px">
-    {#if ctx.onRow && anyMenuOn(STRIP_IDS)}
+  <div class="menu ctxmenu" style="left:{ctx.x}px; top:{ctx.y}px" use:menuKeys={() => (ctx = null)} use:fitMenu={ctx}>
+    {#if ctx.onRow && anyMenuOn(STRIP_IDS) && !inArchive}
       <div class="strip">
         {#if menuOn("file.cut")}
-          <button title="Cut" onclick={() => { ctx = null; copySel(true); }}><span class="glyph">&#xE8C6;</span></button>
+          <button title="Cut" aria-label="Cut" onclick={() => { ctx = null; copySel(true); }}><span class="glyph">&#xE8C6;</span></button>
         {/if}
         {#if menuOn("file.copy")}
-          <button title="Copy" onclick={() => { ctx = null; copySel(false); }}><span class="glyph">&#xE8C8;</span></button>
+          <button title="Copy" aria-label="Copy" onclick={() => { ctx = null; copySel(false); }}><span class="glyph">&#xE8C8;</span></button>
         {/if}
         {#if menuOn("file.rename")}
-          <button title="Rename" onclick={() => { ctx = null; startRename(); }}><span class="glyph">&#xE8AC;</span></button>
+          <button title="Rename" aria-label="Rename" onclick={() => { ctx = null; startRename(); }}><span class="glyph">&#xE8AC;</span></button>
         {/if}
         {#if menuOn("file.delete")}
-          <button title="Delete" onclick={() => { ctx = null; del(); }}><span class="glyph">&#xE74D;</span></button>
+          <button title="Delete" aria-label="Delete" onclick={() => { ctx = null; del(); }}><span class="glyph">&#xE74D;</span></button>
         {/if}
       </div>
       <div class="menu-sep"></div>
@@ -964,34 +1274,94 @@
     {#if ctx.onRow}
       {@const fi = firstSel()}
       {@const fe = fi !== undefined ? rows[fi] : undefined}
+      {@const multi = app.allSelected ? app.total : sel.size}
       {#if menuOn("file.open")}
         <button class="menu-item" onclick={() => { ctx = null; if (fi !== undefined) openEntry(fi); }}>
           <span class="glyph">&#xE8E5;</span> Open
         </button>
       {/if}
-      {#if fe && !fe.is_dir && menuOn("file.openwith")}
-        <button class="menu-item" onclick={() => { ctx = null; invoke("open_with", { index: fi }).catch((e) => (app.status = String(e))); }}>
+      {#if fe?.is_dir && menuOn("file.opennewtab")}
+        <button class="menu-item" onclick={() => { ctx = null; openInNewTabs(); }}>
+          <span class="glyph">&#xE8A7;</span> Open in new tab
+        </button>
+      {/if}
+      {#if fe?.is_dir && multi === 1 && menuOn("file.opennewwindow")}
+        <button class="menu-item" onclick={() => { ctx = null; openInNewWindow(); }}>
+          <span class="glyph">&#xE737;</span> Open in new window
+        </button>
+      {/if}
+      {#if fe && app.search && multi === 1 && menuOn("file.openlocation")}
+        <button class="menu-item" onclick={() => { ctx = null; openFileLocation(entryPath(fe)); }}>
+          <span class="glyph">&#xE838;</span> Open file location
+        </button>
+      {/if}
+      {#if fe && !fe.is_dir && multi === 1 && menuOn("file.openwith") && !inArchive}
+        <button class="menu-item" onclick={() => { ctx = null; invoke("open_with", { path: entryPath(fe) }).catch((e) => (app.status = String(e))); }}>
           <span class="glyph">&#xE7AC;</span> Open with
         </button>
       {/if}
-      {#if fe?.is_dir && menuOn("file.pin")}
+      {#if inArchive && menuOn("file.extractall")}
+        <button class="menu-item" onclick={() => { ctx = null; extractSelected(); }}>
+          <span class="glyph">&#xE8B7;</span> Extract...
+        </button>
+        <button class="menu-item" onclick={() => { ctx = null; extractAll(); }}>
+          <span class="glyph">&#xE8B7;</span> Extract all...
+        </button>
+      {:else if fe && !fe.is_dir && multi === 1 && isArchiveName(fe.name) && menuOn("file.extractall")}
+        <button class="menu-item" onclick={() => { ctx = null; extractAll(entryPath(fe)); }}>
+          <span class="glyph">&#xE8B7;</span> Extract all...
+        </button>
+      {/if}
+      {#if app.cloud && !inArchive && menuOn("file.keep")}
+        {@const kept = !!fe && isKept(fe)}
+        <button class="menu-item" role="menuitemcheckbox" aria-checked={kept} onclick={() => { ctx = null; cloudPin(true); }}>
+          <span class="glyph">{kept ? "" : ""}</span> Always keep on this device
+        </button>
+      {/if}
+      {#if app.cloud && !inArchive && menuOn("file.freeup")}
+        <button class="menu-item" onclick={() => { ctx = null; cloudPin(false); }}>
+          <span class="glyph">&#xE753;</span> Free up space
+        </button>
+      {/if}
+      {#if fe?.is_dir && menuOn("file.pin") && !inArchive}
         {#if isPinned(entryPath(fe))}
-          <button class="menu-item" onclick={() => { ctx = null; pinRemove(entryPath(fe)); }}>
+          <button class="menu-item" onclick={() => { ctx = null; pinSelected(false); }}>
             <span class="glyph">&#xE77A;</span> Unpin from Quick access
           </button>
         {:else}
-          <button class="menu-item" onclick={() => { ctx = null; pinAdd(entryPath(fe)); }}>
+          <button class="menu-item" onclick={() => { ctx = null; pinSelected(true); }}>
             <span class="glyph">&#xE840;</span> Pin to Quick access
           </button>
         {/if}
       {/if}
-      {#if menuOn("file.copypath")}
-        <button class="menu-item" onclick={() => { ctx = null; invoke("copy_as_path", { indices: selIndices() }).then(refreshClipState).catch((e) => (app.status = String(e))); }}>
+      {#if ctxFilesOnly && menuOn("file.favorite") && !inArchive}
+        {@const fav = !!fe && isFavorite(entryPath(fe))}
+        <button class="menu-item" onclick={() => { const on = !fav; ctx = null; favoriteSel(on); }}>
+          <span class="glyph">{fav ? "" : ""}</span> {fav ? "Remove from Favorites" : "Add to Favorites"}
+        </button>
+      {/if}
+      {#if menuOn("file.compress") && !inArchive}
+        <button class="menu-item" onclick={() => { ctx = null; compressSel(); }}>
+          <span class="glyph">&#xF012;</span> Compress to ZIP file
+        </button>
+      {/if}
+      {#if menuOn("file.copypath") && !inArchive}
+        <button class="menu-item" onclick={() => { ctx = null; withSel((sel) => invoke("copy_as_path", { sel })).then(refreshClipState).catch((e) => (app.status = String(e))); }}>
           <span class="glyph">&#xE8C8;</span> Copy as path
         </button>
       {/if}
-      {#if menuOn("file.properties")}
-        <button class="menu-item" onclick={() => { ctx = null; if (fi !== undefined) invoke("show_properties", { index: fi }).catch((e) => (app.status = String(e))); }}>
+      {#if menuOn("file.shortcut") && !inArchive}
+        <button class="menu-item" onclick={() => { ctx = null; createShortcuts(); }}>
+          <span class="glyph">&#xE71B;</span> Create shortcut
+        </button>
+      {/if}
+      {#if ctxFilesOnly && menuOn("file.share") && !inArchive}
+        <button class="menu-item" onclick={() => { ctx = null; shareSel(); }}>
+          <span class="glyph">&#xE72D;</span> Share
+        </button>
+      {/if}
+      {#if menuOn("file.properties") && !inArchive}
+        <button class="menu-item" onclick={() => { ctx = null; propertiesSel(); }}>
           <span class="glyph">&#xE90F;</span> Properties
         </button>
       {/if}
@@ -1000,33 +1370,20 @@
         <div class="menuload">Loading…</div>
       {:else if ctxItems.length}
         <div class="menu-sep"></div>
-        <div class="scrollwrap">
-          {#each ctxItems as it, idx (idx)}
-            {#if it.sep}
-              <div class="menu-sep"></div>
-            {:else}
-              <div class="subwrap" role="none" onmouseenter={() => (openSub = it.sub ? idx : -1)}>
-                <button class="menu-item wide" disabled={it.disabled} onclick={() => !it.sub && shellInvoke(it)}>
-                  <span class="mtext">{it.text}</span>
-                  {#if it.sub}<span class="glyph subchev">&#xE76C;</span>{/if}
-                </button>
-                {#if it.sub && openSub === idx}
-                  <div class="menu submenu">
-                    {#each it.sub as s, sidx (sidx)}
-                      {#if s.sep}
-                        <div class="menu-sep"></div>
-                      {:else}
-                        <button class="menu-item wide" disabled={s.disabled} onclick={() => shellInvoke(s)}>
-                          <span class="mtext">{s.text}</span>
-                        </button>
-                      {/if}
-                    {/each}
-                  </div>
-                {/if}
-              </div>
-            {/if}
-          {/each}
+        <!-- Extensions can add dozens of entries: they scroll on their own, so the
+             native entries and Show more options stay in view. -->
+        <div class="extras">
+          <ShellItems items={ctxItems} run={shellInvoke} />
         </div>
+      {:else if ctxNote && settings.shellExtras}
+        <div class="menu-sep"></div>
+        <div class="menunote" role="note">{ctxNote}</div>
+      {/if}
+      {#if menuOn("file.moreoptions") && !inArchive}
+        <div class="menu-sep"></div>
+        <button class="menu-item" onclick={() => ctx && moreOptions(ctx.at)}>
+          <span class="glyph">&#xE712;</span> Show more options
+        </button>
       {/if}
     {:else}
       {#if menuOn("blank.refresh")}
@@ -1034,12 +1391,17 @@
           <span class="glyph">&#xE72C;</span> Refresh
         </button>
       {/if}
-      {#if menuOn("blank.paste")}
+      {#if menuOn("blank.paste") && !inArchive}
         <button class="menu-item" disabled={!app.canPaste} onclick={() => { ctx = null; paste(); }}>
           <span class="glyph">&#xE77F;</span> Paste
         </button>
       {/if}
-      {#if menuOn("blank.new")}
+      {#if menuOn("blank.pasteshortcut") && !inArchive}
+        <button class="menu-item" disabled={!app.canPaste} onclick={() => { ctx = null; pasteShortcuts(); }}>
+          <span class="glyph">&#xE71B;</span> Paste shortcut
+        </button>
+      {/if}
+      {#if menuOn("blank.new") && !inArchive}
         <div class="menu-sep"></div>
         <div class="subwrap" role="none" onmouseenter={() => (blankNewOpen = true)} onmouseleave={() => (blankNewOpen = false)}>
           <button class="menu-item wide">
@@ -1048,7 +1410,7 @@
             <span class="glyph subchev">&#xE76C;</span>
           </button>
           {#if blankNewOpen}
-            <div class="menu submenu">
+            <div class="menu submenu" use:menuKeys={() => (blankNewOpen = false)}>
               <button class="menu-item wide" onclick={() => { ctx = null; newFolder(); }}>
                 {#if extMeta.get("//dir")?.icon}
                   <img src={extMeta.get("//dir")?.icon} alt="" width="16" height="16" />
@@ -1079,7 +1441,13 @@
           <span class="glyph">&#xE8B3;</span> Select all
         </button>
       {/if}
-      {#if menuOn("blank.terminal")}
+      {#if inArchive && menuOn("file.extractall")}
+        <div class="menu-sep"></div>
+        <button class="menu-item" onclick={() => { ctx = null; extractAll(); }}>
+          <span class="glyph">&#xE8B7;</span> Extract all...
+        </button>
+      {/if}
+      {#if menuOn("blank.terminal") && !inArchive}
         <div class="menu-sep"></div>
         <button class="menu-item" onclick={() => { ctx = null; invoke("open_terminal", { dir: app.path }).catch((e) => (app.status = String(e))); }}>
           <span class="glyph">&#xE756;</span> Open in Terminal
@@ -1091,6 +1459,7 @@
 
 <style>
   .pane {
+    position: relative;
     flex: 1;
     min-height: 0;
     overflow: hidden;
@@ -1209,11 +1578,48 @@
   .gcell.selected:hover {
     background: var(--sel-hover);
   }
-  .vrow.drophover,
-  .gcell.drophover {
-    background: var(--sel-hover);
-    outline: 1px solid var(--accent);
+  /* Explorer's focus rectangle: only once the keyboard is in use. */
+  .scroller:focus-visible {
+    outline: none;
+  }
+  .scroller:focus-visible .focused {
+    outline: 1px solid var(--text-2);
     outline-offset: -1px;
+  }
+  /* Item check boxes: on hover and on selected items. */
+  .ck {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--text-3);
+    border-radius: 3px;
+    /* Transparent rather than hidden, so the spot still takes a click before
+       hover has painted it. */
+    opacity: 0;
+  }
+  .ck .glyph {
+    font-size: 10px;
+    visibility: hidden;
+  }
+  .vrow:hover .ck,
+  .gcell:hover .ck,
+  .ck.on {
+    opacity: 1;
+  }
+  .ck.on {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .ck.on .glyph {
+    visibility: visible;
+    color: var(--menu-bg);
+  }
+  .ck.corner {
+    position: absolute;
+    top: 4px;
+    left: 4px;
   }
   .cell {
     display: flex;
@@ -1230,6 +1636,11 @@
   .glabel.dim {
     opacity: 0.55;
   }
+  /* Cut items keep their name but ghost their icon until pasted, as in Explorer. */
+  .vrow.cut .fileicon,
+  .gcell.cut .gicon {
+    opacity: 0.5;
+  }
   .fname {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1242,12 +1653,34 @@
     color: var(--text-3);
     text-align: center;
   }
+  /* Plain text cells end in an ellipsis when the column is too narrow. */
   .cell.sub {
+    display: block;
+    text-overflow: ellipsis;
     color: var(--text-3);
     font-size: 13px;
   }
   .cell.size {
-    justify-content: flex-end;
+    text-align: right;
+  }
+  /* Status: Explorer's icon, then its wording. Fluent's status colors. */
+  .cell.status .glyph {
+    width: 16px;
+    margin-right: 6px;
+    font-size: 14px;
+    vertical-align: -2px;
+  }
+  .cell.status .cloud {
+    color: var(--accent);
+  }
+  .cell.status .ok {
+    color: light-dark(#0f7b0f, #6ccb5f);
+  }
+  .cell.status .warn {
+    color: light-dark(#9d5d00, #fce100);
+  }
+  .cell.status .bad {
+    color: light-dark(#c42b1c, #ff99a4);
   }
   /* Grid cells */
   .gcell {
@@ -1296,6 +1729,7 @@
     white-space: normal;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     word-break: break-word;
   }
@@ -1317,15 +1751,6 @@
     width: 100%;
     font-size: 13px;
   }
-  .empty {
-    position: absolute;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    color: var(--text-3);
-    font-size: 13px;
-    pointer-events: none;
-  }
   .marquee {
     position: absolute;
     border: 1px solid var(--accent);
@@ -1337,49 +1762,89 @@
     min-width: 260px;
     max-width: 340px;
   }
-  .emptyfolder {
+  .state {
     position: absolute;
     inset: 0;
-    display: grid;
-    place-items: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 24px;
     font-size: 13px;
     color: var(--text-3);
+    text-align: center;
     pointer-events: none;
   }
-  .scrollwrap {
-    max-height: 60vh;
-    overflow-y: auto;
-    overflow-x: visible;
+  .state.error {
+    pointer-events: auto;
+    color: var(--text-2);
   }
-  .menuload {
+  .sicon {
+    font-size: 28px;
+    color: var(--text-3);
+  }
+  .stext {
+    max-width: 520px;
+    user-select: text;
+  }
+  .sbtns {
+    display: flex;
+    gap: 8px;
+  }
+  .sbtn {
+    height: 30px;
+    padding: 0 14px;
+    font-size: 13px;
+    border: 1px solid var(--stroke-strong);
+    border-radius: 4px;
+  }
+  .sbtn:hover {
+    background: var(--hover);
+  }
+  /* Explorer's thin loading strip, shown only for slow folders. */
+  .loadbar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .loadbar span {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 30%;
+    background: var(--accent);
+    animation: loadslide 1.1s ease-in-out infinite;
+  }
+  @keyframes loadslide {
+    from {
+      left: -30%;
+    }
+    to {
+      left: 100%;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .loadbar span {
+      animation: none;
+      left: 0;
+      width: 100%;
+      opacity: 0.6;
+    }
+  }
+  .extras {
+    max-height: 45vh;
+    overflow-y: auto;
+  }
+  .menuload,
+  .menunote {
     padding: 10px 14px;
     font-size: 12px;
     color: var(--text-3);
-  }
-  .subwrap {
-    position: relative;
-  }
-  .menu-item.wide {
-    justify-content: space-between;
-    gap: 8px;
-  }
-  .mtext {
-    flex: 1;
-    text-align: left;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .subchev {
-    font-size: 10px;
-    color: var(--text-3);
-  }
-  .submenu {
-    position: absolute;
-    left: calc(100% - 4px);
-    top: -4px;
-    max-height: 50vh;
-    overflow-y: auto;
   }
   .strip {
     display: flex;
@@ -1398,5 +1863,17 @@
   .strip .glyph {
     font-size: 16px;
     color: var(--text-2);
+  }
+  @media (forced-colors: active) {
+    .vrow.selected,
+    .gcell.selected {
+      forced-color-adjust: none;
+      background: Highlight;
+      color: HighlightText;
+    }
+    .vrow.selected *,
+    .gcell.selected * {
+      color: HighlightText;
+    }
   }
 </style>

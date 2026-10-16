@@ -1,9 +1,9 @@
-use crate::Entry;
+use crate::listing::{Entry, ATTR_DIRECTORY};
+use crate::paths;
 use windows::core::PCWSTR;
-use windows::Win32::Foundation::ERROR_FILE_NOT_FOUND;
+use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_NO_MORE_FILES};
 use windows::Win32::Storage::FileSystem::{
     FindClose, FindExInfoBasic, FindExSearchNameMatch, FindFirstFileExW, FindNextFileW,
-    FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_SYSTEM,
     FIND_FIRST_EX_LARGE_FETCH, WIN32_FIND_DATAW,
 };
 
@@ -11,20 +11,45 @@ pub fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
-/// Resolve to an absolute, prefix-free path ("C:\Users\x").
-pub fn normalize(path: &str) -> Result<String, String> {
-    let p = path.trim();
-    let p = if p.len() == 2 && p.ends_with(':') { format!("{p}\\") } else { p.to_string() };
-    let canon = std::fs::canonicalize(&p).map_err(|e| format!("{p}: {e}"))?;
-    let s = canon.to_string_lossy().to_string();
-    let s = s.strip_prefix(r"\\?\").unwrap_or(&s).to_string();
-    Ok(s)
-}
-
 const FILETIME_UNIX_EPOCH: u64 = 116_444_736_000_000_000;
 
-pub fn list(dir: &str) -> Result<Vec<Entry>, String> {
-    let pattern = wide(&format!(r"\\?\{}\*", dir.trim_end_matches('\\')));
+fn filetime_ms(hi: u32, lo: u32) -> u64 {
+    (((hi as u64) << 32) | lo as u64).saturating_sub(FILETIME_UNIX_EPOCH) / 10_000
+}
+
+pub fn entry_from(data: &WIN32_FIND_DATAW) -> Option<Entry> {
+    let len = data.cFileName.iter().position(|&c| c == 0).unwrap_or(data.cFileName.len());
+    let name = String::from_utf16_lossy(&data.cFileName[..len]);
+    if name == "." || name == ".." {
+        return None;
+    }
+    let attrs = data.dwFileAttributes;
+    let is_dir = attrs & ATTR_DIRECTORY != 0;
+    let ext = if is_dir {
+        String::new()
+    } else {
+        name.rsplit_once('.').map(|(_, e)| e.to_lowercase()).unwrap_or_default()
+    };
+    Some(Entry {
+        size: ((data.nFileSizeHigh as u64) << 32) | data.nFileSizeLow as u64,
+        modified: filetime_ms(data.ftLastWriteTime.dwHighDateTime, data.ftLastWriteTime.dwLowDateTime),
+        created: filetime_ms(data.ftCreationTime.dwHighDateTime, data.ftCreationTime.dwLowDateTime),
+        name,
+        is_dir,
+        ext,
+        attrs,
+        parent: None,
+    })
+}
+
+/// Every entry of a folder (display path). `keep_going` is asked every few
+/// thousand entries so a superseded load can stop early; it returns None then.
+pub fn list_with(dir: &str, mut keep_going: impl FnMut() -> bool) -> Result<Option<Vec<Entry>>, String> {
+    // A computer ("\\server") holds its shares, which no directory listing returns.
+    if paths::kind(dir) == paths::Kind::Unc && paths::root(dir).is_none() {
+        return crate::drives::shares(dir).map(Some);
+    }
+    let pattern = wide(&format!(r"{}\*", paths::to_native(dir).trim_end_matches('\\')));
     let mut data = WIN32_FIND_DATAW::default();
     let handle = unsafe {
         FindFirstFileExW(
@@ -35,48 +60,34 @@ pub fn list(dir: &str) -> Result<Vec<Entry>, String> {
             None,
             FIND_FIRST_EX_LARGE_FETCH,
         )
-    }
-    .map_err(|e| {
-        if e.code() == ERROR_FILE_NOT_FOUND.into() {
-            "empty".to_string()
-        } else {
-            e.message().to_string()
-        }
-    });
-
+    };
     let handle = match handle {
         Ok(h) => h,
-        Err(e) if e == "empty" => return Ok(vec![]),
-        Err(e) => return Err(e),
+        // An empty drive root has no "." entry, so "nothing found" means empty.
+        Err(e) if e.code() == ERROR_FILE_NOT_FOUND.into() => return Ok(Some(Vec::new())),
+        Err(e) => return Err(paths::open_error(dir, e.code().0 as u32 & 0xFFFF)),
     };
-
     let mut entries = Vec::with_capacity(256);
+    let mut result = Ok(());
     loop {
-        let len = data.cFileName.iter().position(|&c| c == 0).unwrap_or(260);
-        let name = String::from_utf16_lossy(&data.cFileName[..len]);
-        if name != "." && name != ".." {
-            let attrs = data.dwFileAttributes;
-            let is_dir = attrs & FILE_ATTRIBUTE_DIRECTORY.0 != 0;
-            let hidden =
-                attrs & FILE_ATTRIBUTE_HIDDEN.0 != 0 || attrs & FILE_ATTRIBUTE_SYSTEM.0 != 0;
-            let size = ((data.nFileSizeHigh as u64) << 32) | data.nFileSizeLow as u64;
-            let ft = ((data.ftLastWriteTime.dwHighDateTime as u64) << 32)
-                | data.ftLastWriteTime.dwLowDateTime as u64;
-            let modified = ft.saturating_sub(FILETIME_UNIX_EPOCH) / 10_000; // ms since unix epoch
-            let ct = ((data.ftCreationTime.dwHighDateTime as u64) << 32)
-                | data.ftCreationTime.dwLowDateTime as u64;
-            let created = ct.saturating_sub(FILETIME_UNIX_EPOCH) / 10_000;
-            let ext = if is_dir {
-                String::new()
-            } else {
-                name.rsplit_once('.').map(|(_, e)| e.to_lowercase()).unwrap_or_default()
-            };
-            entries.push(Entry { name, is_dir, size, modified, created, ext, hidden, parent: None });
+        if let Some(e) = entry_from(&data) {
+            entries.push(e);
+            if entries.len() % 4096 == 0 && !keep_going() {
+                unsafe { let _ = FindClose(handle); }
+                return Ok(None);
+            }
         }
-        if unsafe { FindNextFileW(handle, &mut data) }.is_err() {
+        if let Err(e) = unsafe { FindNextFileW(handle, &mut data) } {
+            if e.code() != ERROR_NO_MORE_FILES.into() {
+                result = Err(paths::open_error(dir, e.code().0 as u32 & 0xFFFF));
+            }
             break;
         }
     }
-    unsafe { FindClose(handle).ok() };
-    Ok(entries)
+    unsafe { let _ = FindClose(handle); }
+    result.map(|_| Some(entries))
+}
+
+pub fn list(dir: &str) -> Result<Vec<Entry>, String> {
+    list_with(dir, || true).map(Option::unwrap_or_default)
 }

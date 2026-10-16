@@ -1,16 +1,38 @@
 /// Persisted user settings: one JSON object under one localStorage key, read
 /// synchronously at module init so the theme is applied before the first paint.
-/// Stored values are merged over DEFAULTS, so a key added in a later release
-/// falls back to its default instead of breaking an existing settings blob.
+/// Stored values are checked against DEFAULTS (type, and allowed value for
+/// choices), so a key added in a later release, or a damaged blob, falls back to
+/// its default instead of breaking the app.
+
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export const DEFAULTS = {
+  /** Bumped when stored settings need a migration step in load(). */
+  schema: 1,
   theme: "system",
   compact: false,
   showHidden: false,
+  // Explorer's "Hide protected operating system files" is on by default:
+  // hidden+system items such as desktop.ini stay out of view even with
+  // hidden items shown.
+  showProtected: false,
   showExt: true,
+  // Explorer's View > Show > Item check boxes.
+  checkboxes: false,
+  // Explorer's View > Show > Preview pane and Details pane (one at a time).
   previewPane: false,
+  detailsPane: false,
+  // Width of whichever side pane shows, in CSS pixels; dragged by its edge.
+  paneWidth: 300,
+  // Explorer's Search options > Current folder / All subfolders.
+  searchScope: "subfolders",
+  // Recent searches, newest first (Search options > Recent searches).
+  searchHistory: [] as string[],
   // Where new tabs and the app itself start. A "::" page or a real folder path.
   startPage: "::Home",
+  // Reopen the last window's tabs when Filezy starts with nothing to open.
+  // Off by default, like Explorer's "Restore previous folder windows at logon".
+  restoreTabs: false,
   // Applied to folders with no saved view of their own.
   defaultView: "details",
   defaultSort: "name",
@@ -28,20 +50,61 @@ export const DEFAULTS = {
 
 export type Settings = typeof DEFAULTS;
 
+export const THEMES: [string, string][] = [
+  ["system", "System"],
+  ["win11-dark", "Windows 11 Dark"],
+  ["win11-light", "Windows 11 Light"],
+  ["catppuccin-mocha", "Catppuccin Mocha"],
+  ["catppuccin-latte", "Catppuccin Latte"],
+  ["dracula", "Dracula"],
+  ["nord", "Nord"],
+  ["tokyo-night", "Tokyo Night"],
+  ["gruvbox-dark", "Gruvbox Dark"],
+];
+
 const KEY = "settings";
 
-function load(): Settings {
-  let stored: Partial<Settings> = {};
+// Allowed values for the settings that are a choice, so a stored value from a
+// newer or hand-edited blob can't put the UI into a state it can't render.
+const CHOICES: Partial<Record<keyof Settings, string[]>> = {
+  defaultView: ["details", "list", "tiles", "icons_s", "icons_m", "icons_l", "icons_xl"],
+  defaultSort: ["name", "modified", "type", "size", "created"],
+  searchScope: ["folder", "subfolders"],
+};
+
+function parse(json: string | null): Record<string, unknown> {
   try {
-    stored = JSON.parse(localStorage.getItem(KEY) ?? "{}");
+    const raw = JSON.parse(json ?? "{}");
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) return raw;
   } catch {
     // Corrupt blob: boot on defaults rather than not booting.
   }
-  const s: Settings = { ...structuredClone(DEFAULTS), ...stored };
+  return {};
+}
+
+function sanitize(stored: Record<string, unknown>): Settings {
+  const s: Settings = structuredClone(DEFAULTS);
+  // Take each stored value only if it has the default's type (string arrays
+  // for the lists) and, for choices, an allowed value.
+  for (const k of Object.keys(DEFAULTS) as (keyof Settings)[]) {
+    const v = stored[k];
+    const d = DEFAULTS[k];
+    const ok = Array.isArray(d)
+      ? Array.isArray(v) && v.every((x) => typeof x === "string")
+      : typeof v === typeof d && (!CHOICES[k] || CHOICES[k]!.includes(v as string));
+    if (ok) (s as Record<string, unknown>)[k] = v;
+  }
+  if (!THEMES.some(([id]) => id === s.theme)) s.theme = DEFAULTS.theme;
+  s.schema = DEFAULTS.schema;
+  return s;
+}
+
+function load(): Settings {
+  const s = sanitize(parse(localStorage.getItem(KEY)));
   // Migration from the pre-settings keys.
   const oldTheme = localStorage.getItem("theme");
   const oldCompact = localStorage.getItem("compact");
-  if (oldTheme !== null) s.theme = oldTheme;
+  if (oldTheme !== null && THEMES.some(([id]) => id === oldTheme)) s.theme = oldTheme;
   if (oldCompact !== null) s.compact = oldCompact === "1";
   if (oldTheme !== null || oldCompact !== null) {
     localStorage.removeItem("theme");
@@ -68,27 +131,12 @@ export function resetAll() {
 // so it gets this event and follows along instead of drifting.
 window.addEventListener("storage", (e) => {
   if (e.key !== KEY || !e.newValue) return;
-  try {
-    Object.assign(settings, JSON.parse(e.newValue));
-    applyTheme();
-  } catch {
-    // ignore a torn write from the other window
-  }
+  Object.assign(settings, sanitize(parse(e.newValue)));
+  applyTheme();
 });
 
 // ---- themes ----
 
-export const THEMES: [string, string][] = [
-  ["system", "System"],
-  ["win11-dark", "Windows 11 Dark"],
-  ["win11-light", "Windows 11 Light"],
-  ["catppuccin-mocha", "Catppuccin Mocha"],
-  ["catppuccin-latte", "Catppuccin Latte"],
-  ["dracula", "Dracula"],
-  ["nord", "Nord"],
-  ["tokyo-night", "Tokyo Night"],
-  ["gruvbox-dark", "Gruvbox Dark"],
-];
 
 function applyTheme() {
   if (settings.theme === "system") delete document.documentElement.dataset.theme;
@@ -100,11 +148,11 @@ function applyTheme() {
 /// by CSS, so a light palette on a dark-mode OS leaves unreadable chrome. Tell the
 /// window which mode it is in; "system" hands the choice back to Windows.
 /// The light/dark flag is read from the theme's own `color-scheme`, so themes.css
-/// stays the single source of truth. Read inside the async continuation: at module
-/// init the stylesheets are not applied yet.
+/// stays the single source of truth. Read a frame later: at module init the
+/// stylesheets are not applied yet.
 async function syncWindowTheme() {
   const wanted = settings.theme;
-  const { getCurrentWindow } = await import("@tauri-apps/api/window");
+  await new Promise((r) => requestAnimationFrame(r));
   if (settings.theme !== wanted) return; // a newer pick won
   const light = getComputedStyle(document.documentElement).colorScheme.includes("light");
   getCurrentWindow()
@@ -187,4 +235,10 @@ export function rememberExtras(texts: string[]) {
 export function forgetExtras() {
   setSetting("seenExtras", []);
   setSetting("hiddenExtras", []);
+}
+
+/// Show the Preview pane, the Details pane, or neither: Explorer shows one at a time.
+export function showPane(pane: "preview" | "details" | null) {
+  setSetting("previewPane", pane === "preview");
+  setSetting("detailsPane", pane === "details");
 }

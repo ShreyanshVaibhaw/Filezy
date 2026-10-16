@@ -1,16 +1,42 @@
 <script lang="ts">
+  import { menuKeys } from "./menukeys";
   import { invoke } from "@tauri-apps/api/core";
-  import { app, navigate, back, forward, up, refresh, setFilter, folderName, joinPath, THIS_PC, HOME, RECYCLE, SETTINGS } from "./store.svelte";
+  import { app, navigate, openPath, back, forward, up, refresh, setFilter, clearSearch, startSearch, rememberSearch, folderName, joinPath, can, THIS_PC, HOME, RECYCLE, SETTINGS, NETWORK } from "./store.svelte";
+  import { settings } from "./settings.svelte";
+  import { crumbs, displayPath, isArchive, isUnc, isVirtual } from "./paths";
 
   let editing = $state(false);
   let editValue = $state("");
   let editInput: HTMLInputElement | undefined = $state();
+  let searchInput: HTMLInputElement | undefined = $state();
+  // Recent searches drop down from the empty search box, as in Explorer.
+  let recentOpen = $state(false);
+  let recentList: HTMLDivElement | undefined = $state();
+  const recent = $derived(settings.searchHistory.slice(0, 8));
+  function pickRecent(q: string) {
+    recentOpen = false;
+    searchValue = q;
+    app.filter = q;
+    startSearch(q, true);
+  }
+  function recentKeys(e: KeyboardEvent) {
+    const items = [...(recentList?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
+    const i = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (e.key === "ArrowDown") items[Math.min(items.length - 1, i + 1)]?.focus();
+    else if (e.key === "ArrowUp") (i <= 0 ? searchInput : items[i - 1])?.focus();
+    else if (e.key === "Escape") {
+      recentOpen = false;
+      searchInput?.focus();
+    } else return;
+    e.preventDefault();
+    e.stopPropagation();
+  }
   let searchValue = $state("");
 
-  // Reset the search box text when the folder changes.
+  // The box follows the tab's search: cleared by navigation, refilled when a tab
+  // with a search is reselected.
   $effect(() => {
-    app.path;
-    if (!app.filter) searchValue = "";
+    searchValue = app.filter;
   });
 
   const segments = $derived.by(() => {
@@ -19,14 +45,10 @@
     if (app.path === HOME) return [{ name: "Home", path: HOME }];
     if (app.path === RECYCLE) return [{ name: "Recycle Bin", path: RECYCLE }];
     if (app.path === SETTINGS) return [{ name: "Settings", path: SETTINGS }];
-    const parts = app.path.replace(/\\$/, "").split("\\");
-    const out: { name: string; path: string }[] = [];
-    let acc = "";
-    for (const part of parts) {
-      acc = acc ? acc + "\\" + part : part;
-      out.push({ name: part.endsWith(":") ? diskName(part) : part, path: acc + (acc.endsWith(":") ? "\\" : "") });
-    }
-    return out;
+    if (app.path === NETWORK) return [{ name: "Network", path: NETWORK }];
+    const segs = crumbs(app.path).map((c) => ({ ...c, name: c.name.endsWith(":") ? diskName(c.name) : c.name }));
+    // A computer and its shares sit under Network, as in Explorer.
+    return isUnc(app.path) ? [{ name: "Network", path: NETWORK }, ...segs] : segs;
   });
 
   function diskName(letter: string): string {
@@ -59,7 +81,7 @@
     const items =
       path === THIS_PC
         ? app.drives.map((d) => ({ name: d.name, path: d.path }))
-        : (await invoke<string[]>("list_dirs", { path }).catch(() => [] as string[])).map(
+        : (await listDirs(path)).map(
             (n) => ({ name: n, path: joinPath(path, n) }),
           );
     if (!items.length) return;
@@ -70,8 +92,23 @@
     startEdit();
   }
 
+  /** Ctrl+F, Ctrl+E, F3: put the caret in the search box. */
+  export function focusSearch() {
+    if (!can("search") && !app.search) return;
+    searchInput?.focus();
+    searchInput?.select();
+  }
+
+  function listDirs(path: string): Promise<string[]> {
+    return invoke<string[]>("list_dirs", {
+      path,
+      showHidden: settings.showHidden,
+      showProtected: settings.showProtected,
+    }).catch(() => [] as string[]);
+  }
+
   function startEdit() {
-    editValue = app.path;
+    editValue = displayPath(app.path);
     editing = true;
     suggestions = [];
     setTimeout(() => {
@@ -80,11 +117,21 @@
     });
   }
 
-  function commitEdit(path?: string) {
+  /// Go where the address text points: a folder opens in this tab and a file
+  /// opens in its app, as typed into Explorer's address bar.
+  async function commitEdit(path?: string) {
     editing = false;
     suggestions = [];
     const v = (path ?? editValue).trim();
-    if (v && v !== app.path) navigate(v);
+    if (!v || v === app.path || v === displayPath(app.path)) return;
+    if (isVirtual(v)) return void navigate(v);
+    try {
+      const r = await invoke<{ kind: string; path: string }>("resolve_path", { input: v });
+      if (r.kind === "file") await openPath(r.path);
+      else await navigate(r.path);
+    } catch (e) {
+      app.status = String(e);
+    }
   }
 
   // Path autocomplete: complete the segment after the last backslash.
@@ -101,7 +148,7 @@
     const parent = cut === 2 ? v.slice(0, 3) : v.slice(0, cut);
     const prefix = v.slice(cut + 1).toLowerCase();
     const seq = ++sugSeq;
-    const kids = await invoke<string[]>("list_dirs", { path: parent }).catch(() => [] as string[]);
+    const kids = await listDirs(parent);
     if (seq !== sugSeq || !editing) return;
     suggestions = kids
       .filter((k) => k.toLowerCase().startsWith(prefix))
@@ -130,20 +177,28 @@
 </script>
 
 <div class="addressrow">
-  <button class="navbtn" onclick={back} disabled={app.histIdx <= 0} title="Back (Alt + Left)">
+  <button class="navbtn" onclick={back} disabled={app.histIdx <= 0} title="Back (Alt + Left)" aria-label="Back (Alt + Left)">
     <span class="glyph">&#xE72B;</span>
   </button>
-  <button class="navbtn" onclick={forward} disabled={app.histIdx >= app.histLen - 1} title="Forward (Alt + Right)">
+  <button class="navbtn" onclick={forward} disabled={app.histIdx >= app.histLen - 1} title="Forward (Alt + Right)" aria-label="Forward (Alt + Right)">
     <span class="glyph">&#xE72A;</span>
   </button>
-  <button class="navbtn" onclick={up} title="Up (Alt + Up)">
+  <button class="navbtn" onclick={up} title="Up (Alt + Up)" aria-label="Up (Alt + Up)">
     <span class="glyph">&#xE74A;</span>
   </button>
-  <button class="navbtn" onclick={() => refresh()} title="Refresh (F5)">
+  <button class="navbtn" onclick={() => refresh()} title="Refresh (F5)" aria-label="Refresh (F5)">
     <span class="glyph">&#xE72C;</span>
   </button>
 
-  <div class="addressbox" class:editing role="textbox" tabindex="-1" onclick={(e) => { if (e.target === e.currentTarget) startEdit(); }}>
+  <div
+    class="addressbox"
+    class:editing
+    role="textbox"
+    tabindex="-1"
+    aria-label="Address"
+    onclick={(e) => { if (e.target === e.currentTarget) startEdit(); }}
+    onkeydown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) startEdit(); }}
+  >
     {#if editing}
       <input
         bind:this={editInput}
@@ -169,16 +224,23 @@
     {:else}
       <span class="glyph pcicon">&#xE977;</span>
       {#if hiddenSegs.length}
-        <button class="crumb chevbtn" onclick={toggleOverflow} title="Previous locations">
+        <button class="crumb chevbtn" onclick={toggleOverflow} title="Previous locations" aria-label="Previous locations">
           <span class="glyph">&#xE712;</span>
         </button>
       {/if}
-      <button class="crumbchevbtn" onclick={(e) => openCrumbMenu(THIS_PC, e)} title="This PC">
+      <button class="crumbchevbtn" onclick={(e) => openCrumbMenu(THIS_PC, e)} title="This PC" aria-label="This PC">
         <span class="glyph crumbchev">&#xE76C;</span>
       </button>
       {#each shownSegs as seg (seg.path)}
-        <button class="crumb" onclick={() => navigate(seg.path)}>{seg.name}</button>
-        <button class="crumbchevbtn" onclick={(e) => openCrumbMenu(seg.path, e)}>
+        <button
+          class="crumb"
+          onclick={() => navigate(seg.path)}
+          data-drop={isVirtual(seg.path) || isArchive(seg.path) ? undefined : seg.path}
+          data-drop-label={seg.name}
+        >
+          {seg.name}
+        </button>
+        <button class="crumbchevbtn" aria-label={`Folders in ${seg.name}`} title={`Folders in ${seg.name}`} onclick={(e) => openCrumbMenu(seg.path, e)}>
           <span class="glyph crumbchev">&#xE76C;</span>
         </button>
       {/each}
@@ -189,21 +251,54 @@
   <div class="searchbox">
     <span class="glyph searchicon">&#xE721;</span>
     <input
-      placeholder={"Search " + (app.path ? folderName(app.path) : "")}
+      bind:this={searchInput}
+      placeholder={"Search " + (app.path ? folderName(app.search?.root ?? app.path) : "")}
+      aria-label="Search"
       bind:value={searchValue}
-      oninput={() => setFilter(searchValue)}
+      oninput={() => {
+        recentOpen = false;
+        setFilter(searchValue);
+      }}
+      onfocus={() => (recentOpen = !searchValue)}
+      onclick={() => (recentOpen = !searchValue)}
+      onblur={() => {
+        if (app.search) rememberSearch(searchValue);
+        setTimeout(() => {
+          if (!recentList?.contains(document.activeElement)) recentOpen = false;
+        }, 0);
+      }}
       onkeydown={(e) => {
-        if (e.key === "Escape") {
+        if (e.key === "Enter") {
+          // Search now instead of after the typing delay.
+          recentOpen = false;
+          startSearch(searchValue, true);
+        } else if (e.key === "Escape") {
+          recentOpen = false;
           searchValue = "";
-          setFilter("");
+          clearSearch();
+        } else if (e.key === "ArrowDown" && recentOpen && recent.length) {
+          e.preventDefault();
+          recentList?.querySelector("button")?.focus();
         }
       }}
     />
+    {#if recentOpen && recent.length}
+      <div class="menu recentdrop" role="listbox" aria-label="Recent searches" bind:this={recentList} onkeydown={recentKeys} tabindex="-1">
+        <div class="recenthdr">Recent searches</div>
+        {#each recent as r (r)}
+          <button class="menu-item" role="option" aria-selected="false" onclick={() => pickRecent(r)} onblur={() => setTimeout(() => {
+            if (!recentList?.contains(document.activeElement) && document.activeElement !== searchInput) recentOpen = false;
+          }, 0)}>
+            <span class="glyph">&#xE81C;</span> {r}
+          </button>
+        {/each}
+      </div>
+    {/if}
   </div>
 </div>
 
 {#if crumbMenu}
-  <div class="menu crumbdrop" style="left:{crumbMenu.x}px; top:{crumbMenu.y}px">
+  <div class="menu crumbdrop" style="left:{crumbMenu.x}px; top:{crumbMenu.y}px" use:menuKeys={() => (crumbMenu = null)}>
     {#each crumbMenu.items as it (it.path)}
       <button class="menu-item" onclick={() => { crumbMenu = null; navigate(it.path); }}>
         <span class="glyph">&#xE8B7;</span> {it.name}
@@ -213,7 +308,7 @@
 {/if}
 
 {#if overflowOpen}
-  <div class="menu" style="left:{overflowX}px; top:{overflowY}px">
+  <div class="menu" style="left:{overflowX}px; top:{overflowY}px" use:menuKeys={() => (overflowOpen = false)}>
     {#each [...hiddenSegs].reverse() as seg (seg.path)}
       <button class="menu-item" onclick={() => { overflowOpen = false; navigate(seg.path); }}>
         <span class="glyph">&#xE8B7;</span> {seg.name}
@@ -334,6 +429,7 @@
     background: var(--sel);
   }
   .searchbox {
+    position: relative;
     width: 240px;
     height: 34px;
     display: flex;
@@ -344,6 +440,18 @@
     border-bottom-color: var(--stroke-strong);
     border-radius: 5px;
     flex-shrink: 0;
+  }
+  .recentdrop {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    min-width: 0;
+  }
+  .recenthdr {
+    padding: 6px 12px 4px;
+    font-size: 12px;
+    color: var(--text-3);
   }
   .searchbox .searchicon {
     font-size: 14px;

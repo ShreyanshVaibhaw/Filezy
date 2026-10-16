@@ -8,113 +8,225 @@
   import NavPane from "./lib/NavPane.svelte";
   import FilePane from "./lib/FilePane.svelte";
   import DrivesPane from "./lib/DrivesPane.svelte";
+  import NetworkPane from "./lib/NetworkPane.svelte";
   import PreviewPane from "./lib/PreviewPane.svelte";
   import HomePane from "./lib/HomePane.svelte";
   import RecyclePane from "./lib/RecyclePane.svelte";
   import SettingsPane from "./lib/SettingsPane.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
   import {
-    app, sel, tabs, navigate, refresh, back, forward, up, del, copySel, paste,
-    newFolder, selectAll, startRename, openEntry, hooks, selCount, selIndices, clearSel,
-    newTab, closeTab, switchTab, searchUpdate, loadPins, reopenClosedTab, undo,
-    THIS_PC, HOME, RECYCLE, SETTINGS,
+    app, tabs, refresh, back, forward, up, selectAll, hooks, firstSel, newTab, closeTab, switchTab,
+    searchUpdate, loadPins, reopenClosedTab, onFsChanged, can, navigate, refreshClipState,
+    THIS_PC, HOME, RECYCLE, SETTINGS, NETWORK, loadDrives, saveSession, restoreSession,
   } from "./lib/store.svelte";
-  import { settings, setSetting } from "./lib/settings.svelte";
 
-  let addressEdit: { focus: () => void } | undefined = $state();
+  // Keep the record for "Reopen tabs from last time" current as tabs open,
+  // move and close (it reads every tab's location and the active tab).
+  $effect(saveSession);
+  import { moveFocus, toggleRow, typeToSelect, openSelection, focusedRow } from "./lib/selection.svelte";
+  import { del, copySel, paste, newFolder, startRename, undo, redo, propertiesSel } from "./lib/ops.svelte";
+  import BatchRename from "./lib/BatchRename.svelte";
+  import Dialog from "./lib/Dialog.svelte";
+  import ExtractDialog from "./lib/ExtractDialog.svelte";
+  import Notice from "./lib/Notice.svelte";
+  import { initDrag } from "./lib/drag";
+  import { settings, setSetting, showPane } from "./lib/settings.svelte";
+  import DetailsPane from "./lib/DetailsPane.svelte";
 
-  onMount(async () => {
-    app.home = await invoke<string>("home_dir");
-    loadPins();
-    newTab(); // lands on the Home page, like Explorer
+  let addressEdit: { focus: () => void; focusSearch: () => void } | undefined = $state();
+
+  // The side pane's width: dragged by its left edge, saved when the drag ends.
+  let paneDrag: { x: number; w: number } | null = null;
+  let dragWidth = $state(0);
+  const paneWidth = $derived(Math.min(600, Math.max(200, dragWidth || settings.paneWidth)));
+  function startPaneResize(ev: MouseEvent) {
+    ev.preventDefault();
+    paneDrag = { x: ev.clientX, w: paneWidth };
+  }
+  function paneResizeMove(ev: MouseEvent) {
+    if (paneDrag) dragWidth = Math.min(600, Math.max(200, paneDrag.w - (ev.clientX - paneDrag.x)));
+  }
+  /// The keyboard side of the splitter: Left widens the pane, Right narrows it.
+  function paneKey(ev: KeyboardEvent) {
+    const step = { ArrowLeft: 16, ArrowRight: -16, Home: -1000, End: 1000 }[ev.key];
+    if (step === undefined) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    setSetting("paneWidth", Math.min(600, Math.max(200, paneWidth + step)));
+  }
+  function endPaneResize() {
+    if (!paneDrag) return;
+    paneDrag = null;
+    setSetting("paneWidth", Math.round(dragWidth));
+    dragWidth = 0;
+  }
+
+  onMount(() => {
+    const unlisten: Promise<() => void>[] = [
+      listen<string>("fs-changed", (ev) => onFsChanged(ev.payload)),
+      // Any app's copy or cut: Paste and the ghosted cut items follow at once.
+      listen("clipboard-changed", () => refreshClipState()),
+      // A USB drive plugged in or out, a disc, a network drive mapped.
+      listen("drives-changed", () => loadDrives()),
+      listen<Parameters<typeof searchUpdate>[0]>("search-update", (ev) => searchUpdate(ev.payload)),
+    ];
+    initDrag();
+    (async () => {
+      app.home = await invoke<string>("home_dir");
+      loadPins();
+      // `filezy <folder>` or Explorer's `filezy /select,<file>`; otherwise the
+      // last window's tabs (when Reopen tabs is on and no other window is
+      // open, so Ctrl+N doesn't copy them), else the start page.
+      const launch = await invoke<{ path: string; select: string | null } | null>("launch_target").catch(() => null);
+      if (!launch) {
+        if (settings.restoreTabs && (await invoke<boolean>("first_window").catch(() => false)) && (await restoreSession())) return;
+        return newTab();
+      }
+      await newTab(launch.path);
+      if (launch.select) await navigate(launch.path, false, { refresh: true, select: [launch.select] });
+    })();
     // Warm the shell-extension DLLs in the background so the first real
     // right-click doesn't pay the multi-second cold QueryContextMenu cost.
     // Pointless when extension entries are switched off in Settings.
     if (settings.shellExtras) {
-      setTimeout(() => invoke("shell_menu", { dir: app.home, names: [] }).catch(() => {}), 2500);
+      setTimeout(() => invoke("shell_menu_paths", { paths: [app.home] }).catch(() => {}), 2500);
     }
-    invoke<typeof app.drives>("drives").then((d) => (app.drives = d));
+    loadDrives();
     invoke<typeof app.specials>("special_dirs").then((s) => (app.specials = s));
-    invoke<string | null>("onedrive_dir").then((p) => (app.onedrive = p ?? ""));
-    const un1 = await listen<string>("fs-changed", (ev) => {
-      if (ev.payload === app.path) refresh();
-    });
-    const un2 = await listen<{ total: number; done: boolean }>("search-update", (ev) => {
-      searchUpdate(ev.payload.total, ev.payload.done);
-    });
-    return () => {
-      un1();
-      un2();
-    };
+    invoke<typeof app.cloudRoots>("cloud_roots").then((r) => (app.cloudRoots = r));
+    return () => unlisten.forEach((u) => u.then((f) => f()));
   });
 
+  function isTextField(el: EventTarget | null): boolean {
+    return (
+      el instanceof HTMLInputElement ||
+      el instanceof HTMLTextAreaElement ||
+      el instanceof HTMLSelectElement ||
+      (el instanceof HTMLElement && el.isContentEditable)
+    );
+  }
+
+  /** File-list keys act when the list, or nothing in particular, has focus. */
+  function listFocused(el: EventTarget | null): boolean {
+    if (!(el instanceof HTMLElement) || el === document.body) return true;
+    return !!el.closest("[data-filelist]");
+  }
+
+  /// F6 / Shift+F6: move between the address bar, the folder tree and the
+  /// content, like Explorer's pane cycling.
+  function cyclePanes(dir: number) {
+    const regions = [
+      document.querySelector<HTMLElement>(".addressbox"),
+      document.querySelector<HTMLElement>(".navpane [tabindex='0']"),
+      document.querySelector<HTMLElement>("[data-filelist] .scroller") ??
+        document.querySelector<HTMLElement>(".filecard [tabindex='0'], .filecard button, .filecard input"),
+    ].filter((r): r is HTMLElement => !!r);
+    const now = regions.findIndex((r) => r.contains(document.activeElement) || r === document.activeElement);
+    const next = regions[(now + dir + regions.length) % regions.length];
+    next?.focus();
+  }
+
   function onKeydown(ev: KeyboardEvent) {
-    if (ev.target instanceof HTMLInputElement) return;
-    const k = ev.key;
-    if (ev.ctrlKey && ev.shiftKey && (k === "t" || k === "T")) { reopenClosedTab(); ev.preventDefault(); return; }
-    if (ev.ctrlKey && (k === "t" || k === "T")) { newTab(); ev.preventDefault(); return; }
-    if (ev.ctrlKey && (k === "w" || k === "W")) { closeTab(app.activeTab); ev.preventDefault(); return; }
-    if (ev.ctrlKey && (k === "n" || k === "N")) { invoke("new_window").catch(() => {}); ev.preventDefault(); return; }
-    if (ev.ctrlKey && k === "Tab") {
+    const k = ev.key.length === 1 ? ev.key.toLowerCase() : ev.key;
+    const ctrl = ev.ctrlKey && !ev.altKey;
+    const typing = isTextField(ev.target);
+    const handled = () => ev.preventDefault();
+
+    // ---- window-wide: the most specific modifier combination first ----
+    if (ctrl && ev.shiftKey && k === "t") return handled(), reopenClosedTab();
+    if (ctrl && !ev.shiftKey && k === "t") return handled(), newTab();
+    if (ctrl && !ev.shiftKey && k === "w") return handled(), closeTab(app.activeTab);
+    if (ctrl && k === "Tab") {
+      handled();
       const i = tabs.findIndex((t) => t.id === app.activeTab);
       const next = tabs[(i + (ev.shiftKey ? tabs.length - 1 : 1)) % tabs.length];
       if (next) switchTab(next.id);
-      ev.preventDefault();
       return;
     }
-    if (ev.altKey && (k === "p" || k === "P")) { setSetting("previewPane", !settings.previewPane); ev.preventDefault(); return; }
+    if (ctrl && !ev.shiftKey && /^[1-9]$/.test(k)) {
+      // Ctrl+1..8 picks that tab, Ctrl+9 the last one, as in Explorer and browsers.
+      handled();
+      const t = k === "9" ? tabs[tabs.length - 1] : tabs[+k - 1];
+      if (t) switchTab(t.id);
+      return;
+    }
+    if (ctrl && ev.shiftKey && k === "n") {
+      if (typing) return;
+      return handled(), newFolder();
+    }
+    if (ctrl && !ev.shiftKey && k === "n") return handled(), invoke("new_window").catch(() => {});
+    if (ev.altKey && k === "ArrowLeft") return handled(), back();
+    if (ev.altKey && k === "ArrowRight") return handled(), forward();
+    if (ev.altKey && k === "ArrowUp") return handled(), up();
+    if ((ctrl && k === "l") || (ev.altKey && !ev.ctrlKey && k === "d") || k === "F4") {
+      return handled(), addressEdit?.focus();
+    }
+    if ((ctrl && (k === "f" || k === "e")) || k === "F3") return handled(), addressEdit?.focusSearch();
+    if (k === "F5" || (ctrl && k === "r")) return handled(), refresh();
+    if (k === "F6") return handled(), cyclePanes(ev.shiftKey ? -1 : 1);
+    // Alt+P: Preview pane; Alt+Shift+P: Details pane (one at a time, as in Explorer).
+    if (ev.altKey && !ev.ctrlKey && ev.shiftKey && k.toLowerCase() === "p") {
+      return handled(), showPane(settings.detailsPane ? null : "details");
+    }
+    if (ev.altKey && !ev.ctrlKey && k === "p") return handled(), showPane(settings.previewPane ? null : "preview");
     if (ev.altKey && k === "Enter") {
-      const first = selIndices()[0];
-      if (first !== undefined) invoke("show_properties", { index: first }).catch(() => {});
-      ev.preventDefault();
+      handled();
+      if (firstSel() !== undefined) propertiesSel();
       return;
     }
-    if (k === "Escape" && app.path === SETTINGS) { back(); ev.preventDefault(); return; }
-    if (ev.altKey && k === "ArrowLeft") { back(); ev.preventDefault(); }
-    else if (ev.altKey && k === "ArrowRight") { forward(); ev.preventDefault(); }
-    else if ((ev.altKey && k === "ArrowUp") || k === "Backspace") { up(); ev.preventDefault(); }
-    else if (ev.ctrlKey && ev.shiftKey && (k === "N" || k === "n")) { newFolder(); ev.preventDefault(); }
-    else if (ev.ctrlKey && (k === "a" || k === "A")) { selectAll(); ev.preventDefault(); }
-    else if (ev.ctrlKey && (k === "c" || k === "C")) copySel(false);
-    else if (ev.ctrlKey && (k === "x" || k === "X")) copySel(true);
-    else if (ev.ctrlKey && (k === "v" || k === "V")) paste();
-    else if (ev.ctrlKey && (k === "z" || k === "Z")) { undo(); ev.preventDefault(); }
-    else if (ev.ctrlKey && (k === "l" || k === "L")) { addressEdit?.focus(); ev.preventDefault(); }
-    else if (k === "F5") { refresh(); ev.preventDefault(); }
-    else if (k === "F2") startRename();
-    else if (k === "Delete") del();
-    else if (k === "Enter" && selCount()) openEntry(selIndices()[0]);
-    else if (k === "ArrowDown" || k === "ArrowUp" || k === "ArrowLeft" || k === "ArrowRight") {
-      ev.preventDefault();
-      if (!app.total) return;
-      const step = k === "ArrowDown" || k === "ArrowUp" ? (hooks.gridCols ?? 1) : (hooks.hStep ?? 1);
-      const fwd = k === "ArrowDown" || k === "ArrowRight";
-      // Iterate rather than spread: Math.max(...set) throws RangeError on huge selections.
-      let cur = app.allSelected ? app.total - 1 : -1;
-      let lo = app.allSelected ? 0 : app.total;
-      for (const idx of sel) {
-        if (idx > cur) cur = idx;
-        if (idx < lo) lo = idx;
-      }
-      let next = fwd ? Math.min(app.total - 1, cur + step) : Math.max(0, lo - step);
-      if (ev.shiftKey && sel.size) {
-        sel.add(next);
-      } else {
-        clearSel();
-        sel.add(next);
-        app.anchor = next;
-      }
-      hooks.scrollToIndex?.(next);
-    } else if (k === "Home" && app.total) {
-      clearSel(); sel.add(0); app.anchor = 0; hooks.scrollToIndex?.(0);
-    } else if (k === "End" && app.total) {
-      const last = app.total - 1;
-      clearSel(); sel.add(last); app.anchor = last; hooks.scrollToIndex?.(last);
+    if (k === "Escape" && app.path === SETTINGS && !typing) return handled(), back();
+
+    // ---- file list ----
+    if (typing || !listFocused(ev.target)) return;
+    if (!can("select")) return;
+    const mods = { shift: ev.shiftKey, ctrl: ev.ctrlKey };
+    const cur = focusedRow() ?? -1;
+    if (k === "Backspace") return handled(), back();
+    if (ctrl && !ev.shiftKey && k === "a") return handled(), selectAll();
+    if (ctrl && k === "c") return handled(), copySel(false);
+    if (ctrl && k === "x") return handled(), copySel(true);
+    if (ctrl && k === "v") return handled(), paste();
+    if (ctrl && !ev.shiftKey && k === "z") return handled(), undo();
+    if ((ctrl && k === "y") || (ctrl && ev.shiftKey && k === "z")) return handled(), redo();
+    if (k === "F2") return handled(), startRename();
+    // Shift+Delete deletes for good, after Windows' own confirmation.
+    if (k === "Delete") return handled(), del(ev.shiftKey);
+    if (k === "Enter") return handled(), openSelection();
+    if ((ev.shiftKey && k === "F10") || k === "ContextMenu") return handled(), hooks.contextMenu?.();
+    if (k === " " && ev.ctrlKey) {
+      handled();
+      if (cur >= 0) toggleRow(cur);
+      return;
+    }
+    if (!app.total) return;
+    const vertical = k === "ArrowDown" || k === "ArrowUp";
+    if (vertical || k === "ArrowLeft" || k === "ArrowRight") {
+      handled();
+      // The first arrow press puts the keyboard on the first item.
+      if (cur < 0) return moveFocus(0, mods);
+      const step = vertical ? (hooks.gridCols ?? 1) : (hooks.hStep ?? 0);
+      if (!step) return;
+      const earlier = k === "ArrowUp" || k === "ArrowLeft";
+      return moveFocus(cur + (earlier ? -step : step), mods);
+    }
+    if (k === "Home") return handled(), moveFocus(0, mods);
+    if (k === "End") return handled(), moveFocus(app.total - 1, mods);
+    if (k === "PageDown" || k === "PageUp") {
+      handled();
+      const page = hooks.pageSize ?? 10;
+      return moveFocus(Math.max(cur, 0) + (k === "PageUp" ? -page : page), mods);
+    }
+    if (k === " " && !ev.shiftKey && cur >= 0) return handled(), moveFocus(cur);
+    // Typing a name jumps to it.
+    if (ev.key.length === 1 && !ev.ctrlKey && !ev.altKey && ev.key !== " ") {
+      handled();
+      typeToSelect(ev.key);
     }
   }
 </script>
 
-<svelte:window onkeydown={onKeydown} />
+<!-- Focus re-reads the clipboard too, in case a change event was missed. -->
+<svelte:window onkeydown={onKeydown} onfocus={refreshClipState} onmousemove={paneResizeMove} onmouseup={endPaneResize} />
 
 <div class="root">
   <TitleBar />
@@ -125,6 +237,8 @@
     <div class="filecard">
       {#if app.path === THIS_PC}
         <DrivesPane />
+      {:else if app.path === NETWORK}
+        <NetworkPane />
       {:else if app.path === HOME}
         <HomePane />
       {:else if app.path === RECYCLE}
@@ -134,15 +248,39 @@
       {:else}
         <div class="filerow">
           <FilePane />
-          {#if settings.previewPane}
-            <PreviewPane />
+          {#if settings.previewPane || settings.detailsPane}
+            <div class="sidepane" style="width:{paneWidth}px">
+              <!-- A focusable separator is WAI-ARIA's window splitter, an interactive widget the linter doesn't know. -->
+              <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+              <div
+                class="panegrip"
+                role="separator"
+                tabindex="0"
+                aria-orientation="vertical"
+                aria-label="Pane width"
+                aria-valuenow={paneWidth}
+                aria-valuemin={200}
+                aria-valuemax={600}
+                onmousedown={startPaneResize}
+                onkeydown={paneKey}
+              ></div>
+              {#if settings.detailsPane}
+                <DetailsPane />
+              {:else}
+                <PreviewPane />
+              {/if}
+            </div>
           {/if}
         </div>
         <StatusBar />
       {/if}
+      <Notice />
     </div>
   </div>
 </div>
+<Dialog />
+<ExtractDialog />
+<BatchRename />
 
 <style>
   .root {
@@ -161,6 +299,31 @@
     flex: 1;
     min-height: 0;
     display: flex;
+  }
+  .sidepane {
+    position: relative;
+    flex-shrink: 0;
+    border-left: 1px solid var(--stroke);
+    overflow: hidden;
+  }
+  .panegrip {
+    position: absolute;
+    left: -3px;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    cursor: col-resize;
+    z-index: 1;
+  }
+  .panegrip:hover,
+  .panegrip:focus-visible {
+    background: var(--accent);
+    opacity: 0.6;
+  }
+  @media (max-width: 900px) {
+    .sidepane {
+      display: none;
+    }
   }
   .filecard {
     flex: 1;

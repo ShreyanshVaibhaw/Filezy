@@ -7,16 +7,22 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["protocol-asset"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 notify = "8"
 base64 = "0.22"
 png = "0.17"
 windows-core = "0.62"
+windows-collections = "0.3"
 winreg = "0.55"
 tauri-plugin-updater = "2.10.1"
 tauri-plugin-process = "2.3.1"
+# Archives (archive.rs): ZIP read and write, 7z and tar read.
+zip = { version = "9.0.2", default-features = false, features = ["aes-crypto", "bzip2", "deflate", "deflate64", "lzma", "xz", "ppmd"] }
+sevenz-rust2 = { version = "0.24", default-features = false, features = ["bzip2", "ppmd", "deflate"] }
+tar = "0.4.46"
+flate2 = "1"
 
 [dependencies.windows]
 version = "0.62"
@@ -29,6 +35,7 @@ features = [
   "Win32_UI_Shell_Common",
   "Win32_UI_Shell_PropertiesSystem",
   "Win32_System_Variant",
+  "Win32_System_Environment",
   "Win32_System_Com_StructuredStorage",
   "Win32_UI_WindowsAndMessaging",
   "Win32_Graphics_Gdi",
@@ -40,7 +47,31 @@ features = [
   "Win32_System_Ioctl",
   "Win32_System_IO",
   "Win32_Security",
+  "ApplicationModel_DataTransfer",
+  "Storage_Streams",
+  "Win32_Globalization",
+  "Win32_System_Search",
+  "Win32_System_Time",
+  "Win32_NetworkManagement_WNet",
+  "Win32_NetworkManagement_NetManagement",
+  "Win32_System_LibraryLoader",
+  "Storage",
+  "Storage_Provider",
+  "Foundation_Collections",
+  "Win32_Storage_CloudFilters",
+  "Win32_System_Threading",
 ]
+
+[dev-dependencies.windows]
+# examples/testcloud.rs, the E2E suite's stand-in cloud provider.
+version = "0.62"
+features = ["Win32_System_CorrelationVector", "Storage_Search"]
+
+[features]
+# The E2E runner's hooks (scripts/e2e): the page's __e2e object and the
+# FILEZY_E2E_* limits. Only `npm run build:e2e` turns it on; a shipped build
+# has none of it, whatever its environment says.
+e2e = []
 
 [profile.release]
 lto = true
