@@ -72,9 +72,6 @@ public static class Wnd {
     public static bool Hilited(IntPtr menu, int i) { return (GetMenuState(menu, (uint)i, 0x400) & 0x80) != 0; }
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
     [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
-    [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
-    [DllImport("user32.dll")] static extern void mouse_event(uint f, uint x, uint y, uint d, IntPtr e);
-    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern bool PostMessageW(IntPtr h, uint m, IntPtr w, IntPtr l);
     [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] static extern uint MapVirtualKeyW(uint code, uint type);
@@ -101,12 +98,6 @@ public static class Wnd {
             ClassOf(fg), Title(fg), pid, ClassOf(gi.focus), fpid, ClassOf(gi.menuOwner), gi.flags);
     }
     static string Title(IntPtr h) { var sb = new StringBuilder(256); GetWindowTextW(h, sb, 256); return sb.ToString(); }
-    // A real left click, for DirectUI panes that expose no invoke pattern.
-    public static void Click(int x, int y) {
-        SetCursorPos(x, y);
-        mouse_event(0x2, 0, 0, 0, IntPtr.Zero);
-        mouse_event(0x4, 0, 0, 0, IntPtr.Zero);
-    }
     public static List<KeyValuePair<IntPtr, string>> List(uint onlyPid) {
         var all = new List<KeyValuePair<IntPtr, string>>();
         EnumWindows((h, l) => {
@@ -220,11 +211,11 @@ if ($target.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Patt
 } elseif ($target.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$pattern)) {
     $pattern.Select()
 } else {
-    # Message-box style dialogs draw their buttons as plain panes: click them.
-    $r = $target.Current.BoundingRectangle
-    if ($r.IsEmpty) { throw "'$($target.Current.Name)' cannot be invoked or clicked" }
-    [void][Wnd]::SetForegroundWindow([IntPtr]$win.Current.NativeWindowHandle)
-    Start-Sleep -Milliseconds 150
-    [Wnd]::Click([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2))
+    # Some dialogs' buttons show up as plain panes with no actions, though they
+    # are button windows (a progress dialog's Cancel is a CCPushButton). Those
+    # take BM_CLICK: a press made of window messages, posted to that button only.
+    $h = [IntPtr]$target.Current.NativeWindowHandle
+    if ($h -eq [IntPtr]::Zero) { throw "'$($target.Current.Name)' has no invoke pattern and no window to press" }
+    [void][Wnd]::PostMessageW($h, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
 }
 "clicked '$($target.Current.Name)' in '$($win.Current.Name)'"
