@@ -17,9 +17,8 @@
 // Side effects outside the temp folder, all deliberate: keyboard tests bring the
 // app window to the front, clipboard tests replace the clipboard contents, and
 // Recycle Bin tests recycle and restore files whose names carry a per-run token
-// (leftovers are restored when the run ends). Drag tests move the mouse pointer
-// and press real mouse buttons and keys, only while the app is in front and
-// under the pointer (see drag.ps1 and mouse.ps1); the pointer goes back after.
+// (leftovers are restored when the run ends). Drag tests never touch the real
+// mouse: the app's own drop target is driven from a script (see e2edrag.rs).
 // The indexed-search test needs a folder the Windows index covers, which the
 // temp folder never is: it writes three small files under
 // %USERPROFILE%\filezy-e2e-index-<token> and removes that folder when it ends.
@@ -317,40 +316,34 @@ const t = {
   },
 
   /**
-   * A real OLE drag from another process onto the app window (see drag.ps1).
-   * `points` are CSS pixels in the window, each with an optional rest in ms and
-   * the modifiers held from there on (keys: "ctrl+shift", or "none"); the drop
-   * happens at the last one. Moves the mouse pointer, then puts it back.
+   * A drag in from another app, scripted through the app's own drop target
+   * (see e2edrag.rs). `points` are CSS pixels in the window, each with an
+   * optional rest in ms and the modifiers held from there on (keys:
+   * "ctrl+shift", or "none"); the drop happens at the last one. Returns what
+   * the drag's source would see: hr, effect, performed, logical, feedback.
    */
-  async drag(files, points, { keys = "", right = false, cancel = false } = {}) {
-    await t.foreground();
-    const pts = points
-      .map((p) => `${Math.round(p.x)},${Math.round(p.y)}${p.ms || p.keys ? `,${p.ms ?? 60}` : ""}${p.keys ? `,${p.keys}` : ""}`)
-      .join(";");
-    const a = ["-ProcId", String(proc.pid), "-Files", files.join("|"), "-Points", pts];
-    if (keys) a.push("-Keys", keys);
-    if (right) a.push("-Right");
-    if (cancel) a.push("-Cancel");
-    try {
-      return JSON.parse(await t.ps("drag.ps1", ...a));
-    } finally {
-      // The drag's own window took the foreground; key tests must take it back.
-      foregrounded = false;
-    }
-  },
+  drag: (files, points, { keys = "", right = false, cancel = false } = {}) =>
+    cdp.ev(`__e2e.invoke("e2e_drag", ${JSON.stringify({ paths: files, script: { points, keys, right, cancel } })})`),
 
   /**
-   * A real mouse drag inside the app window (see mouse.ps1), for drags that
-   * start in the app. `points` as for drag(); the button goes down at the first.
+   * A drag that starts in the app: the button goes down at the first point and
+   * the page starts its drag on the way to the second, as for a user; the rest
+   * of the path is scripted as for drag(). `points` as for drag().
    */
   async mouseDrag(points, { ctrl = false, right = false } = {}) {
-    foregrounded = false;
-    await t.foreground();
-    const pts = points.map((p) => `${Math.round(p.x)},${Math.round(p.y)}${p.ms ? `,${p.ms}` : ""}`).join(";");
-    const a = ["-ProcId", String(proc.pid), "-Points", pts];
-    if (ctrl) a.push("-Ctrl");
-    if (right) a.push("-Right");
-    return t.ps("mouse.ps1", ...a);
+    const [from, ...rest] = points;
+    const button = right ? "right" : "left";
+    const modifiers = ctrl ? 2 : 0;
+    const mouse = (type, p, extra = {}) => cdp.send("Input.dispatchMouseEvent", { type, x: p.x, y: p.y, modifiers, ...extra });
+    await cdp.ev(`__e2e.invoke("e2e_arm_drag", ${JSON.stringify({ script: { points: rest, keys: ctrl ? "ctrl" : "", right } })})`);
+    await mouse("mouseMoved", from);
+    await mouse("mousePressed", from, { button, clickCount: 1 });
+    await mouse("mouseMoved", rest[0], { button, buttons: right ? 2 : 1 });
+    try {
+      return await cdp.ev(`__e2e.invoke("e2e_drag_outcome")`);
+    } finally {
+      await mouse("mouseReleased", rest.at(-1), { button, clickCount: 1 });
+    }
   },
 
   /** Answer the app's own confirmation dialog (Yes/OK or No/Cancel); returns its message. */

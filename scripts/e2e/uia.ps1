@@ -7,16 +7,13 @@
 #   uia.ps1 -Window "Delete File" -Command 6       # press the dialog button with id 6 (Yes)
 #   uia.ps1 -Menu -Key 0x43                        # press C (an access key) in an open popup menu
 #   uia.ps1 -Menu -Key 27                          # press Escape there
-#   uia.ps1 -Press 0x42                            # press B in the app, if it is in front
 #   uia.ps1 -Menu -Count                           # print how many entries the open popup menu has
 #   uia.ps1 -Menu -List                            # print its entries
 #   uia.ps1 -Menu -Choose "Rename"                 # pick an entry by its text (arrow keys and Enter)
-#   uia.ps1 -Menu -Pick "Copy here"                # click an entry by its text with the real mouse
 #
-# Menu keys are real key presses, made only while the menu's process owns the
-# foreground, so they can't land in another app. A menu reads real keyboard
-# input; its items expose no UI Automation actions. -Pick clicks only when the
-# point is on the menu's own window, and puts the pointer back after.
+# Menu keys are posted to the menu's own window, whose menu loop reads them
+# like typed keys; nothing goes through the real keyboard or to another window.
+# A menu's items expose no UI Automation actions.
 #
 # -Window and -Click are -like patterns. -ProcId limits the search to one process.
 # Windows are found with EnumWindows rather than the UIA tree, because a dialog
@@ -31,11 +28,9 @@ param(
     [switch]$Close,
     [int]$Command = 0,
     [int]$Key = 0,
-    [int]$Press = 0,
     [switch]$Count,
     [switch]$List,
-    [string]$Choose,
-    [string]$Pick
+    [string]$Choose
 )
 
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
@@ -75,26 +70,6 @@ public static class Wnd {
         return -1;
     }
     public static bool Hilited(IntPtr menu, int i) { return (GetMenuState(menu, (uint)i, 0x400) & 0x80) != 0; }
-    [StructLayout(LayoutKind.Sequential)] public struct PT { public int x, y; }
-    [StructLayout(LayoutKind.Sequential)] struct BOX { public int l, t, r, b; }
-    [DllImport("user32.dll")] static extern bool GetMenuItemRect(IntPtr w, IntPtr m, uint i, out BOX r);
-    [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(PT p);
-    [DllImport("user32.dll")] static extern bool GetCursorPos(out PT p);
-    /// Click entry `i` of the popup menu shown in window `w` with the real
-    /// mouse, if the point is on that window and the app owns the foreground.
-    public static bool ClickItem(uint pid, IntPtr w, IntPtr menu, int i) {
-        BOX r;
-        if (!GetMenuItemRect(IntPtr.Zero, menu, (uint)i, out r)) return false;
-        var p = new PT { x = (r.l + r.r) / 2, y = (r.t + r.b) / 2 };
-        if (WindowFromPoint(p) != w) return false;
-        uint fg; GetWindowThreadProcessId(GetForegroundWindow(), out fg);
-        if (fg != pid) return false;
-        PT back; GetCursorPos(out back);
-        Click(p.x, p.y);
-        System.Threading.Thread.Sleep(50);
-        SetCursorPos(back.x, back.y);
-        return true;
-    }
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
     [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
     [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
@@ -102,8 +77,13 @@ public static class Wnd {
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern bool PostMessageW(IntPtr h, uint m, IntPtr w, IntPtr l);
     [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")] static extern void keybd_event(byte vk, byte scan, uint flags, IntPtr extra);
-    // A real key press, only while process `pid` owns the foreground, so it can't land anywhere else.
+    [DllImport("user32.dll")] static extern uint MapVirtualKeyW(uint code, uint type);
+    /// Key `vk` down and up, posted to window `w` only.
+    public static void Post(IntPtr w, byte vk) {
+        long scan = (long)MapVirtualKeyW(vk, 0) << 16;
+        PostMessageW(w, 0x100, (IntPtr)vk, (IntPtr)(scan | 1));
+        PostMessageW(w, 0x101, (IntPtr)vk, (IntPtr)(scan | 1 | 0xC0000000L));
+    }
     [StructLayout(LayoutKind.Sequential)] struct RECT { public int l, t, r, b; }
     [StructLayout(LayoutKind.Sequential)] struct GUITHREADINFO {
         public int cbSize; public uint flags; public IntPtr active, focus, capture, menuOwner, moveSize, caret; public RECT rc;
@@ -121,13 +101,6 @@ public static class Wnd {
             ClassOf(fg), Title(fg), pid, ClassOf(gi.focus), fpid, ClassOf(gi.menuOwner), gi.flags);
     }
     static string Title(IntPtr h) { var sb = new StringBuilder(256); GetWindowTextW(h, sb, 256); return sb.ToString(); }
-    public static bool PressIfForeground(uint pid, byte vk) {
-        uint fg; GetWindowThreadProcessId(GetForegroundWindow(), out fg);
-        if (fg != pid) return false;
-        keybd_event(vk, 0, 0, IntPtr.Zero);
-        keybd_event(vk, 0, 2, IntPtr.Zero);
-        return true;
-    }
     // A real left click, for DirectUI panes that expose no invoke pattern.
     public static void Click(int x, int y) {
         SetCursorPos(x, y);
@@ -148,12 +121,6 @@ public static class Wnd {
     }
 }
 "@
-if ($Press) {
-    if (-not [Wnd]::PressIfForeground([uint32]$ProcId, [byte]$Press)) { throw "the app isn't in the foreground" }
-    "pressed"
-    exit 0
-}
-
 # Physical pixels for both UIA rectangles and the cursor.
 [void][Wnd]::SetProcessDPIAware()
 $A = [System.Windows.Automation.AutomationElement]
@@ -189,29 +156,20 @@ if ($Dump) {
     exit 0
 }
 
-if ($Count -or $Choose -or $List -or $Pick) {
+if ($Count -or $Choose -or $List) {
     $w = [IntPtr]$win.Current.NativeWindowHandle
     $h = [Wnd]::MenuOf($w)
     if ($Count) { [Wnd]::Count($h); exit 0 }
     if ($List) { [Wnd]::List($h); exit 0 }
-    if ($Pick) {
-        $target = [Wnd]::IndexOf($h, $Pick)
-        if ($target -lt 0) { throw "no menu entry '$Pick'" }
-        if (-not [Wnd]::ClickItem([uint32]$ProcId, $w, $h, $target)) { throw "couldn't click '$Pick' (" + [Wnd]::Keyboard() + ")" }
-        for ($i = 0; $i -lt 40 -and (Find-Window); $i++) { Start-Sleep -Milliseconds 50 }
-        if (Find-Window) { throw "the menu stayed open after clicking '$Pick'" }
-        "picked '$Pick'"
-        exit 0
-    }
     $target = [Wnd]::IndexOf($h, $Choose)
     if ($target -lt 0) { throw "no menu entry '$Choose'" }
     # Down until the menu itself shows the entry highlighted, then Enter.
     for ($i = 0; $i -lt 2 * [Wnd]::Count($h) -and -not [Wnd]::Hilited($h, $target); $i++) {
-        if (-not [Wnd]::PressIfForeground([uint32]$ProcId, 0x28)) { throw "the menu's window isn't in the foreground" }
+        [Wnd]::Post($w, 0x28)
         Start-Sleep -Milliseconds 40
     }
-    if (-not [Wnd]::Hilited($h, $target)) { throw "couldn't reach '$Choose' with the arrow keys" }
-    if (-not [Wnd]::PressIfForeground([uint32]$ProcId, 0x0D)) { throw "the menu's window isn't in the foreground" }
+    if (-not [Wnd]::Hilited($h, $target)) { throw "couldn't reach '$Choose' with the arrow keys (" + [Wnd]::Keyboard() + ")" }
+    [Wnd]::Post($w, 0x0D)
     "chose '$Choose'"
     exit 0
 }
@@ -221,7 +179,7 @@ if ($Key) {
     # A menu that has only just appeared may not be reading keys yet: press
     # again until it closes.
     for ($i = 0; $i -lt 20; $i++) {
-        if (-not [Wnd]::PressIfForeground([uint32]$ProcId, [byte]$Key)) { throw "the menu's window isn't in the foreground" }
+        [Wnd]::Post([IntPtr]$win.Current.NativeWindowHandle, [byte]$Key)
         Start-Sleep -Milliseconds 250
         if (-not (Find-Window)) { "pressed"; exit 0 }
     }

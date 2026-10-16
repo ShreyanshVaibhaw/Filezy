@@ -324,7 +324,7 @@ fn item_array(paths: &[String]) -> Result<windows::Win32::UI::Shell::IShellItemA
 }
 
 /// A shell data object for the selection (CF_HDROP and the shell's own formats).
-fn data_object(paths: &[String]) -> Result<windows::Win32::System::Com::IDataObject, String> {
+pub(crate) fn data_object(paths: &[String]) -> Result<windows::Win32::System::Com::IDataObject, String> {
     use windows::Win32::UI::Shell::BHID_DataObject;
     unsafe { item_array(paths)?.BindToHandler(None, &BHID_DataObject).map_err(|e| e.message().to_string()) }
 }

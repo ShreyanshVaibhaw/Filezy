@@ -147,6 +147,9 @@ pub fn install(app: &AppHandle, top: isize) {
     let top = HWND(top as *mut _);
     let helper = unsafe { CoCreateInstance(&CLSID_DragDropHelper, None, CLSCTX_INPROC_SERVER) }.ok();
     let target: IDropTarget = Target { top, app: app.clone(), helper, drag: RefCell::default() }.into();
+    if crate::e2e() {
+        crate::e2edrag::set_target(&target);
+    }
     let mut windows = vec![top];
     unsafe extern "system" fn collect(hwnd: HWND, lp: LPARAM) -> BOOL {
         unsafe { (*(lp.0 as *mut Vec<HWND>)).push(hwnd) };

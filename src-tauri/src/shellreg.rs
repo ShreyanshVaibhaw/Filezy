@@ -2,7 +2,7 @@
 //! background (F11). Opt-in from Settings and fully reversible: it lives in
 //! this user's own classes (HKCU), never replaces Explorer as the file
 //! manager, and turning it off, or uninstalling Filezy, deletes the keys.
-use winreg::enums::{HKEY_CURRENT_USER, KEY_READ, KEY_WRITE};
+use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
 use winreg::RegKey;
 
 /// Where this user's file classes live.
@@ -52,6 +52,7 @@ pub fn registered(classes: &str, exe: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use winreg::enums::KEY_WRITE;
 
     #[test]
     fn registers_and_removes_only_its_own_keys() {

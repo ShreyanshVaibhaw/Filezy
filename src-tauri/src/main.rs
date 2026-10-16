@@ -5,6 +5,7 @@ mod clip;
 mod cloud;
 mod drives;
 mod droptarget;
+mod e2edrag;
 mod fs_list;
 mod icons;
 mod index;
@@ -590,6 +591,12 @@ async fn paste_shortcuts(dest: String) -> Result<Vec<String>, String> {
 async fn start_drag(sel: Keep, state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
     let paths = sel_paths(&state, &sel)?;
     if paths.is_empty() {
+        return Ok(());
+    }
+    if let Some((script, done)) = e2edrag::take_armed() {
+        tauri::async_runtime::spawn_blocking(move || {
+            let _ = done.send(e2edrag::run(&app, paths, script));
+        });
         return Ok(());
     }
     // The drag loop must run on the UI thread (see shellmenu::drag).
@@ -1217,6 +1224,30 @@ fn e2e_enabled() -> bool {
     e2e()
 }
 
+/// A drag in from another app, without the real mouse (see e2edrag).
+#[tauri::command]
+async fn e2e_drag(paths: Vec<String>, script: e2edrag::Script, app: AppHandle) -> Result<e2edrag::Outcome, String> {
+    if !e2e() {
+        return Err("not a test session".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || e2edrag::run(&app, paths, script)).await.map_err(|e| e.to_string())?
+}
+
+/// Script the next drag the page starts, then wait for it to end (see e2edrag).
+#[tauri::command]
+fn e2e_arm_drag(script: e2edrag::Script) -> Result<(), String> {
+    if !e2e() {
+        return Err("not a test session".into());
+    }
+    e2edrag::arm(script);
+    Ok(())
+}
+
+#[tauri::command]
+async fn e2e_drag_outcome() -> Result<e2edrag::Outcome, String> {
+    tauri::async_runtime::spawn_blocking(e2edrag::outcome).await.map_err(|e| e.to_string())?
+}
+
 /// Open a terminal in `dir`: Windows Terminal when available, else cmd.
 #[tauri::command]
 fn open_terminal(dir: String) -> Result<(), String> {
@@ -1368,6 +1399,9 @@ fn main() {
             new_window,
             is_installed,
             e2e_enabled,
+            e2e_drag,
+            e2e_arm_drag,
+            e2e_drag_outcome,
             recycle_paths,
             move_back,
             move_into,

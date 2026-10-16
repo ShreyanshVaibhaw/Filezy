@@ -1,4 +1,4 @@
-// Drag and drop from other apps (real OLE drags, see drag.ps1) and clipboard
+// Drag and drop from other apps (scripted through the drop target, see e2edrag.rs) and clipboard
 // changes made by other apps.
 import fs from "node:fs";
 import path from "node:path";
@@ -242,27 +242,24 @@ export default [
       const dest = t.dir("dd-right/dest");
       const f = t.mk(path.join(src, "r.txt"), "r");
       await t.nav(dest);
-      // Entries are clicked with the real mouse. Keys pressed in this menu
-      // (another process is the drag's source) sometimes don't reach it; the
-      // same menu from a drag inside Filezy takes keys (see below).
       let dragging = drop(t, [f], await blank(t), { right: true });
-      await t.uia("-Menu", "-Pick", "Copy here");
+      await t.uia("-Menu", "-Key", String(0x43));
       let r = await dragging;
       t.eq(r.effect, COPY, "the menu's choice");
       await settleOp(t);
       t.ok(t.exists(f) && t.exists(path.join(dest, "r.txt")), "copied");
       const g = t.mk(path.join(src, "s.txt"), "s");
       dragging = drop(t, [g], await blank(t), { right: true });
-      await t.uia("-Menu", "-Pick", "Cancel");
+      await t.uia("-Menu", "-Choose", "Cancel");
       r = await dragging;
       t.eq(r.effect, NONE, "cancelled");
       await settleOp(t);
       t.ok(t.exists(g) && !t.exists(path.join(dest, "s.txt")), "Cancel left it alone");
-      // The keyboard is back in the list: a real B selects by name.
+      // The keyboard is back in the list: B selects by name.
       t.mk(path.join(dest, "banana.txt"), "b");
       await settleOp(t);
       await t.ev("document.querySelector('.scroller').focus()");
-      await t.uia("-Press", String(0x42));
+      await t.key("b");
       await t.waitFor(`__e2e.selectedNames().then((n) => n.join() === "banana.txt")`, 3000, "type-to-select after the menu");
     },
   },
