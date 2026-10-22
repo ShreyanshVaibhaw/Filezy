@@ -1,10 +1,10 @@
 /* Selectable themes: each block overrides the fluent.css variable set.
    No data-theme attribute = System (follows the OS via prefers-color-scheme).
-   --bg is transparent for mica themes and opaque for community palettes. */
+   Opaque bases also work when native capture cannot composite Mica. */
 
 [data-theme="win11-dark"] {
   color-scheme: dark;
-  --bg: transparent;
+  --bg: #202020;
   --text: #ffffff;
   --text-2: rgba(255, 255, 255, 0.786);
   --text-3: rgba(255, 255, 255, 0.55);
@@ -27,7 +27,7 @@
 
 [data-theme="win11-light"] {
   color-scheme: light;
-  --bg: transparent;
+  --bg: #f3f3f3;
   --text: #1a1a1a;
   --text-2: rgba(0, 0, 0, 0.78);
   --text-3: rgba(0, 0, 0, 0.55);

@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { msg } from "./i18n.svelte";
   import { menuKeys } from "./menukeys";
   import { invoke } from "@tauri-apps/api/core";
   import { app, navigate, openPath, back, forward, up, refresh, setFilter, clearSearch, startSearch, rememberSearch, folderName, joinPath, can, THIS_PC, HOME, RECYCLE, SETTINGS, NETWORK } from "./store.svelte";
   import { settings } from "./settings.svelte";
-  import { crumbs, displayPath, isArchive, isUnc, isVirtual } from "./paths";
+  import { crumbs, displayPath, isArchive, isUnc, isVirtual, isWsl } from "./paths";
+  import { isShellLocation } from "./shellplaces";
 
   let editing = $state(false);
   let editValue = $state("");
@@ -41,6 +43,7 @@
 
   const segments = $derived.by(() => {
     if (!app.path) return [] as { name: string; path: string }[];
+    if (isShellLocation(app.path)) return [{ name: folderName(app.path), path: app.path }];
     if (app.path === THIS_PC) return [{ name: "This PC", path: THIS_PC }];
     if (app.path === HOME) return [{ name: "Home", path: HOME }];
     if (app.path === RECYCLE) return [{ name: "Recycle Bin", path: RECYCLE }];
@@ -48,7 +51,7 @@
     if (app.path === NETWORK) return [{ name: "Network", path: NETWORK }];
     const segs = crumbs(app.path).map((c) => ({ ...c, name: c.name.endsWith(":") ? diskName(c.name) : c.name }));
     // A computer and its shares sit under Network, as in Explorer.
-    return isUnc(app.path) ? [{ name: "Network", path: NETWORK }, ...segs] : segs;
+    return isUnc(app.path) && !isWsl(app.path) ? [{ name: "Network", path: NETWORK }, ...segs] : segs;
   });
 
   function diskName(letter: string): string {
@@ -177,16 +180,16 @@
 </script>
 
 <div class="addressrow">
-  <button class="navbtn" onclick={back} disabled={app.histIdx <= 0} title="Back (Alt + Left)" aria-label="Back (Alt + Left)">
+  <button class="navbtn" onclick={back} disabled={app.histIdx <= 0} title={msg("Back (Alt + Left)")} aria-label={msg("Back (Alt + Left)")}>
     <span class="glyph">&#xE72B;</span>
   </button>
-  <button class="navbtn" onclick={forward} disabled={app.histIdx >= app.histLen - 1} title="Forward (Alt + Right)" aria-label="Forward (Alt + Right)">
+  <button class="navbtn" onclick={forward} disabled={app.histIdx >= app.histLen - 1} title={msg("Forward (Alt + Right)")} aria-label={msg("Forward (Alt + Right)")}>
     <span class="glyph">&#xE72A;</span>
   </button>
-  <button class="navbtn" onclick={up} title="Up (Alt + Up)" aria-label="Up (Alt + Up)">
+  <button class="navbtn" onclick={up} title={msg("Up (Alt + Up)")} aria-label={msg("Up (Alt + Up)")}>
     <span class="glyph">&#xE74A;</span>
   </button>
-  <button class="navbtn" onclick={() => refresh()} title="Refresh (F5)" aria-label="Refresh (F5)">
+  <button class="navbtn" onclick={() => refresh()} title={msg("Refresh (F5)")} aria-label={msg("Refresh (F5)")}>
     <span class="glyph">&#xE72C;</span>
   </button>
 
@@ -195,7 +198,7 @@
     class:editing
     role="textbox"
     tabindex="-1"
-    aria-label="Address"
+    aria-label={msg("Address")}
     onclick={(e) => { if (e.target === e.currentTarget) startEdit(); }}
     onkeydown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) startEdit(); }}
   >
@@ -224,11 +227,11 @@
     {:else}
       <span class="glyph pcicon">&#xE977;</span>
       {#if hiddenSegs.length}
-        <button class="crumb chevbtn" onclick={toggleOverflow} title="Previous locations" aria-label="Previous locations">
+        <button class="crumb chevbtn" onclick={toggleOverflow} title={msg("Previous locations")} aria-label={msg("Previous locations")}>
           <span class="glyph">&#xE712;</span>
         </button>
       {/if}
-      <button class="crumbchevbtn" onclick={(e) => openCrumbMenu(THIS_PC, e)} title="This PC" aria-label="This PC">
+      <button class="crumbchevbtn" onclick={(e) => openCrumbMenu(THIS_PC, e)} title={msg("This PC")} aria-label={msg("This PC")}>
         <span class="glyph crumbchev">&#xE76C;</span>
       </button>
       {#each shownSegs as seg (seg.path)}
@@ -240,7 +243,7 @@
         >
           {seg.name}
         </button>
-        <button class="crumbchevbtn" aria-label={`Folders in ${seg.name}`} title={`Folders in ${seg.name}`} onclick={(e) => openCrumbMenu(seg.path, e)}>
+        <button class="crumbchevbtn" disabled={isShellLocation(seg.path)} aria-label={msg("Folders in {name}", { name: seg.name })} title={isShellLocation(seg.path) ? msg("Open device folders from the list.") : msg("Folders in {name}", { name: seg.name })} onclick={(e) => openCrumbMenu(seg.path, e)}>
           <span class="glyph crumbchev">&#xE76C;</span>
         </button>
       {/each}
@@ -253,7 +256,9 @@
     <input
       bind:this={searchInput}
       placeholder={"Search " + (app.path ? folderName(app.search?.root ?? app.path) : "")}
-      aria-label="Search"
+      aria-label={msg("Search")}
+      disabled={isShellLocation(app.path)}
+      title={isShellLocation(app.path) ? msg("Search is unavailable in device folders.") : undefined}
       bind:value={searchValue}
       oninput={() => {
         recentOpen = false;
@@ -283,8 +288,8 @@
       }}
     />
     {#if recentOpen && recent.length}
-      <div class="menu recentdrop" role="listbox" aria-label="Recent searches" bind:this={recentList} onkeydown={recentKeys} tabindex="-1">
-        <div class="recenthdr">Recent searches</div>
+      <div class="menu recentdrop" role="listbox" aria-label={msg("Recent searches")} bind:this={recentList} onkeydown={recentKeys} tabindex="-1">
+        <div class="recenthdr">{msg("Recent searches")}</div>
         {#each recent as r (r)}
           <button class="menu-item" role="option" aria-selected="false" onclick={() => pickRecent(r)} onblur={() => setTimeout(() => {
             if (!recentList?.contains(document.activeElement) && document.activeElement !== searchInput) recentOpen = false;
@@ -470,5 +475,10 @@
     .searchbox {
       width: 160px;
     }
+  }
+  @media (max-width: 600px) {
+    .addressrow { flex-wrap: wrap; height: auto; min-height: 80px; row-gap: 4px; padding: 4px 8px; }
+    .addressbox { min-width: 120px; margin-right: 0; }
+    .searchbox { width: 100%; height: 30px; }
   }
 </style>

@@ -1,14 +1,43 @@
 # Filezy
 
-A fast, lightweight Windows 11 File Explorer clone built with Tauri 2, Rust, and Svelte 5.
-Pixel-faithful Fluent design over direct Win32 shell integration, with none of the lag.
+A Windows file manager built with Tauri 2, Rust, and Svelte 5.
+Filezy uses Windows shell operations for copying, moving, conflicts, progress dialogs and the Recycle Bin.
 
 ## Highlights
 
-- **Fast**: opens a 100k-file folder in ~270 ms and scrolls it at 60 fps.
-  Listings come straight from `FindFirstFileExW`, the UI virtualizes everything, and the whole app idles around 35 MB of RAM.
-- **Real shell integration**: genuine right-click context menus (`IContextMenu`), the real Properties and Open With dialogs, `IFileOperation` for copy/move/delete (native progress and conflict dialogs, recycle bin, undo registration), `CF_HDROP` clipboard interop, and OLE drag and drop with Explorer's exact move/copy rules.
-- **Everything Explorer has**: tabs (drag to reorder, per-tab history and scroll), all seven view modes with real shell thumbnails, group-by with sort-within-groups, column resize/reorder, breadcrumbs with per-segment dropdowns, Home page with Quick access and Recent files, This PC with drive capacity bars, lazy nav-pane folder tree, Quick Access pinning, marquee selection, a preview pane (text, images, audio, video and PDF, plus Windows' own previewers for Word and other files that have one), cloud folders from OneDrive and other providers with Explorer's Status column and Always keep on this device / Free up space, libraries, natural filename sorting, hidden-items and file-extension toggles, a registry-driven New menu, live folder watching, and recursive streaming search with an optional NTFS MFT index for machine-wide results.
+- Virtualized file lists, eight views including Content, configurable metadata columns, thumbnails, sorting and grouping.
+- Tabs with history, saved sessions, reordering and transfers between windows.
+- Windows context menus, Properties, Open With, clipboard interop and OLE drag and drop.
+- Home, Quick access, Favorites, Recent files, drive and network browsing, Libraries and registered cloud roots.
+- Text, image, audio, video and PDF previews, plus installed Windows preview handlers.
+- ZIP creation and extraction, plus read and extraction support for 7z, tar and tar.gz.
+- Streaming search with metadata filters, Windows Search integration and an optional NTFS MFT index.
+- Resizable panes, keyboard navigation, high-contrast styles, optional single-click opening and per-folder preferences.
+
+Devices use a separate shell adapter with browse and copy-out commands.
+Device writes, rename, delete, search and previews are unavailable in that adapter.
+WSL distributions appear when registered for the current user; opening one can start it.
+Device, cloud-provider and shell-extension compatibility depends on Windows and the installed provider.
+English is the supported UI language; messages use a translation helper and an expanded-text mode for layout testing.
+
+## Recorded performance
+
+The 23 October 2026 production x64 build opened 100,000 empty files in Details view in a median of 184 ms across five warm-cache runs.
+Exact-name searches took a median of 167 ms across three runs.
+During 120 scripted scroll steps, renderer frame intervals had a median of 12.2 ms and a 95th percentile of 20.2 ms; two exceeded 34 ms.
+The viewport was 1280 by 820 CSS pixels at 125 percent scaling on Windows 11 build 26200.9711, with a Core i5-10300H, 8 logical processors and 31.8 GB RAM.
+Other applications were running; the compiler had finished before measurement.
+After the run, Filezy used 101.4 MiB working set; Filezy plus six WebView2 processes used 527.6 MiB, counting shared pages more than once, and 257.1 MiB private memory.
+The renderer navigation-to-load interval was 368 ms; this excludes process and WebView startup and is not an end-to-end launch measurement.
+Cold-cache listing and end-to-end startup remain unmeasured.
+The retained ExtraCursor case in `scripts/e2e/extracursor-cases.mjs` exercises the production UI without test hooks.
+
+On 12 October 2026, a release build opened 100,000 empty files in a median of 197 ms across five runs with a warm OS cache.
+Scrolling had a median frame time of 18.3 ms and a 95th percentile of 39.4 ms.
+The machine had 8 logical cores and 32 GB RAM, with other applications running.
+Filezy's process used 76 MB working set; adding its six WebView2 processes gave 574 MB, including shared pages counted more than once.
+These are historical measurements, not guarantees for another machine or build.
+Cold-cache listing was not measured.
 
 ## Installing and updating
 
@@ -40,7 +69,7 @@ Turning the setting off deletes those three keys, and so does uninstalling Filez
 
 Pick from Settings → Appearance or the View menu; the choice persists.
 
-- System (follows Windows light/dark, mica backdrop)
+- System (follows Windows light/dark)
 - Windows 11 Dark / Windows 11 Light
 - Catppuccin Mocha / Catppuccin Latte
 - Dracula
@@ -60,7 +89,7 @@ Pick from Settings → Appearance or the View menu; the choice persists.
 ## Building
 
 ```sh
-npm install
+npm ci
 npm run tauri dev            # development
 npm run tauri build          # release + NSIS installer
 npm run tauri build -- --no-bundle   # release exe only
@@ -72,6 +101,11 @@ npm run test:e2e             # drives that exe through Windows (scripts/e2e)
 
 The release binary lands at `src-tauri/target/release/filezy.exe`.
 The end-to-end hooks exist only in the `build:e2e` exe, so a shipped build can't be driven by them.
+The legacy E2E runner includes tests that can foreground windows or change the clipboard.
+Use ExtraCursor for interactive desktop testing while someone is using the computer, with background dispatch and a disposable profile.
+Do not run the legacy input tests during that session.
+The Windows x64 CI job checks the frontend, Rust tests and NSIS packaging on Windows Server 2022.
+Its unsigned installer is a packaging artifact, not a signed updater release.
 
 ### Cutting a release
 
@@ -86,7 +120,20 @@ gh release create v0.1.0 "src-tauri/target/release/bundle/nsis/Filezy_0.1.0_x64-
 ```
 
 The app fetches `releases/latest/download/latest.json`, so each release only carries its own manifest.
-Losing the private key means no installed copy can ever be updated again.
+The manifest tool requires one installer with the exact version and architecture in its Tauri filename and the matching `.exe.sig` file.
+It checks that the package, Cargo and Tauri versions agree and verifies the Minisign signature against the app's bundled public key.
+Stale, ambiguous, mismatched or modified artifacts fail before a manifest is written.
+Set `FILEZY_BUNDLE_DIR` and `FILEZY_ARCH` when preparing a different output directory or architecture.
+Windows x64 is the current CI target; other targets need their own build and native acceptance results.
+
+Updater signing authenticates downloaded update bytes using the public key embedded in Filezy.
+Windows Authenticode signing identifies the executable's publisher and is a separate certificate and verification step.
+An updater signature does not imply Authenticode signing.
+Keep release keys outside the repository and preserve the existing updater public key when building compatible updates.
+
+Before publishing a release, check fresh installation, upgrade with settings preserved, uninstall with Explorer entries removed, portable startup, missing WebView2, cancelled or failed downloads, and invalid update signatures in a disposable Windows VM.
+Record the Windows build, DPI, hardware, exact build and dataset with native acceptance and performance results.
+CI packaging alone does not establish those installation or device results.
 
 Machine-wide search uses the NTFS MFT and needs the app elevated once to index; without elevation it falls back to a recursive walk automatically.
 

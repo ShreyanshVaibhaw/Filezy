@@ -1,10 +1,15 @@
 <script lang="ts">
+  import { msg } from "./i18n.svelte";
   import { menuKeys } from "./menukeys";
   import { app, navigate, folderName, pinRemove, movePin, shellIcon, treeDirty, THIS_PC, HOME, RECYCLE, RECYCLE_GUID, NETWORK } from "./store.svelte";
   import { menuOn, settings } from "./settings.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { dropHover } from "./drag";
+  import { DEVICES } from "./shellplaces";
+
+  let wslRoots = $state<[string, string][]>([]);
+  invoke<[string, string][]>("wsl_roots").then((roots) => wslRoots = roots).catch(() => {});
 
   let pcOpen = $state(true);
 
@@ -209,7 +214,7 @@
 <div
   class="navpane"
   role="tree"
-  aria-label="Navigation pane"
+  aria-label={msg("Navigation pane")}
   data-drop-scroll
   tabindex="-1"
   onkeydown={treeKeys}
@@ -231,10 +236,18 @@
   >
     <span class="chevslot"></span>
     <span class="glyph icon">&#xE80F;</span>
-    <span class="label">Home</span>
+    <span class="label">{msg("Home")}</span>
   </button>
 
   <div class="sep"></div>
+  <button class="navitem" class:active={app.path === DEVICES} onclick={() => navigate(DEVICES)} role="treeitem" data-key={DEVICES} data-level="1" aria-level={1} aria-selected={app.path === DEVICES} tabindex={tabTo(DEVICES)}>
+    <span class="chevslot"></span><span class="glyph icon">&#xE8EA;</span><span class="label">{msg("Devices")}</span>
+  </button>
+  {#each wslRoots as [name, path] (path)}
+    <button class="navitem" class:active={app.path === path} onclick={() => navigate(path)} role="treeitem" data-key={path} data-level="1" aria-level={1} aria-selected={app.path === path} tabindex={tabTo(path)} title={msg("Open {name} in WSL. This starts the distribution if it is stopped.", { name })}>
+      <span class="chevslot"></span><span class="glyph icon">&#xE756;</span><span class="label">{name}</span>
+    </button>
+  {/each}
 
   {#each app.specials as [name, path] (path)}
     <button
@@ -322,7 +335,7 @@
       {pcOpen ? "" : ""}
     </span>
     <span class="glyph icon">&#xE977;</span>
-    <span class="label">This PC</span>
+    <span class="label">{msg("This PC")}</span>
   </button>
   {#if pcOpen}
     {#each app.drives as d (d.path)}
@@ -343,7 +356,7 @@
   >
     <span class="glyph chevslot"></span>
     <span class="glyph icon">&#xE968;</span>
-    <span class="label">Network</span>
+    <span class="label">{msg("Network")}</span>
   </button>
 
   <div class="sep"></div>
@@ -367,7 +380,7 @@
     {:else}
       <span class="glyph icon">&#xE74D;</span>
     {/if}
-    <span class="label">Recycle Bin</span>
+    <span class="label">{msg("Recycle Bin")}</span>
   </button>
 </div>
 
@@ -377,7 +390,7 @@
       class="menu-item"
       onclick={() => { pinRemove(pinCtx!.path); pinCtx = null; }}
     >
-      <span class="glyph">&#xE77A;</span> Unpin from Quick access
+      <span class="glyph">&#xE77A;</span> {msg("Unpin from Quick access")}
     </button>
   </div>
 {/if}
@@ -390,7 +403,7 @@
 
 <style>
   .navpane {
-    width: 240px;
+    width: var(--nav-width, 240px);
     flex-shrink: 0;
     overflow-y: auto;
     overflow-x: hidden;

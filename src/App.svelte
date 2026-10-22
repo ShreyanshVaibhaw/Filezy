@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { msg } from "./lib/i18n.svelte";
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
@@ -32,48 +33,35 @@
   import { initDrag } from "./lib/drag";
   import { settings, setSetting, showPane } from "./lib/settings.svelte";
   import DetailsPane from "./lib/DetailsPane.svelte";
+  import Splitter from "./lib/Splitter.svelte";
+  import { initTabTransfers } from "./lib/tabtransfer";
+  import ShellPane from "./lib/ShellPane.svelte";
+  import { isShellLocation } from "./lib/shellplaces";
 
   let addressEdit: { focus: () => void; focusSearch: () => void } | undefined = $state();
 
-  // The side pane's width: dragged by its left edge, saved when the drag ends.
-  let paneDrag: { x: number; w: number } | null = null;
-  let dragWidth = $state(0);
-  const paneWidth = $derived(Math.min(600, Math.max(200, dragWidth || settings.paneWidth)));
-  function startPaneResize(ev: MouseEvent) {
-    ev.preventDefault();
-    paneDrag = { x: ev.clientX, w: paneWidth };
-  }
-  function paneResizeMove(ev: MouseEvent) {
-    if (paneDrag) dragWidth = Math.min(600, Math.max(200, paneDrag.w - (ev.clientX - paneDrag.x)));
-  }
-  /// The keyboard side of the splitter: Left widens the pane, Right narrows it.
-  function paneKey(ev: KeyboardEvent) {
-    const step = { ArrowLeft: 16, ArrowRight: -16, Home: -1000, End: 1000 }[ev.key];
-    if (step === undefined) return;
-    ev.preventDefault();
-    ev.stopPropagation();
-    setSetting("paneWidth", Math.min(600, Math.max(200, paneWidth + step)));
-  }
-  function endPaneResize() {
-    if (!paneDrag) return;
-    paneDrag = null;
-    setSetting("paneWidth", Math.round(dragWidth));
-    dragWidth = 0;
-  }
+  let viewportWidth = $state(innerWidth);
+  // Leave enough room for the list even when both saved panes are wide.
+  const navWidth = $derived(Math.min(settings.navWidth, Math.max(160, viewportWidth - 500)));
+  const paneWidth = $derived(Math.min(settings.paneWidth, 600, Math.max(200, viewportWidth - navWidth - 285)));
 
   onMount(() => {
+    let stopTransfers = () => {};
     const unlisten: Promise<() => void>[] = [
       listen<string>("fs-changed", (ev) => onFsChanged(ev.payload)),
       // Any app's copy or cut: Paste and the ghosted cut items follow at once.
       listen("clipboard-changed", () => refreshClipState()),
       // A USB drive plugged in or out, a disc, a network drive mapped.
-      listen("drives-changed", () => loadDrives()),
+      listen("drives-changed", () => { loadDrives(); if (isShellLocation(app.path)) refresh(); }),
       listen<Parameters<typeof searchUpdate>[0]>("search-update", (ev) => searchUpdate(ev.payload)),
     ];
     initDrag();
     (async () => {
       app.home = await invoke<string>("home_dir");
       loadPins();
+      const transfers = await initTabTransfers();
+      stopTransfers = transfers.destroy;
+      if (transfers.imported) return;
       // `filezy <folder>` or Explorer's `filezy /select,<file>`; otherwise the
       // last window's tabs (when Reopen tabs is on and no other window is
       // open, so Ctrl+N doesn't copy them), else the start page.
@@ -94,7 +82,7 @@
     loadDrives();
     invoke<typeof app.specials>("special_dirs").then((s) => (app.specials = s));
     invoke<typeof app.cloudRoots>("cloud_roots").then((r) => (app.cloudRoots = r));
-    return () => unlisten.forEach((u) => u.then((f) => f()));
+    return () => { stopTransfers(); unlisten.forEach((u) => u.then((f) => f())); };
   });
 
   function isTextField(el: EventTarget | null): boolean {
@@ -226,14 +214,17 @@
 </script>
 
 <!-- Focus re-reads the clipboard too, in case a change event was missed. -->
-<svelte:window onkeydown={onKeydown} onfocus={refreshClipState} onmousemove={paneResizeMove} onmouseup={endPaneResize} />
+<svelte:window onkeydown={onKeydown} onfocus={refreshClipState} bind:innerWidth={viewportWidth} />
 
-<div class="root">
+<div class="root" style={`--nav-width:${navWidth}px`}>
   <TitleBar />
   <AddressBar bind:this={addressEdit} />
   <CommandBar />
   <div class="content">
     <NavPane />
+    <div class="navgrip">
+      <Splitter label={msg("Navigation pane width")} value={navWidth} min={160} max={Math.min(400, Math.max(160, viewportWidth - 500))} resize={(w) => setSetting("navWidth", w)} />
+    </div>
     <div class="filecard">
       {#if app.path === THIS_PC}
         <DrivesPane />
@@ -245,25 +236,14 @@
         <RecyclePane />
       {:else if app.path === SETTINGS}
         <SettingsPane />
+      {:else if isShellLocation(app.path)}
+        <ShellPane />
       {:else}
         <div class="filerow">
           <FilePane />
           {#if settings.previewPane || settings.detailsPane}
             <div class="sidepane" style="width:{paneWidth}px">
-              <!-- A focusable separator is WAI-ARIA's window splitter, an interactive widget the linter doesn't know. -->
-              <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
-              <div
-                class="panegrip"
-                role="separator"
-                tabindex="0"
-                aria-orientation="vertical"
-                aria-label="Pane width"
-                aria-valuenow={paneWidth}
-                aria-valuemin={200}
-                aria-valuemax={600}
-                onmousedown={startPaneResize}
-                onkeydown={paneKey}
-              ></div>
+              <div class="panegrip"><Splitter label={msg("Pane width")} value={paneWidth} min={200} max={600} reverse resize={(w) => setSetting("paneWidth", w)} /></div>
               {#if settings.detailsPane}
                 <DetailsPane />
               {:else}
@@ -287,14 +267,16 @@
     height: 100vh;
     display: flex;
     flex-direction: column;
-    /* Mica themes stay transparent; community palettes paint their own base. */
-    background: var(--bg, transparent);
+    /* An opaque base also keeps covered-window captures readable. */
+    background: var(--bg, var(--mica-fallback));
   }
   .content {
     flex: 1;
     display: flex;
     min-height: 0;
   }
+  .navgrip { display: flex; }
+  @media (max-width: 700px) { .navgrip { display: none; } }
   .filerow {
     flex: 1;
     min-height: 0;
@@ -311,14 +293,10 @@
     left: -3px;
     top: 0;
     bottom: 0;
-    width: 6px;
+    width: 5px;
+    display: flex;
     cursor: col-resize;
     z-index: 1;
-  }
-  .panegrip:hover,
-  .panegrip:focus-visible {
-    background: var(--accent);
-    opacity: 0.6;
   }
   @media (max-width: 900px) {
     .sidepane {

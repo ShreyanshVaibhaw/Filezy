@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { msg } from "./i18n.svelte";
   import { getVersion } from "@tauri-apps/api/app";
   import appIcon from "../../app-icon.png";
   import {
@@ -41,6 +42,7 @@
 
   const VIEWS = [
     ["details", "Details"],
+    ["content", "Content"],
     ["list", "List"],
     ["tiles", "Tiles"],
     ["icons_s", "Small icons"],
@@ -112,19 +114,19 @@
 <div class="settings">
   <div class="rail">
     {#each CATEGORIES as c (c.id)}
-      <button class="railitem" class:active={cat === c.id} onclick={() => (cat = c.id)}>
+      <button class="railitem" class:active={cat === c.id} onclick={() => (cat = c.id)} aria-label={msg(c.label)} title={msg(c.label)}>
         <span class="glyph">{c.glyph}</span>
-        <span class="raillabel">{c.label}</span>
+        <span class="raillabel">{msg(c.label)}</span>
       </button>
     {/each}
   </div>
 
   <div class="content">
     <div class="inner">
-      <h1 class="title">{title}</h1>
+      <h1 class="title">{msg(title)}</h1>
 
       {#if cat === "appearance"}
-        <h2 class="section">Theme</h2>
+        <h2 class="section">{msg("Theme")}</h2>
         <div class="themegrid">
           {#each THEMES as [id, label] (id)}
             <!-- Each card carries the theme's own data-theme, so the preview is
@@ -151,93 +153,101 @@
           {/each}
         </div>
 
-        <h2 class="section">Layout</h2>
+        <h2 class="section">{msg("Layout")}</h2>
         <div class="row">
           <span class="glyph rowicon">&#xE8A9;</span>
           <div class="rowlabel">
-            <div class="rowname">Compact view</div>
-            <div class="rowdesc">Tighter row spacing in Details and List views</div>
+            <div class="rowname">{msg("Compact view")}</div>
+            <div class="rowdesc">{msg("Tighter row spacing in Details and List views")}</div>
           </div>
-          <Toggle label="Compact view" checked={settings.compact} onchange={(v) => setSetting("compact", v)} />
+          <Toggle label={msg("Compact view")} checked={settings.compact} onchange={(v) => setSetting("compact", v)} />
         </div>
         <div class="row">
           <span class="glyph rowicon">&#xE890;</span>
           <div class="rowlabel">
-            <div class="rowname">Preview pane</div>
-            <div class="rowdesc">Show a preview of the selected file (Alt+P)</div>
+            <div class="rowname">{msg("Preview pane")}</div>
+            <div class="rowdesc">{msg("Show a preview of the selected file (Alt+P)")}</div>
           </div>
-          <Toggle label="Preview pane" checked={settings.previewPane} onchange={(v) => setSetting("previewPane", v)} />
+          <Toggle label={msg("Preview pane")} checked={settings.previewPane} onchange={(v) => setSetting("previewPane", v)} />
         </div>
       {:else if cat === "files"}
-        <h2 class="section">Display</h2>
+        <h2 class="section">{msg("Display")}</h2>
         <div class="row">
           <span class="glyph rowicon">&#xE7B3;</span>
           <div class="rowlabel">
-            <div class="rowname">Show hidden items</div>
-            <div class="rowdesc">Include files and folders marked hidden by Windows</div>
+            <div class="rowname">{msg("Show hidden items")}</div>
+            <div class="rowdesc">{msg("Include files and folders marked hidden by Windows")}</div>
           </div>
-          <Toggle label="Show hidden items" checked={settings.showHidden} onchange={toggleHidden} />
+          <Toggle label={msg("Show hidden items")} checked={settings.showHidden} onchange={toggleHidden} />
         </div>
         <div class="row">
           <span class="glyph rowicon">&#xE7C3;</span>
           <div class="rowlabel">
-            <div class="rowname">File name extensions</div>
-            <div class="rowdesc">Show the extension after each file name</div>
+            <div class="rowname">{msg("File name extensions")}</div>
+            <div class="rowdesc">{msg("Show the extension after each file name")}</div>
           </div>
-          <Toggle label="File name extensions" checked={settings.showExt} onchange={(v) => setSetting("showExt", v)} />
+          <Toggle label={msg("File name extensions")} checked={settings.showExt} onchange={(v) => setSetting("showExt", v)} />
         </div>
         <div class="row">
           <span class="glyph rowicon">&#xE73A;</span>
           <div class="rowlabel">
-            <div class="rowname">Item check boxes</div>
-            <div class="rowdesc">Select items with check boxes as well as clicks</div>
+            <div class="rowname">{msg("Item check boxes")}</div>
+            <div class="rowdesc">{msg("Select items with check boxes as well as clicks")}</div>
           </div>
-          <Toggle label="Item check boxes" checked={settings.checkboxes} onchange={(v) => setSetting("checkboxes", v)} />
+          <Toggle label={msg("Item check boxes")} checked={settings.checkboxes} onchange={(v) => setSetting("checkboxes", v)} />
         </div>
         <div class="row">
           <span class="glyph rowicon">&#xE72E;</span>
           <div class="rowlabel">
-            <div class="rowname">Show protected operating system files</div>
-            <div class="rowdesc">Files Windows marks as both hidden and system, such as desktop.ini. Needs hidden items on.</div>
+            <div class="rowname">{msg("Show protected operating system files")}</div>
+            <div class="rowdesc">{msg("Files Windows marks as both hidden and system, such as desktop.ini. Needs hidden items on.")}</div>
           </div>
           <Toggle
-            label="Show protected operating system files"
+            label={msg("Show protected operating system files")}
             checked={settings.showProtected}
             onchange={(v) => { setSetting("showProtected", v); refresh(); }}
           />
         </div>
 
-        <h2 class="section">Default folder view</h2>
+        <div class="row">
+          <span class="glyph rowicon">&#xE8B0;</span>
+          <div class="rowlabel">
+            <div class="rowname">{msg("Single-click to open items")}</div>
+            <div class="rowdesc">{msg("Ctrl+click selects without opening. Off by default.")}</div>
+          </div>
+          <Toggle label={msg("Single-click to open items")} checked={settings.singleClick} onchange={(v) => setSetting("singleClick", v)} />
+        </div>
+        <h2 class="section">{msg("Default folder view")}</h2>
         <div class="row">
           <span class="glyph rowicon">&#xE890;</span>
           <div class="rowlabel">
-            <div class="rowname">Layout</div>
-            <div class="rowdesc">Used by folders you have not customized</div>
+            <div class="rowname">{msg("Layout")}</div>
+            <div class="rowdesc">{msg("Used by folders you have not customized")}</div>
           </div>
           <select class="combo" value={settings.defaultView} onchange={(e) => setSetting("defaultView", e.currentTarget.value)}>
-            {#each VIEWS as [v, l] (v)}<option value={v}>{l}</option>{/each}
+            {#each VIEWS as [v, l] (v)}<option value={v}>{msg(l)}</option>{/each}
           </select>
         </div>
         <div class="row">
           <span class="glyph rowicon">&#xE8CB;</span>
           <div class="rowlabel">
-            <div class="rowname">Sort by</div>
+            <div class="rowname">{msg("Sort by")}</div>
           </div>
           <select class="combo" value={settings.defaultSort} onchange={(e) => setSetting("defaultSort", e.currentTarget.value)}>
-            {#each SORTS as [v, l] (v)}<option value={v}>{l}</option>{/each}
+            {#each SORTS as [v, l] (v)}<option value={v}>{msg(l)}</option>{/each}
           </select>
         </div>
         <div class="row">
           <span class="glyph rowicon">&#xE74A;</span>
           <div class="rowlabel">
-            <div class="rowname">Ascending order</div>
+            <div class="rowname">{msg("Ascending order")}</div>
           </div>
-          <Toggle label="Ascending order" checked={settings.defaultAsc} onchange={(v) => setSetting("defaultAsc", v)} />
+          <Toggle label={msg("Ascending order")} checked={settings.defaultAsc} onchange={(v) => setSetting("defaultAsc", v)} />
         </div>
         <div class="row">
           <span class="glyph rowicon">&#xE72C;</span>
           <div class="rowlabel">
-            <div class="rowname">Reset folder views</div>
+            <div class="rowname">{msg("Reset folder views")}</div>
             <div class="rowdesc">
               {clearedCount >= 0
                 ? `Cleared ${clearedCount} saved folder view${clearedCount === 1 ? "" : "s"}`
@@ -251,11 +261,11 @@
           </button>
         </div>
 
-        <h2 class="section">Privacy</h2>
+        <h2 class="section">{msg("Privacy")}</h2>
         <div class="row">
           <span class="glyph rowicon">&#xE81C;</span>
           <div class="rowlabel">
-            <div class="rowname">Clear recent files</div>
+            <div class="rowname">{msg("Clear recent files")}</div>
             <div class="rowdesc">
               {recentCleared >= 0
                 ? `Cleared ${recentCleared} recent ${recentCleared === 1 ? "entry" : "entries"}`
@@ -267,46 +277,46 @@
           </button>
         </div>
 
-        <h2 class="section">Windows integration</h2>
+        <h2 class="section">{msg("Windows integration")}</h2>
         <div class="row">
           <span class="glyph rowicon">&#xE8DA;</span>
           <div class="rowlabel">
-            <div class="rowname">Open in Filezy from File Explorer</div>
-            <div class="rowdesc">Adds "Open in Filezy" to Explorer's right-click menu for folders and drives. Explorer stays your file manager; turning this off, or uninstalling Filezy, takes the entry out.</div>
+            <div class="rowname">{msg("Open in Filezy from File Explorer")}</div>
+            <div class="rowdesc">{msg("Adds \"Open in Filezy\" to Explorer's right-click menu for folders and drives. Explorer stays your file manager; turning this off, or uninstalling Filezy, takes the entry out.")}</div>
           </div>
-          <Toggle label="Open in Filezy from File Explorer" checked={explorerEntry} onchange={setExplorerEntry} />
+          <Toggle label={msg("Open in Filezy from File Explorer")} checked={explorerEntry} onchange={setExplorerEntry} />
         </div>
 
-        <h2 class="section">Startup</h2>
+        <h2 class="section">{msg("Startup")}</h2>
         <div class="row">
           <span class="glyph rowicon">&#xE7C4;</span>
           <div class="rowlabel">
-            <div class="rowname">Reopen tabs from last time</div>
-            <div class="rowdesc">When Filezy starts without a folder to open, it brings back the tabs of the window you used last</div>
+            <div class="rowname">{msg("Reopen tabs from last time")}</div>
+            <div class="rowdesc">{msg("When Filezy starts without a folder to open, it brings back the tabs of the window you used last")}</div>
           </div>
-          <Toggle label="Reopen tabs from last time" checked={settings.restoreTabs} onchange={(v) => setSetting("restoreTabs", v)} />
+          <Toggle label={msg("Reopen tabs from last time")} checked={settings.restoreTabs} onchange={(v) => setSetting("restoreTabs", v)} />
         </div>
         <div class="row">
           <span class="glyph rowicon">&#xE80F;</span>
           <div class="rowlabel">
-            <div class="rowname">Open new tabs and windows on</div>
+            <div class="rowname">{msg("Open new tabs and windows on")}</div>
           </div>
           <select class="combo" value={startKind} onchange={(e) => setStartKind(e.currentTarget.value)}>
-            <option value={HOME}>Home</option>
-            <option value={THIS_PC}>This PC</option>
-            <option value="custom">A folder</option>
+            <option value={HOME}>{msg("Home")}</option>
+            <option value={THIS_PC}>{msg("This PC")}</option>
+            <option value="custom">{msg("A folder")}</option>
           </select>
         </div>
         {#if startKind === "custom"}
           <div class="row">
             <span class="glyph rowicon">&#xE8B7;</span>
             <div class="rowlabel">
-              <div class="rowname">Start folder</div>
-              <div class="rowdesc">Falls back to Home if the folder is not available</div>
+              <div class="rowname">{msg("Start folder")}</div>
+              <div class="rowdesc">{msg("Falls back to Home if the folder is not available")}</div>
             </div>
             <input
               class="pathinput"
-              placeholder="D:\Projects"
+              placeholder={msg("D:\\Projects")}
               value={customStart}
               onchange={(e) => { customStart = e.currentTarget.value.trim(); setSetting("startPage", customStart); }}
             />
@@ -314,40 +324,39 @@
         {/if}
       {:else if cat === "menu"}
         <p class="lede">
-          Switch off the entries you never use and they stop appearing in the
-          right-click menu. Nothing here changes Windows itself.
+          {msg("Switch off the entries you never use and they stop appearing in the right-click menu. Nothing here changes Windows itself.")}
         </p>
         {#each MENU_GROUPS as g (g.key)}
-          <h2 class="section">{g.label}</h2>
+          <h2 class="section">{msg(g.label)}</h2>
           <div class="rowdesc groupdesc">{g.desc}</div>
           {#each g.items as it (it.id)}
             <div class="row compactrow">
               <span class="glyph rowicon">{it.glyph}</span>
-              <div class="rowlabel"><div class="rowname">{it.label}</div></div>
-              <Toggle label={it.label} checked={menuOn(it.id)} onchange={(v) => setMenuOn(it.id, v)} />
+              <div class="rowlabel"><div class="rowname">{msg(it.label)}</div></div>
+              <Toggle label={msg(it.label)} checked={menuOn(it.id)} onchange={(v) => setMenuOn(it.id, v)} />
             </div>
           {/each}
         {/each}
         <div class="resetrow">
           <button class="btn" onclick={resetMenu} disabled={settings.hiddenMenu.length === 0}>
-            Show all entries again
+            {msg("Show all entries again")}
           </button>
           <span class="rowdesc">
-            {settings.hiddenMenu.length} entr{settings.hiddenMenu.length === 1 ? "y" : "ies"} hidden
+            {settings.hiddenMenu.length} {msg("entr")}{settings.hiddenMenu.length === 1 ? "y" : "ies"} {msg("hidden")}
           </span>
         </div>
 
-        <h2 class="section">Entries from other apps</h2>
+        <h2 class="section">{msg("Entries from other apps")}</h2>
         <div class="rowdesc groupdesc">
-          Added by installed software through the Windows shell, like archivers and editors
+          {msg("Added by installed software through the Windows shell, like archivers and editors")}
         </div>
         <div class="row">
           <span class="glyph rowicon">&#xE71D;</span>
           <div class="rowlabel">
-            <div class="rowname">Show entries from other apps</div>
-            <div class="rowdesc">Turning this off also skips loading their handlers, so menus open faster</div>
+            <div class="rowname">{msg("Show entries from other apps")}</div>
+            <div class="rowdesc">{msg("Turning this off also skips loading their handlers, so menus open faster")}</div>
           </div>
-          <Toggle label="Show entries from other apps" checked={settings.shellExtras} onchange={(v) => setSetting("shellExtras", v)} />
+          <Toggle label={msg("Show entries from other apps")} checked={settings.shellExtras} onchange={(v) => setSetting("shellExtras", v)} />
         </div>
         {#if settings.shellExtras}
           {#if seenSorted.length}
@@ -363,13 +372,12 @@
               </div>
             {/each}
             <div class="resetrow">
-              <button class="btn" onclick={forgetExtras}>Forget this list</button>
-              <span class="rowdesc">{seenSorted.length} seen so far</span>
+              <button class="btn" onclick={forgetExtras}>{msg("Forget this list")}</button>
+              <span class="rowdesc">{seenSorted.length} {msg("seen so far")}</span>
             </div>
           {:else}
             <div class="rowdesc groupdesc">
-              This list fills in as you open context menus, since Windows only reveals
-              these entries when a menu is built.
+              {msg("This list fills in as you open context menus, since Windows only reveals these entries when a menu is built.")}
             </div>
           {/if}
         {/if}
@@ -377,8 +385,8 @@
         <div class="row">
           <img class="applogo" src={appIcon} alt="" width="40" height="40" />
           <div class="rowlabel">
-            <div class="rowname">Filezy</div>
-            <div class="rowdesc">A faster Windows File Explorer</div>
+            <div class="rowname">{msg("Filezy")}</div>
+            <div class="rowdesc">{msg("A faster Windows File Explorer")}</div>
           </div>
           <span class="version">{version ? "Version " + version : ""}</span>
         </div>
@@ -386,38 +394,38 @@
         <div class="row">
           <span class="glyph rowicon">&#xE896;</span>
           <div class="rowlabel">
-            <div class="rowname">Updates</div>
+            <div class="rowname">{msg("Updates")}</div>
             <div class="rowdesc">
               {#if !updater.installed}
-                This copy runs from a folder rather than an installation, so it cannot update itself.
+                {msg("This copy runs from a folder rather than an installation, so it cannot update itself.")}
               {:else if updater.phase === "checking"}
-                Checking for updates…
+                {msg("Checking for updates…")}
               {:else if updater.phase === "none"}
-                Filezy is up to date
+                {msg("Filezy is up to date")}
               {:else if updater.phase === "found"}
-                Version {updater.version} is available
+                {msg("Version")} {updater.version} {msg("is available")}
               {:else if updater.phase === "downloading"}
-                Downloading… {updater.percent}%
+                {msg("Downloading…")} {updater.percent}%
               {:else if updater.phase === "ready"}
-                Update installed. Restart to finish.
+                {msg("Update installed. Restart to finish.")}
               {:else if updater.phase === "error"}
                 {updater.message}
               {:else}
-                Updates are downloaded and installed from inside the app
+                {msg("Updates are downloaded and installed from inside the app")}
               {/if}
             </div>
           </div>
           {#if updater.phase === "found"}
-            <button class="btn accentbtn" onclick={downloadAndInstall}>Download and install</button>
+            <button class="btn accentbtn" onclick={downloadAndInstall}>{msg("Download and install")}</button>
           {:else if updater.phase === "ready"}
-            <button class="btn accentbtn" onclick={restartApp}>Restart now</button>
+            <button class="btn accentbtn" onclick={restartApp}>{msg("Restart now")}</button>
           {:else}
             <button
               class="btn"
               disabled={!updater.installed || updater.phase === "checking" || updater.phase === "downloading"}
               onclick={checkForUpdates}
             >
-              Check for updates
+              {msg("Check for updates")}
             </button>
           {/if}
         </div>
@@ -430,9 +438,9 @@
         <div class="row">
           <span class="glyph rowicon">&#xE777;</span>
           <div class="rowlabel">
-            <div class="rowname">Reset all settings</div>
+            <div class="rowname">{msg("Reset all settings")}</div>
             <div class="rowdesc">
-              Theme, layout, folder defaults and every context-menu switch go back to stock
+              {msg("Theme, layout, folder defaults and every context-menu switch go back to stock")}
             </div>
           </div>
           <button class="btn" class:danger={resetArmed} onclick={doResetAll}>
@@ -730,5 +738,16 @@
   .notes {
     margin: 0 0 8px 2px;
     white-space: pre-wrap;
+  }
+  @media (max-width: 1000px) {
+    .rail { width: 52px; padding: 8px 4px; }
+    .railitem { padding: 0 12px; flex-shrink: 0; }
+    .raillabel { display: none; }
+    .content { padding: 8px 12px 24px; }
+    .row { flex-wrap: wrap; gap: 8px; padding: 8px; }
+    .pathinput { min-width: 0; width: 100%; }
+    .combo { min-width: 0; max-width: 100%; }
+    .rowlabel { min-width: min(160px, 100%); }
+    .title { font-size: 22px; }
   }
 </style>

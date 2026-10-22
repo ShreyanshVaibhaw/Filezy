@@ -2,10 +2,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { settings, setSetting, setTheme } from "./settings.svelte";
-import { baseName, isArchive, isServer, isVirtual, joinPath, parentPath, samePath } from "./paths";
+import { baseName, isArchive, isServer, isVirtual, joinPath, parentPath, samePath, pathKey } from "./paths";
 import { formatWith, type LocaleFormats } from "./datefmt";
 import { clearColumns } from "./columns";
 import { withFilter, withoutFilters } from "./searchquery";
+import { DEVICES, isShellLocation, shellLocation, shellParsing, type ShellFolder } from "./shellplaces";
+import { transferTab } from "./tabtransfer";
 
 export { joinPath } from "./paths";
 
@@ -351,7 +353,7 @@ export const SORT_KEYS = [
   "name", "modified", "type", "size", "created", "author", "category", "tags", "title",
   "location", "attributes", "status", "dimensions", "duration",
 ];
-export const VIEW_KEYS = ["details", "list", "tiles", "icons_s", "icons_m", "icons_l", "icons_xl"];
+export const VIEW_KEYS = ["details", "content", "list", "tiles", "icons_s", "icons_m", "icons_l", "icons_xl"];
 export const GROUP_KEYS = ["none", "name", "modified", "created", "type", "size"];
 
 function validPrefs(v: unknown): v is FolderPrefs {
@@ -400,7 +402,7 @@ export function folderPrefsCount(): number {
 let groupAuto = false;
 
 function prefKey(p: string): string {
-  return p.replace(/\\+$/, "").toLowerCase();
+  return pathKey(p);
 }
 
 function savePrefs() {
@@ -458,6 +460,7 @@ export const RECYCLE_GUID = "::{645FF040-5081-101B-9F08-00AA002F954E}";
 export function can(cmd: "new" | "paste" | "select" | "search" | "refresh" | "up" | "change"): boolean {
   const p = app.path;
   if (!p || app.error) return cmd === "refresh" || cmd === "up";
+  if (isShellLocation(p)) return cmd === "refresh" || cmd === "up";
   if (isVirtual(p)) return cmd === "refresh";
   // Inside an archive: look, open and extract; nothing in it changes yet.
   // A computer's shares are just as fixed: Windows makes them, not Filezy.
@@ -489,6 +492,8 @@ export interface RecentFile {
 export const recentFiles = $state<{ list: RecentFile[] }>({ list: [] });
 
 export function folderName(p: string): string {
+  if (p === DEVICES) return "Devices";
+  if (isShellLocation(p)) return p === app.path && shellFolder.name ? shellFolder.name : "Device folder";
   if (p === THIS_PC) return "This PC";
   if (p === NETWORK) return "Network";
   if (p === HOME) return "Home";
@@ -617,11 +622,29 @@ export async function loadNetwork() {
   }
 }
 
-function loadVirtual(p: string) {
+async function loadVirtual(p: string) {
+  if (isShellLocation(p)) await loadShell(p);
   if (p === THIS_PC) loadDrives();
   if (p === NETWORK) loadNetwork();
   if (p === HOME) invoke<RecentFile[]>("recent_files").then((r) => (recentFiles.list = r));
   if (p === RECYCLE) loadRecycle();
+}
+
+export const shellFolder = $state<ShellFolder & { loading: boolean; error: string }>({ name: "", parent: null, items: [], capped: false, loading: false, error: "" });
+export const shellSelection = $state<{ paths: string[] }>({ paths: [] });
+let shellSeq = 0;
+async function loadShell(path: string) {
+  const seq = ++shellSeq;
+  Object.assign(shellFolder, { name: "", parent: null, items: [], loading: true, error: "", capped: false });
+  try {
+    const result = await invoke<ShellFolder>("shell_list", { path: shellParsing(path), devicesOnly: path === DEVICES });
+    if (seq === shellSeq && app.path === path) {
+      Object.assign(shellFolder, result);
+      const paths = new Set(result.items.map((item) => item.path));
+      shellSelection.paths = shellSelection.paths.filter((path) => paths.has(path));
+    }
+  } catch (error) { if (seq === shellSeq) shellFolder.error = String(error); }
+  finally { if (seq === shellSeq) shellFolder.loading = false; }
 }
 
 export async function loadRecycle() {
@@ -714,9 +737,10 @@ export async function navigate(p: string, push = true, opts: NavOpts = {}): Prom
     app.loading = false;
     app.error = "";
     app.status = "";
+    if (isShellLocation(p)) shellSelection.paths = [...(opts.select ?? [])];
     clearSel();
     resetRows(0);
-    loadVirtual(p);
+    await loadVirtual(p);
     refreshClipState();
     return true;
   }
@@ -917,7 +941,10 @@ export async function refresh() {
   if (!t || !app.path) return;
   if (t.pending) return; // the navigation in flight lists fresh contents anyway
   if (isVirtual(app.path)) {
-    loadVirtual(app.path);
+    const path = app.path;
+    const scroll = hooks.getScroll?.() ?? 0;
+    await loadVirtual(path);
+    if (app.path === path) restoreScroll(scroll);
     return;
   }
   if (app.error) {
@@ -1003,7 +1030,8 @@ async function leaveTab() {
   t.query = app.search ? app.search.query : "";
   t.keepAll = app.allSelected;
   t.keepKeys = [];
-  if (!app.allSelected && sel.size && !isVirtual(app.path)) {
+  if (isShellLocation(app.path)) t.keepKeys = [...shellSelection.paths];
+  else if (!app.allSelected && sel.size && !isVirtual(app.path)) {
     t.keepKeys = await withSel((sel) => invoke<string[]>("sel_keys", { sel })).catch(() => []);
   }
 }
@@ -1102,14 +1130,29 @@ export function closeTab(id: number) {
 /// Filezy process, as Ctrl+N makes) and the tab closes here. Its history
 /// stays behind, as when Explorer opens a folder in a new window.
 export async function moveTabToWindow(id: number) {
-  const t = tabs.find((t) => t.id === id);
-  if (!t || tabs.length < 2) return;
-  try {
-    await invoke("new_window", { path: t.path });
-    closeTab(id);
-  } catch (e) {
-    app.status = String(e);
-  }
+  await transferTab(id);
+}
+
+/** Snapshot the tab's navigation and selection before handing it to a window. */
+export async function exportTab(id: number) {
+  if (id === app.activeTab) await leaveTab();
+  const tab = tabs.find((t) => t.id === id);
+  return tab ? JSON.parse(JSON.stringify(tab)) as Tab : null;
+}
+
+/** Only accept bounded, version-independent data from another Filezy window. */
+export async function importTab(value: unknown) {
+  const t = value as Tab | null;
+  if (!t || typeof t.path !== "string" || !t.path || !Array.isArray(t.hist) || !t.hist.length ||
+      t.hist.length > 1000 || !t.hist.every((p) => typeof p === "string") ||
+      !Number.isInteger(t.histIdx) || t.histIdx < 0 || t.histIdx >= t.hist.length ||
+      typeof t.query !== "string" || !Array.isArray(t.keepKeys) || !t.keepKeys.every((k) => typeof k === "string") ||
+      !Number.isFinite(t.scroll) || typeof t.keepAll !== "boolean") throw new Error("Invalid tab record.");
+  await leaveTab();
+  const tab: Tab = { id: nextTabId++, path: t.path, hist: [...t.hist], histIdx: t.histIdx,
+    scroll: Math.max(0, t.scroll), query: t.query, keepKeys: [...t.keepKeys], keepAll: t.keepAll, pending: 0 };
+  tabs.push(tab); app.activeTab = tab.id; syncNav();
+  await showTab(tab);
 }
 
 export function duplicateTab(id: number) {
@@ -1128,6 +1171,9 @@ export function closeTabsRight(id: number) {
 }
 
 export function up() {
+  if (isShellLocation(app.path)) {
+    return void navigate(app.path === DEVICES || !shellFolder.parent ? THIS_PC : shellLocation(shellFolder.parent));
+  }
   if (isVirtual(app.path)) return;
   const from = app.search?.root ?? app.path;
   const parent = parentPath(from);
@@ -1520,12 +1566,12 @@ export async function openPath(path: string, inNewTab = false) {
 export async function refreshClipState() {
   const st = await invoke<{ files: boolean; cut: string[] }>("clip_state").catch(() => ({ files: false, cut: [] }));
   app.canPaste = st.files;
-  if (st.cut.length || app.cut.size) app.cut = new Set(st.cut.map((p) => p.toLowerCase()));
+  if (st.cut.length || app.cut.size) app.cut = new Set(st.cut.map(pathKey));
 }
 
 /// Cut items look ghosted until they are pasted or the clipboard changes, as in Explorer.
 export function isCut(e: Entry): boolean {
-  return app.cut.size > 0 && app.cut.has(entryPath(e).toLowerCase());
+  return app.cut.size > 0 && app.cut.has(pathKey(entryPath(e)));
 }
 
 export interface NewItem {

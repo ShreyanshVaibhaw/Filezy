@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { msg } from "./i18n.svelte";
   import { app } from "./store.svelte";
   import { activity, dismissNotice } from "./ops.svelte";
 
@@ -48,20 +49,20 @@
     <span class="glyph icon">{icon}</span>
     <span class="text" title={app.status}>{app.status}</span>
     {#if cur?.problems.length}
-      <button class="act detailsbtn" onclick={() => (activity.open = !activity.open)}>Details</button>
+      <button class="act detailsbtn" onclick={() => (activity.open = !activity.open)}>{msg("Details")}</button>
     {/if}
     {#if cur?.retry}
-      <button class="act" onclick={retry}>Retry</button>
+      <button class="act" onclick={retry}>{msg("Retry")}</button>
     {/if}
-    <button class="close" aria-label="Dismiss message" title="Dismiss" onclick={dismissNotice}>
+    <button class="close" aria-label={msg("Dismiss message")} title={msg("Dismiss")} onclick={dismissNotice}>
       <span class="glyph">&#xE8BB;</span>
     </button>
   </div>
 {/if}
 
 {#if activity.open}
-  <div class="menu activity" role="dialog" aria-label="Recent operations">
-    <div class="ahead">Recent operations</div>
+  <div class="menu activity" role="dialog" aria-label={msg("Recent operations")}>
+    <div class="ahead">{msg("Recent operations")}</div>
     {#each activity.list as a (a.id)}
       <div class="aitem">
         <div class="atitle {a.tone}">{a.title}</div>
@@ -72,11 +73,11 @@
           </div>
         {/each}
         {#if a.problems.length > 50}
-          <div class="aprob more">…and {a.problems.length - 50} more</div>
+          <div class="aprob more">{msg("…and")} {a.problems.length - 50} {msg("more")}</div>
         {/if}
       </div>
     {:else}
-      <div class="aitem empty">No operations yet.</div>
+      <div class="aitem empty">{msg("No operations yet.")}</div>
     {/each}
   </div>
 {/if}

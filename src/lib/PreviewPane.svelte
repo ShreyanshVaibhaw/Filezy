@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { msg } from "./i18n.svelte";
   // The preview pane. Text, images, audio, video and PDF are drawn here; other
   // files go to Windows' own preview handler (Word, Excel, fonts...), whose
   // window the backend keeps over this pane (src-tauri/src/preview.rs).
@@ -201,22 +202,22 @@
   }
 </script>
 
-<div class="preview" role="region" aria-label="Preview" bind:this={pane}>
+<div class="preview" role="region" aria-label={msg("Preview")} bind:this={pane}>
   {#if view.s === "empty"}
-    <div class="msg">Select a file to preview.</div>
+    <div class="msg">{msg("Select a file to preview.")}</div>
   {:else if view.s === "loading"}
     <div class="msg loading">{view.downloading ? "Downloading…" : "Loading preview…"}</div>
   {:else if view.s === "failed"}
     <div class="msg">
       <p>{view.why}</p>
-      <button class="link" onclick={() => attempt++}>Try again</button>
+      <button class="link" onclick={() => attempt++}>{msg("Try again")}</button>
     </div>
   {:else if view.s === "text"}
     <pre class="text">{view.text}</pre>
     {#if view.truncated}
       <div class="more">
-        <span>Showing the first 256 KB.</span>
-        <button class="link" onclick={() => path && openPath(path)}>Open</button>
+        <span>{msg("Showing the first 256 KB.")}</span>
+        <button class="link" onclick={() => path && openPath(path)}>{msg("Open")}</button>
       </div>
     {/if}
   {:else if view.s === "image"}
@@ -244,7 +245,7 @@
     </div>
   {:else if view.s === "pdf"}
     <!-- WebView2's own PDF viewer, in a frame of another origin than the app. -->
-    <iframe class="pdf" src="{view.src}#navpanes=0" title="PDF preview"></iframe>
+    <iframe class="pdf" src="{view.src}#navpanes=0" title={msg("PDF preview")}></iframe>
   {:else if view.s === "audio"}
     <div class="media audio">
       {#if view.art}<img src={view.art} alt="" />{/if}
@@ -253,24 +254,24 @@
   {:else if view.s === "native" && path}
     {#key path}
       <div class="native" use:native={path}>
-        <div class="msg loading">Loading preview…</div>
+        <div class="msg loading">{msg("Loading preview…")}</div>
       </div>
     {/key}
   {:else if view.s === "online"}
     <div class="msg">
-      <p>This file is available online only.</p>
-      <button class="link" onclick={() => path && (download = path)}>Download and preview</button>
+      <p>{msg("This file is available online only.")}</p>
+      <button class="link" onclick={() => path && (download = path)}>{msg("Download and preview")}</button>
     </div>
   {:else if view.s === "untrusted"}
     <div class="msg">
       <p>{UNTRUSTED}</p>
-      <button class="link" onclick={() => path && openPath(path)}>Open</button>
+      <button class="link" onclick={() => path && openPath(path)}>{msg("Open")}</button>
     </div>
   {:else}
     <div class="msg">
-      <p>No preview available.</p>
+      <p>{msg("No preview available.")}</p>
       {#if path && !isArchive(app.path)}
-        <button class="link" onclick={() => path && openPath(path)}>Open</button>
+        <button class="link" onclick={() => path && openPath(path)}>{msg("Open")}</button>
       {/if}
     </div>
   {/if}

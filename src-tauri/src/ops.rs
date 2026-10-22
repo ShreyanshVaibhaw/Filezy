@@ -8,7 +8,7 @@
 use crate::fs_list::wide;
 use crate::paths;
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use windows::core::{Ref, HRESULT, PCWSTR};
 use windows::Win32::Foundation::HWND;
@@ -140,14 +140,18 @@ pub fn item_path(it: &IShellItem, sigdn: windows::Win32::UI::Shell::SIGDN) -> St
 }
 
 fn ref_path(it: Ref<IShellItem>) -> String {
-    it.as_ref().map(|i| paths::to_display(&item_path(i, SIGDN_FILESYSPATH))).unwrap_or_default()
+    it.as_ref().map(|i| {
+        let file = item_path(i, SIGDN_FILESYSPATH);
+        if file.is_empty() { item_path(i, SIGDN_DESKTOPABSOLUTEPARSING) } else { paths::to_display(&file) }
+    }).unwrap_or_default()
 }
 
 #[derive(Default)]
 struct Log {
-    /// Requested sources, lower-cased, to tell top-level items from their children.
+    /// Requested source identities, to tell top-level items from their children.
     top: HashSet<String>,
     items: Vec<Item>,
+    positions: HashMap<String, usize>,
     /// Destinations that already existed when the engine reached them.
     existed: HashSet<String>,
     children: usize,
@@ -155,7 +159,7 @@ struct Log {
 
 impl Log {
     fn is_top(&self, src: &str) -> bool {
-        self.top.contains(&src.to_lowercase())
+        self.top.contains(&paths::identity(src))
     }
 
     fn pre(&mut self, src: &str, dest: Ref<IShellItem>, name: &PCWSTR) {
@@ -164,7 +168,7 @@ impl Log {
         }
         let dst = target(dest, name, src);
         if !dst.is_empty() && paths::attributes(&dst).is_ok() {
-            self.existed.insert(dst.to_lowercase());
+            self.existed.insert(paths::identity(&dst));
         }
     }
 
@@ -179,13 +183,16 @@ impl Log {
             return;
         }
         let (state, error) = classify(hr);
-        let replaced = state == State::Done && !dst.is_empty() && self.existed.contains(&dst.to_lowercase());
+        let replaced = state == State::Done && !dst.is_empty() && self.existed.contains(&paths::identity(&dst));
         let item = Item { src, dst, state, error, replaced, bin_id, size: 0, modified: 0, hr: hr.0 };
         // The engine can report an item more than once; its last word counts.
-        match self.items.iter_mut().find(|i| i.src.eq_ignore_ascii_case(&item.src)) {
-            Some(prev) => *prev = item,
-            None => self.items.push(item),
-        }
+        self.put(item);
+    }
+
+    fn put(&mut self, item: Item) {
+        let key = paths::identity(&item.src);
+        if let Some(&index) = self.positions.get(&key) { self.items[index] = item; }
+        else { self.positions.insert(key, self.items.len()); self.items.push(item); }
     }
 }
 
@@ -340,7 +347,7 @@ fn queue(fo: &IFileOperation, op: &Op, log: &mut Log) -> Result<(), String> {
     let err = |e: windows::core::Error| e.message().to_string();
     let mut add = |src: &str, r: windows::core::Result<()>| {
         if let Err(e) = r {
-            log.items.push(Item {
+            log.put(Item {
                 src: src.to_string(),
                 dst: String::new(),
                 state: State::Failed,
@@ -394,7 +401,7 @@ fn perform(op: &Op, owner: isize) -> OpResult {
     let mut result =
         OpResult { kind: op.kind(), items: vec![], aborted: false, cancelled: false, error: None, children: 0, clipboard: None };
     let log = Arc::new(Mutex::new(Log {
-        top: op.sources().iter().map(|s| s.to_lowercase()).collect(),
+        top: op.sources().iter().map(|s| paths::identity(s)).collect(),
         ..Default::default()
     }));
     let mut run = || -> Result<bool, String> {
@@ -406,7 +413,7 @@ fn perform(op: &Op, owner: isize) -> OpResult {
             }
             let flags = match op {
                 // Pasting into the items' own folder copies with " - Copy" names, like Explorer.
-                Op::Copy { srcs, dest } if srcs.iter().all(|s| paths::parent(s).is_some_and(|p| p.eq_ignore_ascii_case(dest))) => {
+                Op::Copy { srcs, dest } if srcs.iter().all(|s| paths::parent(s).is_some_and(|p| paths::identity(&p) == paths::identity(dest))) => {
                     FOF_ALLOWUNDO | FOFX_ADDUNDORECORD | FOF_RENAMEONCOLLISION
                 }
                 // Explorer doesn't ask before recycling by default; recycle even big files.
@@ -444,9 +451,9 @@ fn perform(op: &Op, owner: isize) -> OpResult {
     }
     let mut log = std::mem::take(&mut *log.lock().unwrap());
     // Requested items the engine never reported on were not attempted.
-    let seen: HashSet<String> = log.items.iter().map(|i| i.src.to_lowercase()).collect();
+    let seen: HashSet<String> = log.items.iter().map(|i| paths::identity(&i.src)).collect();
     for s in op.sources() {
-        if !seen.contains(&s.to_lowercase()) {
+        if !seen.contains(&paths::identity(&s)) {
             log.items.push(Item {
                 src: s,
                 dst: String::new(),
@@ -525,7 +532,7 @@ pub struct Renamed {
 /// already selected) can't collide halfway. A target that exists outside the
 /// batch is refused for that item alone.
 pub fn rename_many(items: &[(String, String)]) -> Vec<Renamed> {
-    let sources: HashSet<String> = items.iter().map(|(f, _)| f.to_lowercase()).collect();
+    let sources: HashSet<String> = items.iter().map(|(f, _)| paths::identity(f)).collect();
     let mut taken: HashSet<String> = HashSet::new();
     let mut out: Vec<Renamed> = items
         .iter()
@@ -534,10 +541,10 @@ pub fn rename_many(items: &[(String, String)]) -> Vec<Renamed> {
                 let name = paths::check_name(name)?;
                 let parent = paths::parent(from).ok_or("This item can't be renamed.")?;
                 let to = paths::join(&parent, &name);
-                if !taken.insert(to.to_lowercase()) {
+                if !taken.insert(paths::identity(&to)) {
                     return Err(format!("Two items would both be named '{name}'."));
                 }
-                if !sources.contains(&to.to_lowercase()) && paths::attributes(&to).is_ok() {
+                if !sources.contains(&paths::identity(&to)) && paths::attributes(&to).is_ok() {
                     return Err(format!("There is already a file with the name '{name}' in this location."));
                 }
                 Ok(to)
@@ -592,6 +599,18 @@ pub fn create_folder(dir: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wsl_case_distinct_operations_keep_both_outcomes() {
+        let sources = [r"\\wsl.localhost\Ubuntu\tmp\Case.txt", r"\\wsl.localhost\Ubuntu\tmp\case.txt"];
+        let mut log = Log { top: sources.iter().map(|s| paths::identity(s)).collect(), ..Default::default() };
+        for src in sources { log.post(src.into(), format!(r"{src}.copy"), HRESULT(0), None); }
+        assert_eq!(log.items.len(), 2);
+        log.post(sources[0].into(), String::new(), HRESULT(COPYENGINE_S_USER_IGNORED), None);
+        assert_eq!(log.items.len(), 2);
+        assert_eq!(log.items[0].state, State::Skipped);
+        assert_eq!(log.items[1].state, State::Done);
+    }
 
     #[test]
     fn hresults_map_to_states() {

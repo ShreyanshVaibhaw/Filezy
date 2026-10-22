@@ -182,11 +182,12 @@ input:focus-visible {
   align-items: center;
   gap: 12px;
   width: 100%;
-  height: 34px;
+  min-height: 34px;
   padding: 0 12px;
   border-radius: 4px;
   text-align: left;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .menu-item:hover:not(:disabled) {
   background: var(--hover);

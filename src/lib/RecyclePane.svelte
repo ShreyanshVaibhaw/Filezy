@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { msg } from "./i18n.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { SvelteSet } from "svelte/reactivity";
   import { app, recycleItems, loadRecycle, say, RECYCLE } from "./store.svelte";
@@ -111,16 +112,16 @@
 <div class="recyclepane" data-recycle data-drop={RECYCLE} data-drop-label="Recycle Bin" data-drop-quiet>
   <div class="actions">
     <button class="abtn" disabled={!selIds.size || busy} onclick={restore}>
-      <span class="glyph">&#xE777;</span> Restore selected
+      <span class="glyph">&#xE777;</span> {msg("Restore selected")}
     </button>
     <button class="abtn" disabled={!recycleItems.list.length || busy} onclick={restoreAll}>
-      <span class="glyph">&#xE777;</span> Restore all items
+      <span class="glyph">&#xE777;</span> {msg("Restore all items")}
     </button>
     <button class="abtn" disabled={!selIds.size || busy} onclick={deleteSel}>
-      <span class="glyph">&#xE74D;</span> Delete selected
+      <span class="glyph">&#xE74D;</span> {msg("Delete selected")}
     </button>
     <button class="abtn" disabled={!recycleItems.list.length || busy} onclick={emptyBin}>
-      <span class="glyph">&#xE74D;</span> Empty Recycle Bin
+      <span class="glyph">&#xE74D;</span> {msg("Empty Recycle Bin")}
     </button>
   </div>
 
@@ -129,20 +130,20 @@
   {:else}
     {#if recycleItems.total > recycleItems.list.length}
       <div class="capped">
-        Showing the first {recycleItems.list.length.toLocaleString()} of {recycleItems.total.toLocaleString()} items.
+        {msg("Showing the first")} {recycleItems.list.length.toLocaleString()} {msg("of")} {recycleItems.total.toLocaleString()} {msg("items.")}
       </div>
     {/if}
     <div class="rheader">
-      <span class="c name">Name</span>
-      <span class="c">Original location</span>
-      <span class="c">Date deleted</span>
-      <span class="c size">Size</span>
+      <span class="c name">{msg("Name")}</span>
+      <span class="c">{msg("Original location")}</span>
+      <span class="c">{msg("Date deleted")}</span>
+      <span class="c size">{msg("Size")}</span>
     </div>
     <div
       class="rows"
       role="listbox"
       aria-multiselectable="true"
-      aria-label="Recycle Bin"
+      aria-label={msg("Recycle Bin")}
       tabindex="0"
       aria-activedescendant={focus >= 0 ? `bin-${focus}` : undefined}
       onkeydown={onKeydown}

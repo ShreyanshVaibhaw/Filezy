@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { msg } from "./i18n.svelte";
   import { menuKeys } from "./menukeys";
   import {
     app, sel, sortBy, setGroup, refresh, toggleHidden, setView, selectAll, loadNewItems, newItems,
@@ -10,6 +11,7 @@
   import { filterOf } from "./searchquery";
   import { extractAll, extractTarget } from "./archive.svelte";
   import { baseName, isArchive } from "./paths";
+  import { isShellLocation } from "./shellplaces";
   import { copySel, paste, del, newFolder, newFile, startRename, shareSel } from "./ops.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { selectNone, invertSelection } from "./selection.svelte";
@@ -141,22 +143,22 @@
 <div class="commandbar">
   <button class="cbtn labeled" disabled={!can("new")} onclick={(e) => toggle("new", e)}>
     <span class="glyph accent">&#xE710;</span>
-    <span>New</span>
+    <span>{msg("New")}</span>
     <span class="glyph chev">&#xE70D;</span>
   </button>
 
   <div class="divider"></div>
 
-  <button class="cbtn" disabled={!hasSel || !can("change")} onclick={() => copySel(true)} title="Cut (Ctrl+X)" aria-label="Cut (Ctrl+X)">
+  <button class="cbtn" disabled={!hasSel || !can("change")} onclick={() => copySel(true)} title={msg("Cut (Ctrl+X)")} aria-label={msg("Cut (Ctrl+X)")}>
     <span class="glyph">&#xE8C6;</span>
   </button>
-  <button class="cbtn" disabled={!hasSel || inArchive} onclick={() => copySel(false)} title="Copy (Ctrl+C)" aria-label="Copy (Ctrl+C)">
+  <button class="cbtn" disabled={!hasSel || inArchive} onclick={() => copySel(false)} title={msg("Copy (Ctrl+C)")} aria-label={msg("Copy (Ctrl+C)")}>
     <span class="glyph">&#xE8C8;</span>
   </button>
-  <button class="cbtn" disabled={!app.canPaste || !can("paste")} onclick={paste} title="Paste (Ctrl+V)" aria-label="Paste (Ctrl+V)">
+  <button class="cbtn" disabled={!app.canPaste || !can("paste")} onclick={paste} title={msg("Paste (Ctrl+V)")} aria-label={msg("Paste (Ctrl+V)")}>
     <span class="glyph">&#xE77F;</span>
   </button>
-  <button class="cbtn" disabled={!hasSel || !can("change")} onclick={startRename} title="Rename (F2)" aria-label="Rename (F2)">
+  <button class="cbtn" disabled={!hasSel || !can("change")} onclick={startRename} title={msg("Rename (F2)")} aria-label={msg("Rename (F2)")}>
     <span class="glyph">&#xE8AC;</span>
   </button>
   <button
@@ -164,47 +166,47 @@
     disabled={!filesOnly || !can("change")}
     onclick={shareSel}
     title={hasSel && !filesOnly ? "Share works for files, not folders" : "Share"}
-    aria-label="Share"
+    aria-label={msg("Share")}
   >
     <span class="glyph">&#xE72D;</span>
   </button>
-  <button class="cbtn" disabled={!hasSel || !can("change")} onclick={() => del()} title="Delete (Del)" aria-label="Delete (Del)">
+  <button class="cbtn" disabled={!hasSel || !can("change")} onclick={() => del()} title={msg("Delete (Del)")} aria-label={msg("Delete (Del)")}>
     <span class="glyph">&#xE74D;</span>
   </button>
 
   <div class="divider"></div>
 
-  <button class="cbtn labeled" onclick={(e) => toggle("sort", e)}>
+  <button class="cbtn labeled" disabled={isShellLocation(app.path)} onclick={(e) => toggle("sort", e)}>
     <span class="glyph">&#xE8CB;</span>
-    <span>Sort</span>
+    <span>{msg("Sort")}</span>
     <span class="glyph chev">&#xE70D;</span>
   </button>
-  <button class="cbtn labeled" onclick={(e) => toggle("view", e)}>
+  <button class="cbtn labeled" disabled={isShellLocation(app.path)} onclick={(e) => toggle("view", e)}>
     <span class="glyph">&#xE890;</span>
-    <span>View</span>
+    <span>{msg("View")}</span>
     <span class="glyph chev">&#xE70D;</span>
   </button>
   {#if extractFrom}
     <button class="cbtn labeled" onclick={() => extractAll(extractFrom)} title="Extract all files from {baseName(extractFrom)}">
       <span class="glyph">&#xE8B7;</span>
-      <span>Extract all</span>
+      <span>{msg("Extract all")}</span>
     </button>
   {/if}
   {#if searching}
     <button class="cbtn labeled" onclick={(e) => toggle("search", e)}>
       <span class="glyph">&#xE71C;</span>
-      <span>Search options</span>
+      <span>{msg("Search options")}</span>
       <span class="glyph chev">&#xE70D;</span>
     </button>
   {/if}
 
   <div class="divider"></div>
 
-  <button class="cbtn" onclick={(e) => toggle("more", e)} title="See more" aria-label="See more">
+  <button class="cbtn" onclick={(e) => toggle("more", e)} title={msg("See more")} aria-label={msg("See more")}>
     <span class="glyph">&#xE712;</span>
   </button>
 
-  <button class="cbtn gear" class:active={app.path === SETTINGS} onclick={() => navigate(SETTINGS)} title="Settings" aria-label="Settings">
+  <button class="cbtn gear" class:active={app.path === SETTINGS} onclick={() => navigate(SETTINGS)} title={msg("Settings")} aria-label={msg("Settings")}>
     <span class="glyph">&#xE713;</span>
   </button>
 </div>
@@ -218,7 +220,7 @@
         {:else}
           <span class="glyph">&#xE8B7;</span>
         {/if}
-        Folder
+        {msg("Folder")}
       </button>
       {#if newItems.list?.length}
         <div class="menu-sep"></div>
@@ -240,53 +242,53 @@
     {:else if openMenu === "sort"}
       {#each sortItems as [key, label] (key)}
         <button class="menu-item" onclick={() => { openMenu = ""; sortBy(key, app.sortKey === key ? app.asc : true); }}>
-          <span class="check">{app.sortKey === key ? "●" : ""}</span> {label}
+          <span class="check">{app.sortKey === key ? "●" : ""}</span> {msg(label)}
         </button>
       {/each}
       <div class="menu-sep"></div>
       <button class="menu-item" onclick={() => { openMenu = ""; sortBy(app.sortKey, true); }}>
-        <span class="check">{app.asc ? "●" : ""}</span> Ascending
+        <span class="check">{app.asc ? "●" : ""}</span> {msg("Ascending")}
       </button>
       <button class="menu-item" onclick={() => { openMenu = ""; sortBy(app.sortKey, false); }}>
-        <span class="check">{!app.asc ? "●" : ""}</span> Descending
+        <span class="check">{!app.asc ? "●" : ""}</span> {msg("Descending")}
       </button>
       <div class="menu-sep"></div>
       {#each [["none", "Group: None"], ["name", "Group by Name"], ["modified", "Group by Date"], ["type", "Group by Type"], ["size", "Group by Size"]] as [gkey, glabel] (gkey)}
         <button class="menu-item" onclick={() => { openMenu = ""; setGroup(gkey); }}>
-          <span class="check">{app.groupKey === gkey ? "●" : ""}</span> {glabel}
+          <span class="check">{app.groupKey === gkey ? "●" : ""}</span> {msg(glabel)}
         </button>
       {/each}
     {:else if openMenu === "view"}
-      {#each [["icons_xl", "Extra large icons"], ["icons_l", "Large icons"], ["icons_m", "Medium icons"], ["icons_s", "Small icons"], ["list", "List"], ["details", "Details"], ["tiles", "Tiles"]] as [vkey, vlabel] (vkey)}
+      {#each [["icons_xl", "Extra large icons"], ["icons_l", "Large icons"], ["icons_m", "Medium icons"], ["icons_s", "Small icons"], ["list", "List"], ["details", "Details"], ["content", "Content"], ["tiles", "Tiles"]] as [vkey, vlabel] (vkey)}
         <button class="menu-item" onclick={() => { openMenu = ""; setView(vkey); }}>
-          <span class="check">{app.view === vkey ? "●" : ""}</span> {vlabel}
+          <span class="check">{app.view === vkey ? "●" : ""}</span> {msg(vlabel)}
         </button>
       {/each}
       <button class="menu-item" onclick={() => { openMenu = ""; toggleCompact(); }}>
-        <span class="check">{settings.compact ? "●" : ""}</span> Compact view
+        <span class="check">{settings.compact ? "●" : ""}</span> {msg("Compact view")}
       </button>
       <div class="menu-sep"></div>
       <button class="menu-item" onclick={() => { openMenu = ""; showPane(settings.previewPane ? null : "preview"); }}>
-        <span class="check">{settings.previewPane ? "●" : ""}</span> Preview pane
+        <span class="check">{settings.previewPane ? "●" : ""}</span> {msg("Preview pane")}
       </button>
       <button class="menu-item" onclick={() => { openMenu = ""; showPane(settings.detailsPane ? null : "details"); }}>
-        <span class="check">{settings.detailsPane ? "●" : ""}</span> Details pane
+        <span class="check">{settings.detailsPane ? "●" : ""}</span> {msg("Details pane")}
       </button>
       <div class="menu-sep"></div>
       <button class="menu-item" onclick={() => { openMenu = ""; toggleHidden(); }}>
-        <span class="check">{settings.showHidden ? "●" : ""}</span> Hidden items
+        <span class="check">{settings.showHidden ? "●" : ""}</span> {msg("Hidden items")}
       </button>
       <button class="menu-item" onclick={() => { openMenu = ""; setSetting("showExt", !settings.showExt); }}>
-        <span class="check">{settings.showExt ? "●" : ""}</span> File name extensions
+        <span class="check">{settings.showExt ? "●" : ""}</span> {msg("File name extensions")}
       </button>
       <button class="menu-item" onclick={() => { openMenu = ""; setSetting("checkboxes", !settings.checkboxes); }}>
-        <span class="check">{settings.checkboxes ? "●" : ""}</span> Item check boxes
+        <span class="check">{settings.checkboxes ? "●" : ""}</span> {msg("Item check boxes")}
       </button>
       <div class="menu-sep"></div>
       <div class="subwrap" role="none" onmouseenter={() => (themeSubOpen = true)} onmouseleave={() => (themeSubOpen = false)}>
         <button class="menu-item wide">
           <span class="glyph">&#xE790;</span>
-          <span class="mtext">Theme</span>
+          <span class="mtext">{msg("Theme")}</span>
           <span class="glyph subchev">&#xE76C;</span>
         </button>
         {#if themeSubOpen}
@@ -301,29 +303,29 @@
       </div>
     {:else if openMenu === "more"}
       <button class="menu-item" disabled={!can("select")} onclick={() => { openMenu = ""; selectAll(); }}>
-        <span class="glyph">&#xE8B3;</span> Select all
+        <span class="glyph">&#xE8B3;</span> {msg("Select all")}
       </button>
       <button class="menu-item" disabled={!can("select")} onclick={() => { openMenu = ""; selectNone(); }}>
-        <span class="glyph">&#xE8E6;</span> Select none
+        <span class="glyph">&#xE8E6;</span> {msg("Select none")}
       </button>
       <button class="menu-item" disabled={!can("select")} onclick={() => { openMenu = ""; invertSelection(); }}>
-        <span class="glyph">&#xE8B6;</span> Invert selection
+        <span class="glyph">&#xE8B6;</span> {msg("Invert selection")}
       </button>
       <button class="menu-item" onclick={() => { openMenu = ""; refresh(); }}>
-        <span class="glyph">&#xE72C;</span> Refresh
+        <span class="glyph">&#xE72C;</span> {msg("Refresh")}
       </button>
       {#if app.path === THIS_PC || app.path === NETWORK}
         <div class="menu-sep"></div>
         <button class="menu-item" onclick={() => { openMenu = ""; mapDrive(); }}>
-          <span class="glyph">&#xE8CE;</span> Map network drive...
+          <span class="glyph">&#xE8CE;</span> {msg("Map network drive...")}
         </button>
         <button class="menu-item" onclick={() => { openMenu = ""; invoke("disconnect_drive", { path: null }).then(loadDrives).catch((e) => (app.status = String(e))); }}>
-          <span class="glyph">&#xE8CD;</span> Disconnect network drive...
+          <span class="glyph">&#xE8CD;</span> {msg("Disconnect network drive...")}
         </button>
       {/if}
       <div class="menu-sep"></div>
       <button class="menu-item" onclick={() => { openMenu = ""; navigate(SETTINGS); }}>
-        <span class="glyph">&#xE713;</span> Settings
+        <span class="glyph">&#xE713;</span> {msg("Settings")}
       </button>
     {/if}
   </div>
@@ -337,7 +339,9 @@
     gap: 2px;
     padding: 0 12px;
     flex-shrink: 0;
+    overflow-x: auto;
   }
+  .commandbar > :global(*) { flex-shrink: 0; }
   .cbtn {
     height: 34px;
     min-width: 38px;

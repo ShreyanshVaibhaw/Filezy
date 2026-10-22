@@ -35,6 +35,18 @@ export function isUnc(p: string): boolean {
   return /^\\\\[^\\?.][^\\]*/.test(p);
 }
 
+/** WSL's server and distro names ignore case; Linux path components do not. */
+export function isWsl(p: string): boolean {
+  return /^\\\\wsl(?:\.localhost|\$)\\[^\\]+/i.test(p);
+}
+
+export function pathKey(p: string): string {
+  const trimmed = p.replace(/\\+$/, "");
+  if (!isWsl(trimmed)) return trimmed.toLowerCase();
+  const parts = trimmed.slice(2).split("\\");
+  return "\\\\" + parts.slice(0, 2).join("\\").toLowerCase() + (parts.length > 2 ? "\\" + parts.slice(2).join("\\") : "");
+}
+
 /** "\\server" alone: a computer, whose items are its shares. */
 export function isServer(p: string): boolean {
   return /^\\\\[^\\?.][^\\]*\\?$/.test(p);
@@ -62,6 +74,7 @@ export function parentPath(p: string): string | null {
   if (/^[a-zA-Z]:$/.test(t)) return null;
   if (isUnc(t)) {
     const parts = t.slice(2).split("\\");
+    if (isWsl(t) && parts.length === 2) return null;
     if (parts.length <= 1) return null;
     return "\\\\" + parts.slice(0, -1).join("\\");
   }
@@ -114,6 +127,12 @@ export function crumbs(p: string): { name: string; path: string }[] {
   const out: { name: string; path: string }[] = [];
   if (isUnc(t)) {
     const parts = t.slice(2).split("\\");
+    if (isWsl(t)) {
+      let location = "\\\\" + parts[0] + "\\" + parts[1];
+      out.push({ name: parts[1], path: location });
+      for (const part of parts.slice(2)) { location += "\\" + part; out.push({ name: part, path: location }); }
+      return out;
+    }
     let acc = "\\\\" + parts[0];
     out.push({ name: parts[0], path: acc });
     for (const part of parts.slice(1)) {
@@ -133,13 +152,13 @@ export function crumbs(p: string): { name: string; path: string }[] {
 
 /** Case-insensitive path equality, ignoring trailing backslashes. */
 export function samePath(a: string, b: string): boolean {
-  return a.replace(/\\+$/, "").toLowerCase() === b.replace(/\\+$/, "").toLowerCase();
+  return pathKey(a) === pathKey(b);
 }
 
 /** True when `p` is `dir` itself or inside it. */
 export function isWithin(p: string, dir: string): boolean {
-  const a = p.replace(/\\+$/, "").toLowerCase();
-  const b = dir.replace(/\\+$/, "").toLowerCase();
+  const a = pathKey(p);
+  const b = pathKey(dir);
   // An archive's root ("C:\a.zip|") holds everything after its "|".
   return a === b || a.startsWith(b.endsWith("|") ? b : b + "\\");
 }

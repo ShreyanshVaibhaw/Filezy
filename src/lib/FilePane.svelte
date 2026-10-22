@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { msg } from "./i18n.svelte";
   import { menuKeys, fitMenu } from "./menukeys";
   import { COLUMNS, colDef, columnsFor, saveColumns, SEARCH_KEY, attrLetters, type Col, type ColKey } from "./columns";
   import {
@@ -33,6 +34,7 @@
   }
   const VIEWS: Record<string, ViewDef> = {
     details: { grid: false, rowH: 40, cellW: 0, icon: 16 },
+    content: { grid: false, rowH: 88, cellW: 0, icon: 48 },
     list: { grid: true, flow: "column", rowH: 28, cellW: 250, icon: 16 },
     icons_s: { grid: true, rowH: 32, cellW: 250, icon: 16 },
     icons_m: { grid: true, rowH: 118, cellW: 102, icon: 48, vertical: true },
@@ -403,6 +405,13 @@
     }
   }
 
+  // A drag, checkbox, rename or modified click must never launch a file.
+  function rowClick(i: number, ev: MouseEvent) {
+    if (!settings.singleClick || dragged || ev.button !== 0 || ev.ctrlKey || ev.shiftKey || ev.altKey || app.renaming >= 0) return;
+    if ((ev.target as HTMLElement).closest(".ck, input")) return;
+    openEntry(i);
+  }
+
   // A click on one item of a multi-selection collapses to it on release, and a
   // Ctrl+click on a selected item deselects it on release, unless either became a drag.
   let collapseTo = -1;
@@ -673,6 +682,7 @@
     columns = columnsFor(layoutKey, app.cloud);
   });
   const gridCols = $derived(`minmax(200px, 1fr) ${columns.map((c) => c.w + "px").join(" ")}`);
+  const detailsWidth = $derived(app.view === "details" ? Math.max(gridW, 232 + columns.reduce((sum, c) => sum + c.w, 0)) : gridW);
   const propCols = $derived(columns.filter((c) => colDef(c.k).prop).map((c) => c.k));
   const statusCol = $derived(columns.some((c) => c.k === "status"));
 
@@ -951,12 +961,13 @@
 
 <div class="pane" data-filelist>
   {#if !v.grid}
-    <div class="header" bind:this={headerEl} style="height:{HEADER}px; grid-template-columns:{gridCols}">
+    <div class="headerclip">
+    <div class="header" bind:this={headerEl} style="height:{HEADER}px; width:{detailsWidth}px; transform:translateX({-scrollLeft}px); grid-template-columns:{gridCols}">
       <button class="hcell" onclick={() => headerClick("name")} oncontextmenu={(ev) => headerContext(ev, null)}>
         {#if app.sortKey === "name"}
           <span class="glyph caret">{app.asc ? "" : ""}</span>
         {/if}
-        <span class="hlabel">Name</span>
+        <span class="hlabel">{msg("Name")}</span>
       </button>
       {#each columns as c (c.k)}
         <button
@@ -971,10 +982,11 @@
           {#if app.sortKey === c.k}
             <span class="glyph caret">{app.asc ? "" : ""}</span>
           {/if}
-          <span class="hlabel">{colDef(c.k).label}</span>
+          <span class="hlabel">{msg(colDef(c.k).label)}</span>
           <div class="hresize" role="none" onmousedown={(ev) => startResize(c.k, ev)} ondblclick={(ev) => { ev.stopPropagation(); fitColumn(c.k); }}></div>
         </button>
       {/each}
+    </div>
     </div>
   {/if}
 
@@ -1005,7 +1017,7 @@
           ? `height:${glist.ipcG * v.rowH + HDR_H}px; width:${glist.width + 16}px`
           : v.flow === "column"
             ? `height:${ipc * v.rowH}px; width:${cols * v.cellW + 16}px`
-            : `height:${totalRows * v.rowH}px`}
+            : `height:${totalRows * v.rowH}px;${!v.grid ? `width:${detailsWidth}px` : ""}`}
     >
       {#if glist}
         {#each glist.segs as s (s.g.label)}
@@ -1061,6 +1073,7 @@
         {:else if !v.grid}
           <div
             class="vrow"
+            class:contentrow={app.view === "content"}
             class:selected={isSelected(i)}
             class:focused={app.focus === i}
             class:cut={!!e && isCut(e)}
@@ -1071,7 +1084,9 @@
             data-drop-label={e?.is_dir ? displayName(e) : undefined}
             style="transform: translateY({d * v.rowH}px); height:{v.rowH}px; grid-template-columns:{gridCols}"
             onmousedown={(ev) => { if (e) { rowMouseDown(i, ev); armDrag(ev); } }}
-            ondblclick={() => e && app.renaming !== i && openEntry(i)}
+            onclick={(ev) => e && rowClick(i, ev)}
+            onkeydown={(ev) => { if (ev.key === "Enter" && e) { ev.stopPropagation(); openEntry(i); } }}
+            ondblclick={() => !settings.singleClick && e && app.renaming !== i && openEntry(i)}
             oncontextmenu={(ev) => e && onContext(ev, i)}
             role="option"
             aria-selected={isSelected(i)}
@@ -1080,14 +1095,15 @@
             tabindex="-1"
           >
             {#if e}
+              {@const image = app.view === "content" ? thumbOf(e, 48) ?? iconOf(e) : iconOf(e)}
               <div class="cell name" class:dim={isHidden(e)}>
                 {#if settings.checkboxes}
                   <span class="ck" class:on={isSelected(i)} aria-hidden="true" onmousedown={(ev) => { ev.stopPropagation(); if (ev.button === 0) toggleRow(i); }}>
                     <span class="glyph">&#xE73E;</span>
                   </span>
                 {/if}
-                {#if iconOf(e)}
-                  <img class="fileicon" src={iconOf(e)} alt="" width="16" height="16" />
+                {#if image}
+                  <img class="fileicon" src={image} alt="" width={app.view === "content" ? 48 : 16} height={app.view === "content" ? 48 : 16} />
                 {:else}
                   <span class="glyph fileicon placeholder">{e.is_dir ? "" : ""}</span>
                 {/if}
@@ -1111,6 +1127,14 @@
                   <span class="fname">{displayName(e)}</span>
                 {/if}
               </div>
+              {#if app.view === "content"}
+                <div class="contentmeta">
+                  {#each columns as c (c.k)}
+                    {@const value = cellText(e, c.k)}
+                    {#if value}<span title={`${msg(colDef(c.k).label)}: ${value}`}>{msg(colDef(c.k).label)}: {value}</span>{/if}
+                  {/each}
+                </div>
+              {:else}
               {#each columns as c (c.k)}
                 {@const cs = c.k === "status" ? cloudStateOf(e) : null}
                 {#if cs}
@@ -1122,6 +1146,7 @@
                   <div class="cell sub" class:size={colDef(c.k).right}>{cellText(e, c.k)}</div>
                 {/if}
               {/each}
+              {/if}
             {/if}
           </div>
         {:else}
@@ -1139,7 +1164,9 @@
             data-drop-label={e?.is_dir ? displayName(e) : undefined}
             style="transform: translate({pos.x}px, {pos.y}px); width:{v.cellW - 6}px; height:{v.rowH - 6}px"
             onmousedown={(ev) => { if (e) { rowMouseDown(i, ev); armDrag(ev); } }}
-            ondblclick={() => e && app.renaming !== i && openEntry(i)}
+            onclick={(ev) => e && rowClick(i, ev)}
+            onkeydown={(ev) => { if (ev.key === "Enter" && e) { ev.stopPropagation(); openEntry(i); } }}
+            ondblclick={() => !settings.singleClick && e && app.renaming !== i && openEntry(i)}
             oncontextmenu={(ev) => e && onContext(ev, i)}
             role="option"
             aria-selected={isSelected(i)}
@@ -1204,8 +1231,8 @@
         <span class="glyph sicon">&#xE783;</span>
         <div class="stext">{app.error}</div>
         <div class="sbtns">
-          <button class="sbtn" onclick={() => refresh()}>Try again</button>
-          <button class="sbtn" onclick={up}>Go up</button>
+          <button class="sbtn" onclick={() => refresh()}>{msg("Try again")}</button>
+          <button class="sbtn" onclick={up}>{msg("Go up")}</button>
         </div>
       </div>
     {:else if app.total === 0 && !app.loading}
@@ -1217,15 +1244,15 @@
               ? "Nothing was found before the search was stopped."
               : "No items match your search."}
         {:else if isServer(app.path)}
-          This computer doesn't share any folders, or none you can see.
+          {msg("This computer doesn't share any folders, or none you can see.")}
         {:else}
-          This folder is empty.
+          {msg("This folder is empty.")}
         {/if}
       </div>
     {/if}
   </div>
   {#if slowLoad}
-    <div class="loadbar" role="progressbar" aria-label="Loading folder"><span></span></div>
+    <div class="loadbar" role="progressbar" aria-label={msg("Loading folder")}><span></span></div>
   {/if}
 </div>
 
@@ -1233,20 +1260,20 @@
   <div class="menu hdrmenu" style="left:{hdrMenu.x}px; top:{hdrMenu.y}px" use:menuKeys={() => (hdrMenu = null)} use:fitMenu={hdrMenu}>
     {#if hdrMenu.key}
       <button class="menu-item" onclick={() => { const k = hdrMenu?.key; hdrMenu = null; if (k) fitColumn(k); }}>
-        <span class="glyph"></span> Size column to fit
+        <span class="glyph"></span> {msg("Size column to fit")}
       </button>
     {/if}
     <button class="menu-item" onclick={() => { hdrMenu = null; fitAll(); }}>
-      <span class="glyph"></span> Size all columns to fit
+      <span class="glyph"></span> {msg("Size all columns to fit")}
     </button>
     <div class="menu-sep"></div>
     <button class="menu-item" role="menuitemcheckbox" aria-checked="true" disabled>
-      <span class="glyph">&#xE73E;</span> Name
+      <span class="glyph">&#xE73E;</span> {msg("Name")}
     </button>
     {#each COLUMNS as d (d.key)}
       {@const on = columns.some((c) => c.k === d.key)}
       <button class="menu-item" role="menuitemcheckbox" aria-checked={on} onclick={() => { hdrMenu = null; toggleColumn(d.key); }}>
-        <span class="glyph">{on ? "\uE73E" : ""}</span> {d.label}
+        <span class="glyph">{on ? "\uE73E" : ""}</span> {msg(d.label)}
       </button>
     {/each}
   </div>
@@ -1257,16 +1284,16 @@
     {#if ctx.onRow && anyMenuOn(STRIP_IDS) && !inArchive}
       <div class="strip">
         {#if menuOn("file.cut")}
-          <button title="Cut" aria-label="Cut" onclick={() => { ctx = null; copySel(true); }}><span class="glyph">&#xE8C6;</span></button>
+          <button title={msg("Cut")} aria-label={msg("Cut")} onclick={() => { ctx = null; copySel(true); }}><span class="glyph">&#xE8C6;</span></button>
         {/if}
         {#if menuOn("file.copy")}
-          <button title="Copy" aria-label="Copy" onclick={() => { ctx = null; copySel(false); }}><span class="glyph">&#xE8C8;</span></button>
+          <button title={msg("Copy")} aria-label={msg("Copy")} onclick={() => { ctx = null; copySel(false); }}><span class="glyph">&#xE8C8;</span></button>
         {/if}
         {#if menuOn("file.rename")}
-          <button title="Rename" aria-label="Rename" onclick={() => { ctx = null; startRename(); }}><span class="glyph">&#xE8AC;</span></button>
+          <button title={msg("Rename")} aria-label={msg("Rename")} onclick={() => { ctx = null; startRename(); }}><span class="glyph">&#xE8AC;</span></button>
         {/if}
         {#if menuOn("file.delete")}
-          <button title="Delete" aria-label="Delete" onclick={() => { ctx = null; del(); }}><span class="glyph">&#xE74D;</span></button>
+          <button title={msg("Delete")} aria-label={msg("Delete")} onclick={() => { ctx = null; del(); }}><span class="glyph">&#xE74D;</span></button>
         {/if}
       </div>
       <div class="menu-sep"></div>
@@ -1277,60 +1304,60 @@
       {@const multi = app.allSelected ? app.total : sel.size}
       {#if menuOn("file.open")}
         <button class="menu-item" onclick={() => { ctx = null; if (fi !== undefined) openEntry(fi); }}>
-          <span class="glyph">&#xE8E5;</span> Open
+          <span class="glyph">&#xE8E5;</span> {msg("Open")}
         </button>
       {/if}
       {#if fe?.is_dir && menuOn("file.opennewtab")}
         <button class="menu-item" onclick={() => { ctx = null; openInNewTabs(); }}>
-          <span class="glyph">&#xE8A7;</span> Open in new tab
+          <span class="glyph">&#xE8A7;</span> {msg("Open in new tab")}
         </button>
       {/if}
       {#if fe?.is_dir && multi === 1 && menuOn("file.opennewwindow")}
         <button class="menu-item" onclick={() => { ctx = null; openInNewWindow(); }}>
-          <span class="glyph">&#xE737;</span> Open in new window
+          <span class="glyph">&#xE737;</span> {msg("Open in new window")}
         </button>
       {/if}
       {#if fe && app.search && multi === 1 && menuOn("file.openlocation")}
         <button class="menu-item" onclick={() => { ctx = null; openFileLocation(entryPath(fe)); }}>
-          <span class="glyph">&#xE838;</span> Open file location
+          <span class="glyph">&#xE838;</span> {msg("Open file location")}
         </button>
       {/if}
       {#if fe && !fe.is_dir && multi === 1 && menuOn("file.openwith") && !inArchive}
         <button class="menu-item" onclick={() => { ctx = null; invoke("open_with", { path: entryPath(fe) }).catch((e) => (app.status = String(e))); }}>
-          <span class="glyph">&#xE7AC;</span> Open with
+          <span class="glyph">&#xE7AC;</span> {msg("Open with")}
         </button>
       {/if}
       {#if inArchive && menuOn("file.extractall")}
         <button class="menu-item" onclick={() => { ctx = null; extractSelected(); }}>
-          <span class="glyph">&#xE8B7;</span> Extract...
+          <span class="glyph">&#xE8B7;</span> {msg("Extract...")}
         </button>
         <button class="menu-item" onclick={() => { ctx = null; extractAll(); }}>
-          <span class="glyph">&#xE8B7;</span> Extract all...
+          <span class="glyph">&#xE8B7;</span> {msg("Extract all...")}
         </button>
       {:else if fe && !fe.is_dir && multi === 1 && isArchiveName(fe.name) && menuOn("file.extractall")}
         <button class="menu-item" onclick={() => { ctx = null; extractAll(entryPath(fe)); }}>
-          <span class="glyph">&#xE8B7;</span> Extract all...
+          <span class="glyph">&#xE8B7;</span> {msg("Extract all...")}
         </button>
       {/if}
       {#if app.cloud && !inArchive && menuOn("file.keep")}
         {@const kept = !!fe && isKept(fe)}
         <button class="menu-item" role="menuitemcheckbox" aria-checked={kept} onclick={() => { ctx = null; cloudPin(true); }}>
-          <span class="glyph">{kept ? "" : ""}</span> Always keep on this device
+          <span class="glyph">{kept ? "" : ""}</span> {msg("Always keep on this device")}
         </button>
       {/if}
       {#if app.cloud && !inArchive && menuOn("file.freeup")}
         <button class="menu-item" onclick={() => { ctx = null; cloudPin(false); }}>
-          <span class="glyph">&#xE753;</span> Free up space
+          <span class="glyph">&#xE753;</span> {msg("Free up space")}
         </button>
       {/if}
       {#if fe?.is_dir && menuOn("file.pin") && !inArchive}
         {#if isPinned(entryPath(fe))}
           <button class="menu-item" onclick={() => { ctx = null; pinSelected(false); }}>
-            <span class="glyph">&#xE77A;</span> Unpin from Quick access
+            <span class="glyph">&#xE77A;</span> {msg("Unpin from Quick access")}
           </button>
         {:else}
           <button class="menu-item" onclick={() => { ctx = null; pinSelected(true); }}>
-            <span class="glyph">&#xE840;</span> Pin to Quick access
+            <span class="glyph">&#xE840;</span> {msg("Pin to Quick access")}
           </button>
         {/if}
       {/if}
@@ -1342,32 +1369,32 @@
       {/if}
       {#if menuOn("file.compress") && !inArchive}
         <button class="menu-item" onclick={() => { ctx = null; compressSel(); }}>
-          <span class="glyph">&#xF012;</span> Compress to ZIP file
+          <span class="glyph">&#xF012;</span> {msg("Compress to ZIP file")}
         </button>
       {/if}
       {#if menuOn("file.copypath") && !inArchive}
         <button class="menu-item" onclick={() => { ctx = null; withSel((sel) => invoke("copy_as_path", { sel })).then(refreshClipState).catch((e) => (app.status = String(e))); }}>
-          <span class="glyph">&#xE8C8;</span> Copy as path
+          <span class="glyph">&#xE8C8;</span> {msg("Copy as path")}
         </button>
       {/if}
       {#if menuOn("file.shortcut") && !inArchive}
         <button class="menu-item" onclick={() => { ctx = null; createShortcuts(); }}>
-          <span class="glyph">&#xE71B;</span> Create shortcut
+          <span class="glyph">&#xE71B;</span> {msg("Create shortcut")}
         </button>
       {/if}
       {#if ctxFilesOnly && menuOn("file.share") && !inArchive}
         <button class="menu-item" onclick={() => { ctx = null; shareSel(); }}>
-          <span class="glyph">&#xE72D;</span> Share
+          <span class="glyph">&#xE72D;</span> {msg("Share")}
         </button>
       {/if}
       {#if menuOn("file.properties") && !inArchive}
         <button class="menu-item" onclick={() => { ctx = null; propertiesSel(); }}>
-          <span class="glyph">&#xE90F;</span> Properties
+          <span class="glyph">&#xE90F;</span> {msg("Properties")}
         </button>
       {/if}
       {#if ctxItems === null}
         <div class="menu-sep"></div>
-        <div class="menuload">Loading…</div>
+        <div class="menuload">{msg("Loading…")}</div>
       {:else if ctxItems.length}
         <div class="menu-sep"></div>
         <!-- Extensions can add dozens of entries: they scroll on their own, so the
@@ -1382,23 +1409,23 @@
       {#if menuOn("file.moreoptions") && !inArchive}
         <div class="menu-sep"></div>
         <button class="menu-item" onclick={() => ctx && moreOptions(ctx.at)}>
-          <span class="glyph">&#xE712;</span> Show more options
+          <span class="glyph">&#xE712;</span> {msg("Show more options")}
         </button>
       {/if}
     {:else}
       {#if menuOn("blank.refresh")}
         <button class="menu-item" onclick={() => { ctx = null; refresh(); }}>
-          <span class="glyph">&#xE72C;</span> Refresh
+          <span class="glyph">&#xE72C;</span> {msg("Refresh")}
         </button>
       {/if}
       {#if menuOn("blank.paste") && !inArchive}
         <button class="menu-item" disabled={!app.canPaste} onclick={() => { ctx = null; paste(); }}>
-          <span class="glyph">&#xE77F;</span> Paste
+          <span class="glyph">&#xE77F;</span> {msg("Paste")}
         </button>
       {/if}
       {#if menuOn("blank.pasteshortcut") && !inArchive}
         <button class="menu-item" disabled={!app.canPaste} onclick={() => { ctx = null; pasteShortcuts(); }}>
-          <span class="glyph">&#xE71B;</span> Paste shortcut
+          <span class="glyph">&#xE71B;</span> {msg("Paste shortcut")}
         </button>
       {/if}
       {#if menuOn("blank.new") && !inArchive}
@@ -1406,7 +1433,7 @@
         <div class="subwrap" role="none" onmouseenter={() => (blankNewOpen = true)} onmouseleave={() => (blankNewOpen = false)}>
           <button class="menu-item wide">
             <span class="glyph">&#xE710;</span>
-            <span class="mtext">New</span>
+            <span class="mtext">{msg("New")}</span>
             <span class="glyph subchev">&#xE76C;</span>
           </button>
           {#if blankNewOpen}
@@ -1417,7 +1444,7 @@
                 {:else}
                   <span class="glyph">&#xE8B7;</span>
                 {/if}
-                <span class="mtext">Folder</span>
+                <span class="mtext">{msg("Folder")}</span>
               </button>
               {#if newItems.list?.length}
                 <div class="menu-sep"></div>
@@ -1438,19 +1465,19 @@
       {/if}
       {#if menuOn("blank.selectall")}
         <button class="menu-item" onclick={() => { ctx = null; selectAll(); }}>
-          <span class="glyph">&#xE8B3;</span> Select all
+          <span class="glyph">&#xE8B3;</span> {msg("Select all")}
         </button>
       {/if}
       {#if inArchive && menuOn("file.extractall")}
         <div class="menu-sep"></div>
         <button class="menu-item" onclick={() => { ctx = null; extractAll(); }}>
-          <span class="glyph">&#xE8B7;</span> Extract all...
+          <span class="glyph">&#xE8B7;</span> {msg("Extract all...")}
         </button>
       {/if}
       {#if menuOn("blank.terminal") && !inArchive}
         <div class="menu-sep"></div>
         <button class="menu-item" onclick={() => { ctx = null; invoke("open_terminal", { dir: app.path }).catch((e) => (app.status = String(e))); }}>
-          <span class="glyph">&#xE756;</span> Open in Terminal
+          <span class="glyph">&#xE756;</span> {msg("Open in Terminal")}
         </button>
       {/if}
     {/if}
@@ -1476,6 +1503,7 @@
     padding: 0 12px 0 16px;
     border-bottom: 1px solid var(--stroke);
   }
+  .headerclip { overflow: hidden; flex-shrink: 0; }
   .hcell {
     position: relative;
     display: flex;
@@ -1515,7 +1543,7 @@
   .scroller {
     flex: 1;
     overflow-y: auto;
-    overflow-x: hidden;
+    overflow-x: auto;
     position: relative;
   }
   .scroller.colflow {
@@ -1566,6 +1594,28 @@
     border-radius: 4px;
     padding: 0 4px 0 8px;
   }
+  .vrow.contentrow {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    border-bottom: 1px solid var(--stroke);
+    gap: 5px;
+  }
+  .contentrow .name { flex: 0 0 28px; padding-left: 64px; }
+  .contentrow .fileicon { position: absolute; left: 12px; top: 20px; width: 48px; height: 48px; object-fit: contain; }
+  .contentrow .fileicon.placeholder { font-size: 40px; line-height: 48px; }
+  .contentmeta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 20px;
+    padding-left: 64px;
+    max-height: 38px;
+    overflow: hidden;
+    font-size: 12px;
+    color: var(--text-2);
+  }
+  .contentmeta span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .vrow:hover,
   .gcell:hover {
     background: var(--hover);

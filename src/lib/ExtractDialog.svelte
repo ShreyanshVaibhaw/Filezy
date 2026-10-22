@@ -1,6 +1,7 @@
 <!-- Extract all, as Explorer asks it: where the files go (a new folder named
      after the archive, beside it, unless changed), and whether to show them. -->
 <script lang="ts">
+  import { msg } from "./i18n.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { browseDest, extractDlg, runExtract } from "./archive.svelte";
 
@@ -59,21 +60,21 @@
   <div class="scrim" role="presentation">
     <div class="dlg extractdlg" role="dialog" aria-modal="true" aria-labelledby="ex-title">
       <h2 id="ex-title">{extractDlg.title}</h2>
-      <label class="field" for="ex-dest">Files will be extracted to this folder:</label>
+      <label class="field" for="ex-dest">{msg("Files will be extracted to this folder:")}</label>
       <div class="row">
         <input id="ex-dest" bind:this={input} bind:value={extractDlg.dest} spellcheck="false" aria-describedby="ex-hint" />
-        <button class="btn" onclick={browseDest}>Browse...</button>
+        <button class="btn" onclick={browseDest}>{msg("Browse...")}</button>
       </div>
       <p id="ex-hint" class="hint" class:err={!!invalid}>
         {invalid || (exists ? "This folder exists. Windows asks before replacing anything already in it." : "This folder will be created.")}
       </p>
       <label class="check">
         <input type="checkbox" bind:checked={extractDlg.show} />
-        <span>Show extracted files when complete</span>
+        <span>{msg("Show extracted files when complete")}</span>
       </label>
       <div class="btns">
-        <button class="btn primary" disabled={!!invalid} onclick={go}>Extract</button>
-        <button class="btn" onclick={close}>Cancel</button>
+        <button class="btn primary" disabled={!!invalid} onclick={go}>{msg("Extract")}</button>
+        <button class="btn" onclick={close}>{msg("Cancel")}</button>
       </div>
     </div>
   </div>

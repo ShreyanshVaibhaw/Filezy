@@ -1,6 +1,10 @@
 <script lang="ts">
-  import { menuKeys } from "./menukeys";
+  import { msg } from "./i18n.svelte";
+  import { menuKeys, fitMenu } from "./menukeys";
+  import { tick } from "svelte";
+  import { dropTab, otherTabWindows, transferTab } from "./tabtransfer";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { nativeCaption } from "./caption";
   import {
     app, tabs, extMeta, folderName, newTab, switchTab, closeTab,
     duplicateTab, closeOtherTabs, closeTabsRight, moveTabToWindow, shellIcon,
@@ -26,7 +30,13 @@
   };
 
   // Drag a tab horizontally to reorder, like Explorer/browsers.
-  let drag = $state<{ id: number; x: number; moved: boolean } | null>(null);
+  let drag = $state<{ id: number; x: number; y: number; moved: boolean } | null>(null);
+  let tabOverflow = $state(false);
+  let targets = $state<{ id: string; name: string }[]>([]);
+  $effect(() => {
+    const id = app.activeTab;
+    tick().then(() => document.querySelector<HTMLElement>(`[data-tab="${id}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" }));
+  });
 
   const TAB_IDS = ["tab.duplicate", "tab.movewindow", "tab.close", "tab.closeothers", "tab.closeright"];
 
@@ -35,6 +45,7 @@
     e.preventDefault();
     if (!anyMenuOn(TAB_IDS)) return;
     tabCtx = { x: e.clientX, y: e.clientY, id };
+    targets = otherTabWindows();
   }
 
   /// Left/Right/Home/End move between tabs and switch to them; Delete closes one.
@@ -57,18 +68,19 @@
     }
   }
 
-  function tabDown(e: MouseEvent, id: number) {
+  function tabDown(e: PointerEvent, id: number) {
     if (e.button === 1) {
       closeTab(id);
       return;
     }
     if (e.button !== 0) return;
     switchTab(id);
-    drag = { id, x: e.clientX, moved: false };
+    drag = { id, x: e.clientX, y: e.clientY, moved: false };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
   function tabDragMove(e: MouseEvent) {
     if (!drag) return;
-    if (!drag.moved && Math.abs(e.clientX - drag.x) < 5) return;
+    if (!drag.moved && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 5) return;
     drag.moved = true;
     const els = [...document.querySelectorAll(".titlebar .tab")] as HTMLElement[];
     const from = tabs.findIndex((t) => t.id === drag!.id);
@@ -81,49 +93,71 @@
       tabs.splice(over, 0, t);
     }
   }
+  function tabUp(e: PointerEvent) {
+    const moving = drag;
+    drag = null;
+    if (moving?.moved && (e.clientY < 0 || e.clientY > 56 || e.clientX < 0 || e.clientX > innerWidth)) {
+      void dropTab(moving.id, e.clientX, e.clientY).catch((error) => app.status = String(error));
+    }
+  }
 </script>
 
 <svelte:window
-  onmousemove={tabDragMove}
-  onmouseup={() => (drag = null)}
-  onmousedown={(e) => { if (tabCtx && !(e.target as HTMLElement).closest(".menu")) tabCtx = null; }}
+  onpointermove={tabDragMove}
+  onpointerup={tabUp}
+  onpointercancel={() => drag = null}
+  onmousedown={(e) => { if (!(e.target as HTMLElement).closest(".menu, .tabpicker")) { tabCtx = null; tabOverflow = false; } }}
 />
 
 {#if tabCtx}
-  <div class="menu" style="left:{tabCtx.x}px; top:{tabCtx.y}px" use:menuKeys={() => (tabCtx = null)}>
+  <div class="menu" style="left:{tabCtx.x}px; top:{tabCtx.y}px" use:fitMenu use:menuKeys={() => (tabCtx = null)}>
     {#if menuOn("tab.duplicate")}
       <button class="menu-item" onclick={() => { duplicateTab(tabCtx!.id); tabCtx = null; }}>
-        <span class="glyph">&#xE8C8;</span> Duplicate tab
+        <span class="glyph">&#xE8C8;</span> {msg("Duplicate tab")}
       </button>
     {/if}
     {#if menuOn("tab.movewindow")}
-      <button class="menu-item" disabled={tabs.length < 2} onclick={() => { moveTabToWindow(tabCtx!.id); tabCtx = null; }}>
-        <span class="glyph">&#xE737;</span> Move to new window
+      <button class="menu-item" onclick={() => { moveTabToWindow(tabCtx!.id); tabCtx = null; }}>
+        <span class="glyph">&#xE737;</span> {msg("Move to new window")}
       </button>
+      {#each targets as target (target.id)}
+        <button class="menu-item targetwindow" title={target.name} onclick={() => { const id = tabCtx!.id; tabCtx = null; transferTab(id, target.id); }}>
+          {msg("Move to window:")} {target.name}
+        </button>
+      {/each}
     {/if}
     {#if menuOn("tab.duplicate") || menuOn("tab.movewindow")}
       <div class="menu-sep"></div>
     {/if}
     {#if menuOn("tab.close")}
       <button class="menu-item" onclick={() => { closeTab(tabCtx!.id); tabCtx = null; }}>
-        <span class="glyph">&#xE8BB;</span> Close tab
+        <span class="glyph">&#xE8BB;</span> {msg("Close tab")}
       </button>
     {/if}
     {#if menuOn("tab.closeothers")}
       <button class="menu-item" disabled={tabs.length < 2} onclick={() => { closeOtherTabs(tabCtx!.id); tabCtx = null; }}>
-        Close other tabs
+        {msg("Close other tabs")}
       </button>
     {/if}
     {#if menuOn("tab.closeright")}
       <button class="menu-item" disabled={tabs.findIndex((t) => t.id === tabCtx!.id) === tabs.length - 1} onclick={() => { closeTabsRight(tabCtx!.id); tabCtx = null; }}>
-        Close tabs to the right
+        {msg("Close tabs to the right")}
       </button>
     {/if}
   </div>
 {/if}
+{#if tabOverflow}
+  <div class="menu tabmenu" style="left:8px;top:40px" use:fitMenu use:menuKeys={() => tabOverflow = false}>
+    {#each tabs as t (t.id)}
+      <button class="menu-item" title={t.path} role="menuitemradio" aria-checked={t.id === app.activeTab} onclick={() => { switchTab(t.id); tabOverflow = false; }}>
+        {folderName(t.path) || "Home"}
+      </button>
+    {/each}
+  </div>
+{/if}
 
 <div class="titlebar" data-tauri-drag-region>
-  <div class="tabs" role="tablist" aria-label="Tabs" tabindex="-1" onkeydown={tabKeys}>
+  <div class="tabs" role="tablist" aria-label={msg("Tabs")} tabindex="-1" onkeydown={tabKeys}>
   {#each tabs as t (t.id)}
     <div
       class="tab"
@@ -135,7 +169,7 @@
       data-drop={t.path && !isVirtual(t.path) ? t.path : undefined}
       data-drop-label={t.path ? folderName(t.path) : undefined}
       use:dropHover={() => switchTab(t.id)}
-      onmousedown={(e) => tabDown(e, t.id)}
+      onpointerdown={(e) => { if (!(e.target as HTMLElement).closest(".tabclose")) tabDown(e, t.id); }}
       oncontextmenu={(e) => onTabContext(e, t.id)}
     >
       {#if t.path === RECYCLE && shellIcon(RECYCLE_GUID, 48)}
@@ -148,24 +182,27 @@
         <span class="glyph tabglyph">&#xE8B7;</span>
       {/if}
       <span class="tabname">{t.path ? folderName(t.path) : "Home"}</span>
-      <button class="tabclose" tabindex="-1" onclick={(e) => { e.stopPropagation(); closeTab(t.id); }} title="Close tab (Ctrl+W)" aria-label="Close tab (Ctrl+W)">
+      <button class="tabclose" tabindex="-1" onclick={(e) => { e.stopPropagation(); closeTab(t.id); }} title={msg("Close tab (Ctrl+W)")} aria-label={msg("Close tab (Ctrl+W)")}>
         <span class="glyph">&#xE8BB;</span>
       </button>
     </div>
   {/each}
   </div>
-  <button class="newtab" title="New tab (Ctrl+T)" aria-label="New tab (Ctrl+T)" onclick={() => newTab()}>
+  <button class="newtab tabpicker" title={msg("All tabs")} aria-label={msg("All tabs")} aria-expanded={tabOverflow} onclick={() => tabOverflow = !tabOverflow}>
+    <span class="glyph">&#xE70D;</span>
+  </button>
+  <button class="newtab" title={msg("New tab (Ctrl+T)")} aria-label={msg("New tab (Ctrl+T)")} onclick={() => newTab()}>
     <span class="glyph">&#xE710;</span>
   </button>
   <div class="spacer" data-tauri-drag-region></div>
   <div class="caption">
-    <button class="cap" tabindex="-1" onclick={() => win.minimize()} title="Minimize" aria-label="Minimize">
+    <button class="cap" tabindex="-1" onclick={() => win.minimize()} title={msg("Minimize")} aria-label={msg("Minimize")}>
       <span class="glyph">&#xE921;</span>
     </button>
-    <button class="cap" tabindex="-1" onclick={() => win.toggleMaximize()} title={maximized ? "Restore" : "Maximize"} aria-label={maximized ? "Restore" : "Maximize"}>
+    <button class="cap" use:nativeCaption={maximized} tabindex="-1" onclick={() => win.toggleMaximize()} title={maximized ? msg("Restore") : msg("Maximize")} aria-label={maximized ? msg("Restore") : msg("Maximize")}>
       <span class="glyph">{maximized ? "" : ""}</span>
     </button>
-    <button class="cap close" tabindex="-1" onclick={() => win.close()} title="Close" aria-label="Close">
+    <button class="cap close" tabindex="-1" onclick={() => win.close()} title={msg("Close")} aria-label={msg("Close")}>
       <span class="glyph">&#xE8BB;</span>
     </button>
   </div>
@@ -186,7 +223,11 @@
     min-width: 0;
     flex-shrink: 1;
     height: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
+  .tabs::-webkit-scrollbar { display: none; }
+  .targetwindow, .tabmenu .menu-item { max-width: min(400px, calc(100vw - 16px)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tabs:focus {
     outline: none;
   }
@@ -202,7 +243,8 @@
     padding: 0 8px 0 10px;
     min-width: 120px;
     max-width: 220px;
-    flex-shrink: 1;
+    flex-shrink: 0;
+    width: 180px;
     border-radius: 8px 8px 0 0;
     border: 1px solid transparent;
     border-bottom: none;
@@ -260,7 +302,7 @@
   .spacer {
     flex: 1;
     height: 100%;
-    min-width: 40px;
+    min-width: 24px;
   }
   .caption {
     display: flex;

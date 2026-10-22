@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { msg } from "./i18n.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { SvelteMap } from "svelte/reactivity";
   import { untrack } from "svelte";
@@ -94,27 +95,27 @@
   <div class="menu" style="left:{m.x}px; top:{m.y}px" use:menuKeys={() => (menu = null)} use:fitMenu={m}>
     {#if menuOn("home.open")}
       <button class="menu-item" onclick={() => run((x) => (x.folder ? navigate(x.path) : openPath(x.path)))}>
-        <span class="glyph">&#xE8E5;</span> Open
+        <span class="glyph">&#xE8E5;</span> {msg("Open")}
       </button>
     {/if}
     {#if m.folder && menuOn("home.newtab")}
       <button class="menu-item" onclick={() => run((x) => newTab(x.path))}>
-        <span class="glyph">&#xE8A7;</span> Open in new tab
+        <span class="glyph">&#xE8A7;</span> {msg("Open in new tab")}
       </button>
     {/if}
     {#if m.folder && menuOn("home.newwindow")}
       <button class="menu-item" onclick={() => run((x) => invoke("new_window", { path: x.path }))}>
-        <span class="glyph">&#xE737;</span> Open in new window
+        <span class="glyph">&#xE737;</span> {msg("Open in new window")}
       </button>
     {/if}
     {#if !m.folder && menuOn("home.openlocation")}
       <button class="menu-item" onclick={() => run((x) => openFileLocation(x.path))}>
-        <span class="glyph">&#xE838;</span> Open file location
+        <span class="glyph">&#xE838;</span> {msg("Open file location")}
       </button>
     {/if}
     {#if m.pin && menuOn("home.pin")}
       <button class="menu-item" onclick={() => run((x) => pinRemove(x.path))}>
-        <span class="glyph">&#xE77A;</span> Unpin from Quick access
+        <span class="glyph">&#xE77A;</span> {msg("Unpin from Quick access")}
       </button>
     {/if}
     {#if !m.folder && menuOn("home.favorite")}
@@ -125,20 +126,20 @@
     {/if}
     {#if m.recent && menuOn("home.removerecent")}
       <button class="menu-item" onclick={() => run((x) => removeRecent([x.path]))}>
-        <span class="glyph">&#xE711;</span> Remove from Recent
+        <span class="glyph">&#xE711;</span> {msg("Remove from Recent")}
       </button>
     {/if}
     {#if menuOn("home.properties")}
       <div class="menu-sep"></div>
       <button class="menu-item" onclick={() => run((x) => invoke("show_properties", { path: x.path }))}>
-        <span class="glyph">&#xE90F;</span> Properties
+        <span class="glyph">&#xE90F;</span> {msg("Properties")}
       </button>
     {/if}
   </div>
 {/if}
 
 <div class="homepane">
-  <div class="section">Quick access</div>
+  <div class="section">{msg("Quick access")}</div>
   <div class="qtiles">
     {#each app.specials as [name, path] (path)}
       <button
@@ -189,11 +190,11 @@
     {/each}
   </div>
 
-  <div class="section">Favorites</div>
+  <div class="section">{msg("Favorites")}</div>
   {#if !favorites.length}
-    <div class="empty">Files you add to Favorites show up here.</div>
+    <div class="empty">{msg("Files you add to Favorites show up here.")}</div>
   {:else}
-    <div class="recent" aria-label="Favorites">
+    <div class="recent" aria-label={msg("Favorites")}>
       {#each favorites as f (f.path)}
         <button class="rrow" ondblclick={() => openPath(f.path)} oncontextmenu={(e) => openMenu(e, f.path, {})} title={f.path} aria-label={f.path}>
           {#if iconFor(f.ext)}
@@ -208,11 +209,11 @@
     </div>
   {/if}
 
-  <div class="section">Recent files</div>
+  <div class="section">{msg("Recent files")}</div>
   {#if !recentFiles.list.length}
-    <div class="empty">After you open some files, they show up here.</div>
+    <div class="empty">{msg("After you open some files, they show up here.")}</div>
   {:else}
-    <div class="recent" aria-label="Recent files">
+    <div class="recent" aria-label={msg("Recent files")}>
       {#each recentFiles.list as f (f.path)}
         <button class="rrow" ondblclick={() => openPath(f.path)} oncontextmenu={(e) => openMenu(e, f.path, { recent: true })} title={f.path} aria-label={f.path}>
           {#if iconFor(f.ext)}

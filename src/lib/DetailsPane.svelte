@@ -3,6 +3,7 @@
      the file's handler can write are edited in place; for several items each
      one reports whether the change took. -->
 <script lang="ts">
+  import { msg } from "./i18n.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import {
     app, rows, sel, entryPath, requestMeta, requestThumb, thumbOf, typeOf, fmtDate, fmtSizeAuto,
@@ -149,7 +150,7 @@
   }
 </script>
 
-<div class="details" aria-label="Details pane">
+<div class="details" aria-label={msg("Details pane")}>
   {#if !count}
     <div class="head">
       <div class="big glyph" aria-hidden="true">&#xE8B7;</div>
@@ -168,38 +169,38 @@
         <div class="sub">{typeOf(one)}</div>
       {:else}
         <div class="big glyph" aria-hidden="true">&#xE8A9;</div>
-        <div class="name">{count.toLocaleString()} items selected</div>
+        <div class="name">{count.toLocaleString()} {msg("items selected")}</div>
       {/if}
     </div>
     <dl class="fields">
       {#if one}
         {#if app.search}
-          <dt>Location</dt>
+          <dt>{msg("Location")}</dt>
           <dd title={one.parent ?? app.path}>{one.parent ?? app.path}</dd>
         {/if}
         {#if !one.is_dir}
-          <dt>Size</dt>
+          <dt>{msg("Size")}</dt>
           <dd>{fmtSizeAuto(one.size)}</dd>
         {/if}
-        <dt>Date modified</dt>
+        <dt>{msg("Date modified")}</dt>
         <dd>{fmtDate(one.modified)}</dd>
-        <dt>Date created</dt>
+        <dt>{msg("Date created")}</dt>
         <dd>{fmtDate(one.created)}</dd>
         {#if statusOf(one)}
-          <dt>Availability status</dt>
+          <dt>{msg("Availability status")}</dt>
           <dd>{statusOf(one)}</dd>
         {/if}
         {#if target}
-          <dt>Target</dt>
+          <dt>{msg("Target")}</dt>
           <dd class="wrap" title={target}>{target}</dd>
         {/if}
       {:else if stats}
         {#if stats.files}
-          <dt>Total size</dt>
+          <dt>{msg("Total size")}</dt>
           <dd>{fmtSizeAuto(stats.bytes)}</dd>
         {/if}
         {#if stats.oldest}
-          <dt>Date modified</dt>
+          <dt>{msg("Date modified")}</dt>
           <dd>{stats.oldest === stats.newest ? fmtDate(stats.newest) : `${fmtDate(stats.oldest)} - ${fmtDate(stats.newest)}`}</dd>
         {/if}
       {/if}

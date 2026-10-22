@@ -7,7 +7,7 @@ import {
 } from "./store.svelte";
 import { settings } from "./settings.svelte";
 import { confirm } from "./ask.svelte";
-import { baseName, isArchive, isLibrary, joinPath, parentPath, samePath } from "./paths";
+import { baseName, isArchive, isLibrary, joinPath, parentPath, samePath, pathKey } from "./paths";
 
 export type ItemState = "done" | "skipped" | "failed" | "unattempted";
 export interface OpItem {
@@ -177,6 +177,13 @@ function record(r: OpResult, dest?: string, fromRedo = false) {
   );
 }
 
+/** Device copies use the same per-item reporting and safe undo as local ones. */
+export function recordExternalCopy(result: OpResult) {
+  const first = result.items.find((i) => i.state === "done" && i.dst);
+  record(result, first ? parentPath(first.dst) ?? undefined : undefined);
+  report(result);
+}
+
 const LABEL: Record<UndoEntry["kind"], string> = {
   copy: "copy",
   move: "move",
@@ -221,10 +228,10 @@ async function reverse(e: UndoEntry): Promise<{ undone: UndoItem[]; left: UndoIt
     }
     if (!targets.length) return { undone: [], left: e.items.filter((i) => present.includes(i) && !targets.includes(i)), notes };
     const r = await invoke<OpResult>("recycle_paths", { paths: targets.map((i) => i.to) });
-    const ok = new Set(r.items.filter((i) => i.state === "done").map((i) => i.src.toLowerCase()));
+    const ok = new Set(r.items.filter((i) => i.state === "done").map((i) => pathKey(i.src)));
     return {
-      undone: targets.filter((i) => ok.has(i.to.toLowerCase())),
-      left: [...targets.filter((i) => !ok.has(i.to.toLowerCase())), ...present.filter((i) => !targets.includes(i))],
+      undone: targets.filter((i) => ok.has(pathKey(i.to))),
+      left: [...targets.filter((i) => !ok.has(pathKey(i.to))), ...present.filter((i) => !targets.includes(i))],
       notes: r.items.some((i) => i.state === "failed") ? [...notes, summarize(r).title] : notes,
     };
   }
@@ -236,11 +243,11 @@ async function reverse(e: UndoEntry): Promise<{ undone: UndoItem[]; left: UndoIt
     const go = e.items.filter((_, k) => !st[k].exists);
     if (!go.length) return { undone: [], left: blocked, notes };
     const r = await invoke<OpResult>("move_back", { items: go.map((i) => [i.to, i.from]) });
-    const ok = new Set(r.items.filter((i) => i.state === "done").map((i) => i.src.toLowerCase()));
+    const ok = new Set(r.items.filter((i) => i.state === "done").map((i) => pathKey(i.src)));
     if (r.items.some((i) => i.state !== "done")) notes.push(summarize(r).title);
     return {
-      undone: go.filter((i) => ok.has(i.to.toLowerCase())),
-      left: [...go.filter((i) => !ok.has(i.to.toLowerCase())), ...blocked],
+      undone: go.filter((i) => ok.has(pathKey(i.to))),
+      left: [...go.filter((i) => !ok.has(pathKey(i.to))), ...blocked],
       notes,
     };
   }

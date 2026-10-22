@@ -24,6 +24,8 @@ export const DEFAULTS = {
   detailsPane: false,
   // Width of whichever side pane shows, in CSS pixels; dragged by its edge.
   paneWidth: 300,
+  navWidth: 240,
+  singleClick: false,
   // Explorer's Search options > Current folder / All subfolders.
   searchScope: "subfolders",
   // Recent searches, newest first (Search options > Recent searches).
@@ -67,7 +69,7 @@ const KEY = "settings";
 // Allowed values for the settings that are a choice, so a stored value from a
 // newer or hand-edited blob can't put the UI into a state it can't render.
 const CHOICES: Partial<Record<keyof Settings, string[]>> = {
-  defaultView: ["details", "list", "tiles", "icons_s", "icons_m", "icons_l", "icons_xl"],
+  defaultView: ["details", "content", "list", "tiles", "icons_s", "icons_m", "icons_l", "icons_xl"],
   defaultSort: ["name", "modified", "type", "size", "created"],
   searchScope: ["folder", "subfolders"],
 };
@@ -95,6 +97,9 @@ function sanitize(stored: Record<string, unknown>): Settings {
     if (ok) (s as Record<string, unknown>)[k] = v;
   }
   if (!THEMES.some(([id]) => id === s.theme)) s.theme = DEFAULTS.theme;
+  for (const [key, min, max] of [["paneWidth", 200, 600], ["navWidth", 160, 400]] as const) {
+    s[key] = Number.isFinite(s[key]) ? Math.round(Math.min(max, Math.max(min, s[key]))) : DEFAULTS[key];
+  }
   s.schema = DEFAULTS.schema;
   return s;
 }

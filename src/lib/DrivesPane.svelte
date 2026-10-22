@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { msg } from "./i18n.svelte";
   import { menuKeys, fitMenu } from "./menukeys";
   import { invoke } from "@tauri-apps/api/core";
   import { app, navigate, pinAdd, pinRemove, shellIcon, loadDrives, type Drive } from "./store.svelte";
@@ -152,7 +153,7 @@
 <svelte:window onmousedown={(e) => { if (ctx && !(e.target as HTMLElement).closest(".drivemenu")) ctx = null; }} />
 
 <div class="drivespane">
-  <div class="section">Devices and drives ({app.drives.length})</div>
+  <div class="section">{msg("Devices and drives (")}{app.drives.length})</div>
   <div class="tiles">
     {#each app.drives as d (d.path)}
       {@const used = d.total ? (d.total - d.free) / d.total : 0}
@@ -175,7 +176,7 @@
             <span class="bar" class:low={d.free < d.total * 0.1}>
               <span class="fill" style="width: {Math.min(100, used * 100)}%"></span>
             </span>
-            <span class="free">{fmtBytes(d.free)} free of {fmtBytes(d.total)}{d.read_only ? " · Read-only" : ""}</span>
+            <span class="free">{fmtBytes(d.free)} {msg("free of")} {fmtBytes(d.total)}{d.read_only ? " · Read-only" : ""}</span>
           {:else}
             <span class="free state" title={d.note ?? ""}>{stateText(d)}</span>
           {/if}
@@ -189,32 +190,32 @@
   <div class="menu drivemenu" style="left:{ctx.x}px; top:{ctx.y}px" use:menuKeys={() => (ctx = null)} use:fitMenu={ctx}>
     {#if menuOn("drive.open")}
       <button class="menu-item" onclick={() => { const p = ctx!.path; ctx = null; navigate(p); }}>
-        <span class="glyph">&#xE8E5;</span> Open
+        <span class="glyph">&#xE8E5;</span> {msg("Open")}
       </button>
     {/if}
     {#if menuOn("drive.pin")}
       <button class="menu-item" onclick={() => { const p = ctx!.path; ctx = null; pinAdd(p); }}>
-        <span class="glyph">&#xE840;</span> Pin to Quick access
+        <span class="glyph">&#xE840;</span> {msg("Pin to Quick access")}
       </button>
     {/if}
     {#if ctxDrive?.ejectable && menuOn("drive.eject")}
       <button class="menu-item" onclick={() => { const p = ctx!.path; ctx = null; eject(p); }}>
-        <span class="glyph">&#xF847;</span> Eject
+        <span class="glyph">&#xF847;</span> {msg("Eject")}
       </button>
     {/if}
     {#if ctxDrive?.kind === "network" && menuOn("drive.disconnect")}
       <button class="menu-item" onclick={() => { const p = ctx!.path; ctx = null; disconnect(p); }}>
-        <span class="glyph">&#xE8CD;</span> Disconnect
+        <span class="glyph">&#xE8CD;</span> {msg("Disconnect")}
       </button>
     {/if}
     {#if menuOn("drive.properties")}
       <button class="menu-item" onclick={() => { const p = ctx!.path; ctx = null; invoke("show_properties", { path: p }).catch((e) => (app.status = String(e))); }}>
-        <span class="glyph">&#xE90F;</span> Properties
+        <span class="glyph">&#xE90F;</span> {msg("Properties")}
       </button>
     {/if}
     {#if ctxItems === null}
       <div class="menu-sep"></div>
-      <div class="loading">Loading…</div>
+      <div class="loading">{msg("Loading…")}</div>
     {:else if ctxItems.length}
       <div class="menu-sep"></div>
       <div class="extras">
@@ -227,7 +228,7 @@
     {#if menuOn("drive.moreoptions")}
       <div class="menu-sep"></div>
       <button class="menu-item" onclick={() => ctx && moreOptions(ctx.path, ctx.at)}>
-        <span class="glyph">&#xE712;</span> Show more options
+        <span class="glyph">&#xE712;</span> {msg("Show more options")}
       </button>
     {/if}
   </div>

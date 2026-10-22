@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { msg } from "./i18n.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { app, sel, fmtSizeAuto, selRef, setView, stopSearch } from "./store.svelte";
 
@@ -37,11 +38,11 @@
 </script>
 
 <div class="statusbar">
-  <span class="stat">{app.total.toLocaleString()} item{app.total === 1 ? "" : "s"}</span>
+  <span class="stat">{app.total.toLocaleString()} {msg("item")}{app.total === 1 ? "" : "s"}</span>
   {#if selN}
     <span class="statsep"></span>
     <span class="stat">
-      {selN.toLocaleString()} item{selN > 1 ? "s" : ""} selected
+      {selN.toLocaleString()} {msg("item")}{selN > 1 ? "s" : ""} {msg("selected")}
       {#if selSize}&nbsp;{fmtSizeAuto(selSize)}{/if}
     </span>
   {/if}
@@ -50,17 +51,17 @@
     <span class="stat" class:warn={!app.searching && (app.search?.capped || app.search?.skipped)}>{searchNote}</span>
   {/if}
   {#if app.searching}
-    <button class="stopbtn" onclick={stopSearch} title="Stop searching" aria-label="Stop searching">Stop</button>
+    <button class="stopbtn" onclick={stopSearch} title={msg("Stop searching")} aria-label={msg("Stop searching")}>{msg("Stop")}</button>
   {/if}
   {#if !app.live && !app.search}
     <span class="statsep"></span>
-    <span class="stat" title="Windows doesn't report changes for this location">Doesn't refresh on its own. Press F5 to update.</span>
+    <span class="stat" title={msg("Windows doesn't report changes for this location")}>{msg("Doesn't refresh on its own. Press F5 to update.")}</span>
   {/if}
   <div class="fill"></div>
-  <button class="viewtoggle" class:active={app.view === "details"} title="Details view" aria-label="Details view" onclick={() => setView("details")}>
+  <button class="viewtoggle" class:active={app.view === "details"} title={msg("Details view")} aria-label={msg("Details view")} onclick={() => setView("details")}>
     <span class="glyph">&#xE9D5;</span>
   </button>
-  <button class="viewtoggle" class:active={app.view === "icons_l"} title="Large icons view" aria-label="Large icons view" onclick={() => setView("icons_l")}>
+  <button class="viewtoggle" class:active={app.view === "icons_l"} title={msg("Large icons view")} aria-label={msg("Large icons view")} onclick={() => setView("icons_l")}>
     <span class="glyph">&#xE8A9;</span>
   </button>
 </div>

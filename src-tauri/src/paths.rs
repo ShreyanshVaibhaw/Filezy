@@ -65,6 +65,20 @@ pub fn to_display(p: &str) -> String {
     p.to_string()
 }
 
+/// Windows paths ignore case; WSL only ignores case in its server and distro
+/// names. Linux components must remain distinct in operation and undo records.
+pub fn identity(path: &str) -> String {
+    let path = to_display(path);
+    let path = path.trim_end_matches('\\');
+    if let Some((server, distro, rest)) = unc_parts(path) {
+        if server.eq_ignore_ascii_case("wsl.localhost") || server.eq_ignore_ascii_case("wsl$") {
+            return format!(r"\\{}\{}{}", server.to_lowercase(), distro.to_lowercase(),
+                if rest.is_empty() { String::new() } else { format!(r"\{rest}") });
+        }
+    }
+    path.to_lowercase()
+}
+
 /// Extended-length form for Win32 file APIs. The input must already be a
 /// normalized display path: "\\?\" turns off the API's own "." and ".." handling.
 pub fn to_native(p: &str) -> String {
@@ -346,6 +360,14 @@ pub fn volume_id(p: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wsl_identity_preserves_linux_case() {
+        let root = r"\\wsl.localhost\Ubuntu";
+        assert_eq!(identity(&format!(r"{root}\Case.txt")), identity(r"\\WSL.LOCALHOST\ubuntu\Case.txt"));
+        assert_ne!(identity(&format!(r"{root}\Case.txt")), identity(&format!(r"{root}\case.txt")));
+        assert_eq!(identity(r"C:\Files\Case.txt"), identity(r"c:\files\case.TXT"));
+    }
 
     #[test]
     fn kinds() {

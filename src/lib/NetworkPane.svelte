@@ -2,6 +2,7 @@
      it finds none (network discovery off, or a computer that doesn't announce
      itself). A computer opens as its shares; a share as a folder. -->
 <script lang="ts">
+  import { msg } from "./i18n.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { app, network, loadNetwork, navigate, openPath, loadDrives } from "./store.svelte";
 
@@ -27,25 +28,24 @@
 
 <div class="netpane">
   <form class="goto" onsubmit={go}>
-    <label for="net-path">Go to a computer or shared folder</label>
+    <label for="net-path">{msg("Go to a computer or shared folder")}</label>
     <div class="row">
-      <input id="net-path" bind:value={typed} spellcheck="false" placeholder="\\server\share" />
-      <button class="btn" type="submit">Go</button>
-      <button class="btn" type="button" onclick={mapDrive}>Map network drive...</button>
+      <input id="net-path" bind:value={typed} spellcheck="false" placeholder={msg("\\\\server\\share")} />
+      <button class="btn" type="submit">{msg("Go")}</button>
+      <button class="btn" type="button" onclick={mapDrive}>{msg("Map network drive...")}</button>
     </div>
   </form>
   <div class="section">
-    Computers{network.loading ? "" : ` (${network.places.length})`}
-    <button class="refresh" title="Look again" aria-label="Look again" disabled={network.loading} onclick={loadNetwork}>
+    {msg("Computers")}{network.loading ? "" : ` (${network.places.length})`}
+    <button class="refresh" title={msg("Look again")} aria-label={msg("Look again")} disabled={network.loading} onclick={loadNetwork}>
       <span class="glyph">&#xE72C;</span>
     </button>
   </div>
   {#if network.loading}
-    <p class="note">Looking for computers on the network…</p>
+    <p class="note">{msg("Looking for computers on the network…")}</p>
   {:else if !network.places.length}
     <p class="note">
-      No computers were found. Network discovery may be off in Windows' network settings, or nothing here is shared.
-      A computer can still be opened by its name above, like \\PC-NAME.
+      {msg("No computers were found. Network discovery may be off in Windows' network settings, or nothing here is shared. A computer can still be opened by its name above, like \\\\PC-NAME.")}
     </p>
   {/if}
   <div class="tiles">

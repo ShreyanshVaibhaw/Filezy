@@ -2,6 +2,8 @@
 // set, order and widths (Explorer remembers them per folder). Name is always
 // first and not listed here.
 
+import { pathKey } from "./paths";
+
 export type ColKey =
   | "modified"
   | "type"
@@ -82,7 +84,7 @@ function load(): Record<string, Col[]> {
 
 let saved: Record<string, Col[]> = load();
 
-const keyOf = (path: string) => path.replace(/\\+$/, "").toLowerCase();
+const keyOf = pathKey;
 
 /// The columns a folder (or the search results, SEARCH_KEY) opens with. A
 /// folder a cloud provider syncs also shows Status first, as in Explorer.

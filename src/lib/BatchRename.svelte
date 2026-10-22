@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { msg } from "./i18n.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { batch, batchNames, commitBatch } from "./ops.svelte";
   import { baseName, joinPath, parentPath } from "./paths";
@@ -60,33 +61,33 @@
 {#if batch.open}
   <div class="scrim" role="presentation">
     <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="br-title">
-      <h2 id="br-title">Rename {batch.items.length} items</h2>
+      <h2 id="br-title">{msg("Rename")} {batch.items.length} {msg("items")}</h2>
       <label class="field">
-        <span>New name</span>
+        <span>{msg("New name")}</span>
         <input bind:this={input} bind:value={base} spellcheck="false" aria-describedby="br-hint" />
       </label>
       <p id="br-hint" class="hint" class:err={!!invalid}>
         {invalid || "Each item gets this name and a number, in list order, and keeps its own extension."}
       </p>
-      <div class="preview" role="list" aria-label="Preview">
+      <div class="preview" role="list" aria-label={msg("Preview")}>
         {#each batch.items as it, i (it.path)}
           {@const bad = taken.has(targets[i].toLowerCase())}
           <div class="prow" class:bad role="listitem">
             <span class="old" title={baseName(it.path)}>{baseName(it.path)}</span>
             <span class="glyph arrow" aria-hidden="true">&#xE72A;</span>
             <span class="new" title={names[i]}>{names[i]}</span>
-            {#if bad}<span class="why">name taken</span>{/if}
+            {#if bad}<span class="why">{msg("name taken")}</span>{/if}
           </div>
         {/each}
       </div>
       {#if clashes}
         <p class="hint err">
-          {clashes === 1 ? "1 new name is" : `${clashes} new names are`} already used in that folder; those items keep their names.
+          {clashes === 1 ? "1 new name is" : `${clashes} new names are`} {msg("already used in that folder; those items keep their names.")}
         </p>
       {/if}
       <div class="btns">
-        <button class="btn primary" disabled={!!invalid} onclick={go}>Rename</button>
-        <button class="btn" onclick={() => (batch.open = false)}>Cancel</button>
+        <button class="btn primary" disabled={!!invalid} onclick={go}>{msg("Rename")}</button>
+        <button class="btn" onclick={() => (batch.open = false)}>{msg("Cancel")}</button>
       </div>
     </div>
   </div>

@@ -9,6 +9,8 @@ import * as archive from "./archive.svelte";
 import { settings, setSetting, setTheme } from "./settings.svelte";
 import { dialog } from "./ask.svelte";
 import type { Entry } from "./store.svelte";
+import { setMessages } from "./i18n.svelte";
+import { transferTab, dropTab, otherTabWindows } from "./tabtransfer";
 
 let fetching = 0;
 /// Every row of the current listing. A watcher refresh can replace the listing
@@ -40,6 +42,10 @@ invoke<boolean>("e2e_enabled")
       settings,
       setSetting,
       setTheme,
+      setMessages,
+      transferTab,
+      dropTab,
+      otherTabWindows,
       dialog,
       invoke,
       idle: () => store.listingIdle() && !ops.opsBusy() && !fetching,

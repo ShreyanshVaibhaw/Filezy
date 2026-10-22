@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { baseName, crumbs, displayPath, isArchiveName, isLibrary, isServer, isUnc, isWithin, joinPath, parentPath, rootOf, samePath } from "./paths.ts";
+import { baseName, crumbs, displayPath, isArchiveName, isLibrary, isServer, isUnc, isWithin, isWsl, pathKey, joinPath, parentPath, rootOf, samePath } from "./paths.ts";
 
 test("archive locations", () => {
   const root = "C:\\x\\a.zip|";
@@ -92,4 +92,16 @@ test("libraries", () => {
     { name: "Libraries", path: "C:\\Users\\me\\AppData\\Roaming\\Microsoft\\Windows\\Libraries" },
     { name: "Documents", path: lib },
   ]);
+});
+
+test("WSL mount roots and case-sensitive Linux paths", () => {
+  const root = "\\\\wsl.localhost\\Ubuntu";
+  assert.ok(isWsl(root) && isWsl("\\\\wsl$\\Ubuntu\\home"));
+  assert.equal(parentPath(root), null);
+  assert.equal(parentPath(root + "\\home"), root);
+  assert.ok(samePath(root + "\\home", "\\\\WSL.LOCALHOST\\ubuntu\\home"));
+  assert.ok(!samePath(root + "\\Home", root + "\\home"));
+  assert.ok(!isWithin(root + "\\Home\\file", root + "\\home"));
+  assert.equal(pathKey(root + "\\Home\\"), "\\\\wsl.localhost\\ubuntu\\Home");
+  assert.deepEqual(crumbs(root + "\\home"), [{ name: "Ubuntu", path: root }, { name: "home", path: root + "\\home" }]);
 });

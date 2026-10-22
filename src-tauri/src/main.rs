@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod archive;
+mod caption;
 mod clip;
 mod cloud;
 mod drives;
@@ -29,6 +30,7 @@ mod session;
 mod share;
 mod shellmenu;
 mod shellreg;
+mod shellplaces;
 mod watch;
 
 use listing::{Entry, Group, Keep, Kept, Listing};
@@ -627,7 +629,7 @@ fn rename_now(path: &str, new_name: &str) -> Result<String, String> {
         return Ok(path.to_string());
     }
     let to = paths::join(&parent, &name);
-    if !name.eq_ignore_ascii_case(old_name) && paths::attributes(&to).is_ok() {
+    if paths::identity(&to) != paths::identity(path) && paths::attributes(&to).is_ok() {
         return Err(format!("There is already a file with the name '{name}' in this location."));
     }
     std::fs::rename(paths::to_native(path), paths::to_native(&to)).map_err(|e| e.to_string())?;
@@ -1127,13 +1129,93 @@ async fn recycle_empty(app: AppHandle) -> Result<(), String> {
 /// Ctrl+N or "Open in new window": another instance of this app, optionally
 /// opening a folder.
 #[tauri::command]
-fn new_window(path: Option<String>) -> Result<(), String> {
+fn new_window(path: Option<String>, transfer: Option<String>) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let mut cmd = std::process::Command::new(exe);
     if let Some(p) = path {
         cmd.arg(p);
     }
+    if let Some(token) = transfer {
+        if token.len() != 36 || !token.chars().all(|c| c.is_ascii_hexdigit() || c == '-') { return Err("Invalid tab transfer token.".into()); }
+        cmd.arg(format!("--filezy-tab={token}"));
+    }
     cmd.spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn window_identity(app: AppHandle) -> String { owner(&app).to_string() }
+
+/// Convert the captured pointer's client coordinates using this window's DPI,
+/// then ask Windows which top-level window is under it, even across monitors.
+#[tauri::command]
+fn window_at(x: f64, y: f64, scale: Option<f64>, app: AppHandle) -> Result<String, String> {
+    use windows::Win32::Foundation::{HWND, POINT};
+    use windows::Win32::Graphics::Gdi::ClientToScreen;
+    use windows::Win32::UI::WindowsAndMessaging::{GetAncestor, WindowFromPoint, GA_ROOT};
+    if !x.is_finite() || !y.is_finite() { return Err("Invalid drop point.".into()); }
+    let window = app.get_webview_window("main").ok_or("No window")?;
+    let scale = scale.unwrap_or(window.scale_factor().map_err(|e| e.to_string())?);
+    if !scale.is_finite() || !(0.5..=8.0).contains(&scale) { return Err("Invalid display scale.".into()); }
+    let mut point = POINT { x: (x * scale).round() as i32, y: (y * scale).round() as i32 };
+    unsafe {
+        if !ClientToScreen(HWND(owner(&app) as *mut _), &mut point).as_bool() { return Err("The drop point could not be located.".into()); }
+        Ok((GetAncestor(WindowFromPoint(point), GA_ROOT).0 as isize).to_string())
+    }
+}
+
+#[tauri::command]
+fn tab_launch_token() -> Option<String> {
+    std::env::args().find_map(|arg| arg.strip_prefix("--filezy-tab=").map(str::to_string))
+}
+
+#[tauri::command]
+async fn caption_place(place: caption::Place, app: AppHandle) -> Result<(), String> {
+    let parent = owner(&app);
+    on_main(&app, move || caption::place(parent, place.scale, place)).await?
+}
+
+/// Renderer scaling tests never change the user's Windows display settings.
+#[tauri::command]
+fn e2e_zoom(scale: f64, app: AppHandle) -> Result<(), String> {
+    if !e2e() { return Err("not a test session".into()); }
+    if !scale.is_finite() || !(0.5..=2.0).contains(&scale) { return Err("Invalid test scale.".into()); }
+    app.get_webview_window("main").ok_or("No window")?.set_zoom(scale).map_err(|e| e.to_string())
+}
+
+/// Move only this disposable test window; never alter monitor settings or the
+/// user's other windows. Returning native monitor DPI makes the test evidence
+/// distinguish renderer zoom from an actual monitor transition.
+#[tauri::command]
+fn e2e_displays(index: Option<usize>, app: AppHandle) -> Result<serde_json::Value, String> {
+    if !e2e() { return Err("not a test session".into()); }
+    let window = app.get_webview_window("main").ok_or("No window")?;
+    let monitors = window.available_monitors().map_err(|e| e.to_string())?;
+    if let Some(index) = index {
+        let monitor = monitors.get(index).ok_or("No such monitor")?;
+        window.set_position(tauri::PhysicalPosition::new(monitor.position().x + 40, monitor.position().y + 40)).map_err(|e| e.to_string())?;
+    }
+    Ok(serde_json::Value::Array(monitors.iter().map(|m| serde_json::json!({
+        "name": m.name(), "x": m.position().x, "y": m.position().y,
+        "width": m.size().width, "height": m.size().height, "scale": m.scale_factor()
+    })).collect()))
+}
+
+#[tauri::command]
+async fn shell_list(path: String, devices_only: bool) -> Result<shellplaces::Folder, String> {
+    let path = if devices_only { shellplaces::THIS_PC.to_string() } else { path };
+    tauri::async_runtime::spawn_blocking(move || shellplaces::list(&path, devices_only)).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn wsl_roots() -> Vec<(String, String)> { shellplaces::wsl_roots() }
+
+#[tauri::command]
+async fn shell_copy_out(paths: Vec<String>, app: AppHandle) -> Result<Option<OpResult>, String> {
+    if paths.is_empty() || paths.len() > 10_000 { return Err("Select between 1 and 10,000 device items to copy.".into()); }
+    let parent = owner(&app);
+    let dest = on_main(&app, move || pick::folder(parent, "", "Copy device items to folder")).await??;
+    let Some(dest) = dest else { return Ok(None) };
+    Ok(Some(run_op(Op::Copy { srcs: paths, dest }, &app).await?))
 }
 
 #[derive(Serialize, Debug)]
@@ -1180,12 +1262,14 @@ fn launch_target() -> Option<LaunchTarget> {
 }
 
 fn parse_launch(args: Vec<String>) -> Option<LaunchTarget> {
-    let joined = args.join(" ");
+    // ExtraCursor adds the debugger switch to the app's arguments. It is not
+    // part of a requested path, nor is the internal tab-handoff token.
+    let joined = args.into_iter().filter(|s| !s.starts_with("--remote-debugging-port=") && !s.starts_with("--filezy-tab=")).collect::<Vec<_>>().join(" ");
     let raw = joined.trim();
     if raw.is_empty() {
         return None;
     }
-    if raw.len() > 8 && raw[..8].eq_ignore_ascii_case("/select,") {
+    if raw.get(..8).is_some_and(|prefix| prefix.eq_ignore_ascii_case("/select,")) {
         let file = raw[8..].trim().trim_matches('"').to_string();
         return Some(LaunchTarget { path: paths::parent(&file)?, select: Some(paths::file_name(&file).to_string()) });
     }
@@ -1397,8 +1481,17 @@ fn main() {
             cloud_pin,
             open_terminal,
             new_window,
+            window_identity,
+            window_at,
+            tab_launch_token,
+            caption_place,
+            shell_list,
+            shell_copy_out,
+            wsl_roots,
             is_installed,
             e2e_enabled,
+            e2e_zoom,
+            e2e_displays,
             e2e_drag,
             e2e_arm_drag,
             e2e_drag_outcome,
@@ -1430,6 +1523,10 @@ mod tests {
     #[test]
     fn launch_arguments() {
         assert!(parse_launch(vec![]).is_none());
+        assert!(parse_launch(vec!["--remote-debugging-port=9300".into(), "--filezy-tab=token".into()]).is_none());
+        let t = parse_launch(vec![r"C:\My Files\Ünï".into(), "--remote-debugging-port=9300".into()]).unwrap();
+        assert_eq!(t.path, r"C:\My Files\Ünï");
+        assert_eq!(parse_launch(vec!["日本語のフォルダー".into()]).unwrap().path, "日本語のフォルダー");
         let t = parse_launch(vec![r"C:\My Files\Ünï".into()]).unwrap();
         assert_eq!((t.path.as_str(), t.select), (r"C:\My Files\Ünï", None));
         // Explorer's form, as the shell splits it at the space inside the path.

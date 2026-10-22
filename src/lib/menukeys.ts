@@ -7,6 +7,7 @@
 // keyboard opens them by sending that same event.
 
 export function menuKeys(node: HTMLElement, close: () => void) {
+  const fitted = fitMenu(node);
   const returnTo = document.activeElement as HTMLElement | null;
   const isSub = node.classList.contains("submenu");
   node.setAttribute("role", "menu");
@@ -85,6 +86,7 @@ export function menuKeys(node: HTMLElement, close: () => void) {
   node.addEventListener("keydown", onKey);
   return {
     destroy() {
+      fitted.destroy();
       node.removeEventListener("keydown", onKey);
       // Give focus back unless the user already moved it somewhere else.
       const a = document.activeElement;
@@ -99,14 +101,30 @@ export function menuKeys(node: HTMLElement, close: () => void) {
 /// reusing the element) places it again.
 export function fitMenu(node: HTMLElement, _key?: unknown) {
   const fit = () => {
+    node.style.maxWidth = `${Math.max(0, innerWidth - 8)}px`;
+    node.style.minWidth = `min(200px, calc(100vw - 8px))`;
     node.style.maxHeight = `${innerHeight - 8}px`;
+    // A fixed flyout escapes the scrolling parent instead of being clipped.
+    // Ordinary submenus are repositioned beside their owning item below.
     node.style.overflowY = "auto";
     const r = node.getBoundingClientRect();
-    if (r.bottom > innerHeight - 4) node.style.top = `${Math.max(4, innerHeight - 4 - r.height)}px`;
-    if (r.right > innerWidth - 4) node.style.left = `${Math.max(4, innerWidth - 4 - r.width)}px`;
+    if (node.classList.contains("submenu")) {
+      const edge = node.parentElement?.getBoundingClientRect();
+      if (edge) {
+        node.style.position = "fixed";
+        node.style.left = `${edge.right + r.width <= innerWidth - 4 ? edge.right - 4 : Math.max(4, edge.left - r.width + 4)}px`;
+        node.style.top = `${Math.max(4, Math.min(edge.top - 4, innerHeight - 4 - r.height))}px`;
+      }
+    } else {
+      if (r.bottom > innerHeight - 4) node.style.top = `${Math.max(4, innerHeight - 4 - r.height)}px`;
+      if (r.right > innerWidth - 4) node.style.left = `${Math.max(4, innerWidth - 4 - r.width)}px`;
+      if (r.left < 4) node.style.left = "4px";
+      if (r.top < 4) node.style.top = "4px";
+    }
   };
   const ro = new ResizeObserver(fit);
   ro.observe(node);
+  window.addEventListener("resize", fit);
   fit();
   return {
     update() {
@@ -114,6 +132,7 @@ export function fitMenu(node: HTMLElement, _key?: unknown) {
     },
     destroy() {
       ro.disconnect();
+      window.removeEventListener("resize", fit);
     },
   };
 }
