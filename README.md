@@ -5,7 +5,11 @@ Filezy uses Windows shell operations for copying, moving, conflicts, progress di
 
 ## Highlights
 
-- Virtualized file lists, eight views including Content, configurable metadata columns, thumbnails, sorting and grouping.
+- Virtualized file lists, nine views including Content and a month-grouped Gallery, configurable metadata columns, thumbnails, sorting and grouping.
+- Tools: checksums (MD5, SHA-1, SHA-256, SHA-512 through Windows CNG) with a paste-to-verify field, byte-for-byte comparison of two files, and cancellable folder sizes that count links without following them.
+- Bulk rename by numbering, find and replace (plain or regular expression) or templates (`{name}`, `{n:3}`, `{date}`, `{parent}`), with a preview and one-step undo.
+- Saved searches and workspaces (named sets of tabs), renamed and deleted from Settings.
+- Dual pane as two windows side by side, with Copy to and Move to the other window's folder in the item menu.
 - Tabs with history, saved sessions, reordering and transfers between windows.
 - Windows context menus, Properties, Open With, clipboard interop and OLE drag and drop.
 - Home, Quick access, Favorites, Recent files, drive and network browsing, Libraries and registered cloud roots.
@@ -28,8 +32,9 @@ During 120 scripted scroll steps, renderer frame intervals had a median of 12.2 
 The viewport was 1280 by 820 CSS pixels at 125 percent scaling on Windows 11 build 26200.9711, with a Core i5-10300H, 8 logical processors and 31.8 GB RAM.
 Other applications were running; the compiler had finished before measurement.
 After the run, Filezy used 101.4 MiB working set; Filezy plus six WebView2 processes used 527.6 MiB, counting shared pages more than once, and 257.1 MiB private memory.
-The renderer navigation-to-load interval was 368 ms; this excludes process and WebView startup and is not an end-to-end launch measurement.
-Cold-cache listing and end-to-end startup remain unmeasured.
+The renderer navigation-to-load interval was 368 ms; this excludes process and WebView startup.
+A later 23 October production build, started with a 1,000-file folder by `node scripts/e2e/startup.mjs`, showed its first rows a median of 1.42 s after process launch across five starts (1.29-1.59 s), and 1.39 s on the first start with a new WebView2 profile.
+Those starts used a warm OS cache; cold-cache listing and startup remain unmeasured.
 The retained ExtraCursor case in `scripts/e2e/extracursor-cases.mjs` exercises the production UI without test hooks.
 
 On 12 October 2026, a release build opened 100,000 empty files in a median of 197 ms across five runs with a warm OS cache.

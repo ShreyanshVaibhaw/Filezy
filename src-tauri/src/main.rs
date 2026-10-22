@@ -31,6 +31,7 @@ mod share;
 mod shellmenu;
 mod shellreg;
 mod shellplaces;
+mod tools;
 mod watch;
 
 use listing::{Entry, Group, Keep, Kept, Listing};
@@ -1264,7 +1265,7 @@ fn launch_target() -> Option<LaunchTarget> {
 fn parse_launch(args: Vec<String>) -> Option<LaunchTarget> {
     // ExtraCursor adds the debugger switch to the app's arguments. It is not
     // part of a requested path, nor is the internal tab-handoff token.
-    let joined = args.into_iter().filter(|s| !s.starts_with("--remote-debugging-port=") && !s.starts_with("--filezy-tab=")).collect::<Vec<_>>().join(" ");
+    let joined = args.into_iter().filter(|s| !s.starts_with("--remote-debugging-port=") && !s.starts_with("--filezy-tab=") && !s.starts_with("--filezy-snap=")).collect::<Vec<_>>().join(" ");
     let raw = joined.trim();
     if raw.is_empty() {
         return None;
@@ -1394,7 +1395,8 @@ fn main() {
                 // The window starts hidden (tauri.conf.json) and shows where it
                 // was last closed, so it never jumps there after appearing.
                 let hwnd = w.hwnd().map(|h| h.0 as isize).unwrap_or(0);
-                if hwnd == 0 || !session::restore(hwnd) {
+                // A window split_view opened takes its half of the monitor instead.
+                if hwnd == 0 || !(tools::apply_snap(hwnd) || session::restore(hwnd)) {
                     let _ = w.show();
                 }
                 w.on_window_event(move |e| match e {
@@ -1510,7 +1512,12 @@ fn main() {
             drives,
             special_dirs,
             home_dir,
-            list_dirs
+            list_dirs,
+            tools::cancel_job,
+            tools::hash_files,
+            tools::compare_files,
+            tools::measure_sizes,
+            tools::split_view
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -1523,7 +1530,7 @@ mod tests {
     #[test]
     fn launch_arguments() {
         assert!(parse_launch(vec![]).is_none());
-        assert!(parse_launch(vec!["--remote-debugging-port=9300".into(), "--filezy-tab=token".into()]).is_none());
+        assert!(parse_launch(vec!["--remote-debugging-port=9300".into(), "--filezy-tab=token".into(), "--filezy-snap=0,0,960,1040".into()]).is_none());
         let t = parse_launch(vec![r"C:\My Files\Ünï".into(), "--remote-debugging-port=9300".into()]).unwrap();
         assert_eq!(t.path, r"C:\My Files\Ünï");
         assert_eq!(parse_launch(vec!["日本語のフォルダー".into()]).unwrap().path, "日本語のフォルダー");

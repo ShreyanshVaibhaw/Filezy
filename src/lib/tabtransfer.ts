@@ -32,9 +32,14 @@ async function receiveOne(key: string, token?: string): Promise<boolean> {
   } catch (error) { app.status = `The tab could not be moved. ${error}`; return false; }
 }
 
+/// Tell other windows this one is open, and its active folder: the target of
+/// their Copy to / Move to. Also called whenever that folder changes.
+export function advertise() {
+  if (identity) localStorage.setItem(WINDOWS + identity, JSON.stringify({ stamp: Date.now(), name: tabs.map((t) => t.path).join(", ") || "Filezy", path: app.path }));
+}
+
 export async function initTabTransfers(): Promise<{ imported: boolean; destroy: () => void }> {
   identity = await invoke<string>("window_identity");
-  const advertise = () => localStorage.setItem(WINDOWS + identity, JSON.stringify({ stamp: Date.now(), name: tabs.map((t) => t.path).join(", ") || "Filezy" }));
   advertise();
   const heartbeat = setInterval(advertise, 5000);
   const listener = (event: StorageEvent) => { if (event.key?.startsWith(PREFIX)) void receive(event.key); };
@@ -51,13 +56,13 @@ export async function initTabTransfers(): Promise<{ imported: boolean; destroy: 
   } };
 }
 
-export function otherTabWindows(): { id: string; name: string }[] {
+export function otherTabWindows(): { id: string; name: string; path: string }[] {
   const out = [];
   for (const key of Object.keys(localStorage)) {
     if (!key.startsWith(WINDOWS) || key === WINDOWS + identity) continue;
     try {
       const record = JSON.parse(localStorage.getItem(key)!);
-      if (Date.now() - record.stamp < 15_000) out.push({ id: key.slice(WINDOWS.length), name: String(record.name) });
+      if (Date.now() - record.stamp < 15_000) out.push({ id: key.slice(WINDOWS.length), name: String(record.name), path: String(record.path ?? "") });
     } catch { /* A closing window may have removed the record. */ }
   }
   return out;

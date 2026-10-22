@@ -11,6 +11,7 @@
   import { toggleHidden, clearFolderPrefs, folderPrefsCount, refresh, clearRecent, app, HOME, THIS_PC } from "./store.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import Toggle from "./Toggle.svelte";
+  import { saved, runSearch, openWorkspace, renameSaved, deleteSaved } from "./saved.svelte";
 
   // "Open in Filezy" in Explorer's folder menus: the registry says whether it's there.
   let explorerEntry = $state(false);
@@ -49,6 +50,7 @@
     ["icons_m", "Medium icons"],
     ["icons_l", "Large icons"],
     ["icons_xl", "Extra large icons"],
+    ["gallery", "Gallery"],
   ];
   const SORTS = [
     ["name", "Name"],
@@ -260,6 +262,45 @@
             {clearArmed ? "Click again to clear" : "Clear"}
           </button>
         </div>
+
+        <h2 class="section">{msg("Saved searches and workspaces")}</h2>
+        {#each saved.searches as s, i (s.name)}
+          <div class="row">
+            <span class="glyph rowicon">&#xE721;</span>
+            <div class="rowlabel">
+              <div class="rowname">{s.name}</div>
+              <div class="rowdesc" title={s.root}>"{s.query}" in {s.root}</div>
+            </div>
+            <div class="rowbtns">
+              <button class="btn" onclick={() => runSearch(s)} aria-label={`${msg("Search")} ${s.name}`}>{msg("Search")}</button>
+              <button class="btn" onclick={() => renameSaved("searches", i)} aria-label={`${msg("Rename")} ${s.name}`}>{msg("Rename")}</button>
+              <button class="btn" onclick={() => deleteSaved("searches", i)} aria-label={`${msg("Delete")} ${s.name}`}>{msg("Delete")}</button>
+            </div>
+          </div>
+        {/each}
+        {#each saved.workspaces as w, i (w.name)}
+          <div class="row">
+            <span class="glyph rowicon">&#xE737;</span>
+            <div class="rowlabel">
+              <div class="rowname">{w.name}</div>
+              <div class="rowdesc" title={w.tabs.join("\n")}>{w.tabs.length} {w.tabs.length === 1 ? msg("tab") : msg("tabs")}: {w.tabs.join(", ")}</div>
+            </div>
+            <div class="rowbtns">
+              <button class="btn" onclick={() => openWorkspace(w)} aria-label={`${msg("Open")} ${w.name}`}>{msg("Open")}</button>
+              <button class="btn" onclick={() => renameSaved("workspaces", i)} aria-label={`${msg("Rename")} ${w.name}`}>{msg("Rename")}</button>
+              <button class="btn" onclick={() => deleteSaved("workspaces", i)} aria-label={`${msg("Delete")} ${w.name}`}>{msg("Delete")}</button>
+            </div>
+          </div>
+        {/each}
+        {#if !saved.searches.length && !saved.workspaces.length}
+          <div class="row">
+            <span class="glyph rowicon">&#xE734;</span>
+            <div class="rowlabel">
+              <div class="rowname">{msg("Nothing saved yet")}</div>
+              <div class="rowdesc">{msg("Save a search from Search options, or this window's tabs from See more > Save tabs as workspace.")}</div>
+            </div>
+          </div>
+        {/if}
 
         <h2 class="section">{msg("Privacy")}</h2>
         <div class="row">
@@ -658,6 +699,7 @@
     font-size: 12px;
     color: var(--text-3);
     margin-top: 2px;
+    overflow-wrap: anywhere;
   }
   .version {
     font-size: 12px;
@@ -700,6 +742,14 @@
   }
   .pathinput {
     min-width: 240px;
+  }
+  .rowbtns {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  @media (max-width: 640px) {
+    .rowbtns { flex-direction: column; }
   }
   .btn {
     height: 32px;

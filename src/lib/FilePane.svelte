@@ -11,8 +11,10 @@
   } from "./store.svelte";
   import {
     commitRename, copySel, paste, del, newFolder, newFile, startRename, openInNewTabs,
-    openInNewWindow, openFileLocation, createShortcuts, pasteShortcuts, shareSel, propertiesSel, pinSelected,
+    openInNewWindow, openFileLocation, createShortcuts, pasteShortcuts, shareSel, propertiesSel, pinSelected, sendSelTo,
   } from "./ops.svelte";
+  import { checksumsSel, compareSel, sizesSel, analyzeFolder } from "./tools.svelte";
+  import { otherTabWindows } from "./tabtransfer";
   import { selectRange, toggleRow, focusedRow, openSelection } from "./selection.svelte";
   import type { Entry } from "./store.svelte";
   import { settings, menuOn, anyMenuOn } from "./settings.svelte";
@@ -30,6 +32,8 @@
     icon: number;
     vertical?: boolean;
     tile?: boolean;
+    /** Gallery: square cropped thumbnails, grouped by month (store setView). */
+    gallery?: boolean;
     flow?: "column"; // Explorer's List view: top-to-bottom, then next column
   }
   const VIEWS: Record<string, ViewDef> = {
@@ -41,6 +45,7 @@
     icons_l: { grid: true, rowH: 166, cellW: 140, icon: 96, vertical: true },
     icons_xl: { grid: true, rowH: 300, cellW: 268, icon: 256, vertical: true },
     tiles: { grid: true, rowH: 68, cellW: 272, icon: 48, tile: true },
+    gallery: { grid: true, rowH: 210, cellW: 196, icon: 176, vertical: true, gallery: true },
   };
 
   const HEADER = 40;
@@ -443,10 +448,13 @@
   const ROW_IDS = [
     ...STRIP_IDS, "file.open", "file.opennewtab", "file.opennewwindow", "file.openlocation", "file.openwith", "file.extractall",
     "file.keep", "file.freeup", "file.pin", "file.favorite", "file.compress", "file.copypath", "file.shortcut", "file.share", "file.properties", "file.moreoptions",
+    "file.sendto", "file.checksum", "file.compare", "file.size",
   ];
   // Inside an archive: look, open and extract; nothing in it changes yet.
   const inArchive = $derived(isArchive(app.path));
-  const BLANK_IDS = ["blank.refresh", "blank.paste", "blank.pasteshortcut", "blank.new", "blank.selectall", "blank.terminal"];
+  const BLANK_IDS = ["blank.refresh", "blank.paste", "blank.pasteshortcut", "blank.new", "blank.selectall", "blank.terminal", "blank.sizes"];
+  // Folders other Filezy windows show: Copy to / Move to targets (dual pane).
+  let otherFolders = $state<string[]>([]);
 
   function onContext(ev: { clientX: number; clientY: number; shiftKey?: boolean; preventDefault(): void }, i: number | null) {
     ev.preventDefault();
@@ -474,6 +482,7 @@
     const x = ev.clientX;
     const y = ev.clientY;
     ctx = { x, y, at: { x: ev.clientX, y: ev.clientY }, onRow: i !== null };
+    otherFolders = [...new Set(otherTabWindows().map((w) => w.path))].filter((p) => p && !isVirtual(p) && !isArchive(p) && p.toLowerCase() !== app.path.toLowerCase());
     ctxItems = null;
     ctxNote = "";
     const seq = ++ctxSeq;
@@ -1155,6 +1164,7 @@
             class="gcell"
             class:vert={v.vertical}
             class:tile={v.tile}
+            class:gallery={v.gallery}
             class:selected={isSelected(i)}
             class:focused={app.focus === i}
             class:cut={!!e && isCut(e)}
@@ -1208,7 +1218,7 @@
                     spellcheck="false"
                   />
                 {:else}
-                  <span class="gname" class:clamp2={v.vertical}>{displayName(e)}</span>
+                  <span class="gname" class:clamp2={v.vertical && !v.gallery}>{displayName(e)}</span>
                   {#if v.tile}
                     <span class="gsub">{typeOf(e)}</span>
                     {#if !e.is_dir}<span class="gsub">{fmtSizeKB(e)}</span>{/if}
@@ -1377,6 +1387,33 @@
           <span class="glyph">&#xE8C8;</span> {msg("Copy as path")}
         </button>
       {/if}
+      {#if menuOn("file.sendto") && !inArchive}
+        {#each otherFolders as dest (dest)}
+          <button class="menu-item" onclick={() => { ctx = null; sendSelTo(dest, false); }} title={dest}>
+            <span class="glyph">&#xE8C8;</span> {msg("Copy to")} {folderName(dest)}
+          </button>
+          {#if can("change")}
+            <button class="menu-item" onclick={() => { ctx = null; sendSelTo(dest, true); }} title={dest}>
+              <span class="glyph">&#xE8F0;</span> {msg("Move to")} {folderName(dest)}
+            </button>
+          {/if}
+        {/each}
+      {/if}
+      {#if !inArchive && menuOn("file.checksum") && ctxFilesOnly}
+        <button class="menu-item" onclick={() => { ctx = null; checksumsSel(); }}>
+          <span class="glyph">&#xE8D7;</span> {msg("Checksums")}
+        </button>
+      {/if}
+      {#if !inArchive && menuOn("file.compare") && ctxFilesOnly && multi === 2}
+        <button class="menu-item" onclick={() => { ctx = null; compareSel(); }}>
+          <span class="glyph">&#xE8F1;</span> {msg("Compare files")}
+        </button>
+      {/if}
+      {#if !inArchive && menuOn("file.size")}
+        <button class="menu-item" onclick={() => { ctx = null; sizesSel(); }}>
+          <span class="glyph">&#xEDA2;</span> {msg("Calculate size")}
+        </button>
+      {/if}
       {#if menuOn("file.shortcut") && !inArchive}
         <button class="menu-item" onclick={() => { ctx = null; createShortcuts(); }}>
           <span class="glyph">&#xE71B;</span> {msg("Create shortcut")}
@@ -1472,6 +1509,12 @@
         <div class="menu-sep"></div>
         <button class="menu-item" onclick={() => { ctx = null; extractAll(); }}>
           <span class="glyph">&#xE8B7;</span> {msg("Extract all...")}
+        </button>
+      {/if}
+      {#if menuOn("blank.sizes") && !inArchive && !app.search && !isServer(app.path)}
+        <div class="menu-sep"></div>
+        <button class="menu-item" onclick={() => { ctx = null; analyzeFolder(); }}>
+          <span class="glyph">&#xEDA2;</span> {msg("Folder sizes")}
         </button>
       {/if}
       {#if menuOn("blank.terminal") && !inArchive}
@@ -1750,6 +1793,27 @@
     gap: 2px;
     padding-top: 8px;
     text-align: center;
+  }
+  .gcell.gallery {
+    padding: 6px 6px 0;
+  }
+  .gcell.gallery .gicon {
+    width: 100%;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  /* Thumbnails fill their square, cropped, as in Windows' Gallery. */
+  .gcell.gallery .gicon img {
+    width: 100%;
+    height: 100%;
+    max-width: none !important;
+    max-height: none !important;
+    object-fit: cover;
+  }
+  .gcell.gallery .gname {
+    font-size: 12px;
+    color: var(--text-2);
   }
   .gicon {
     display: flex;

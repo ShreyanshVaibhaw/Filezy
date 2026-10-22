@@ -60,6 +60,7 @@ features = [
   "Foundation_Collections",
   "Win32_Storage_CloudFilters",
   "Win32_System_Threading",
+  "Win32_Security_Cryptography",
 ]
 
 [dev-dependencies.windows]

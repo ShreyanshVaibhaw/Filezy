@@ -24,6 +24,11 @@
   // Keep the record for "Reopen tabs from last time" current as tabs open,
   // move and close (it reads every tab's location and the active tab).
   $effect(saveSession);
+  // Other windows offer this window's folder as a Copy to / Move to target.
+  $effect(() => {
+    void app.path;
+    advertise();
+  });
   import { moveFocus, toggleRow, typeToSelect, openSelection, focusedRow } from "./lib/selection.svelte";
   import { del, copySel, paste, newFolder, startRename, undo, redo, propertiesSel } from "./lib/ops.svelte";
   import BatchRename from "./lib/BatchRename.svelte";
@@ -34,7 +39,8 @@
   import { settings, setSetting, showPane } from "./lib/settings.svelte";
   import DetailsPane from "./lib/DetailsPane.svelte";
   import Splitter from "./lib/Splitter.svelte";
-  import { initTabTransfers } from "./lib/tabtransfer";
+  import { initTabTransfers, advertise } from "./lib/tabtransfer";
+  import ToolDialog from "./lib/ToolDialog.svelte";
   import ShellPane from "./lib/ShellPane.svelte";
   import { isShellLocation } from "./lib/shellplaces";
 
@@ -261,6 +267,7 @@
 <Dialog />
 <ExtractDialog />
 <BatchRename />
+<ToolDialog />
 
 <style>
   .root {

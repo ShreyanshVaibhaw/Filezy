@@ -523,10 +523,10 @@ export async function startRename() {
 }
 
 // ---- batch rename ----
-// Explorer's multi-item rename: every selected item becomes "Name (1)",
-// "Name (2)"... in list order, each keeping its own extension. A preview shows
-// the result, and names that would collide with other items, before anything
-// changes.
+// Explorer's multi-item rename ("Name (1)", "Name (2)"... in list order, each
+// keeping its own extension), plus find/replace and template rules. A preview
+// shows the result, and names that would collide with other items, before
+// anything changes.
 
 export interface BatchItem {
   path: string;
@@ -544,23 +544,10 @@ export async function openBatchRename() {
   batch.open = true;
 }
 
-/** The extension an item keeps through a batch rename ("" for folders). */
-export function extOf(it: BatchItem): string {
-  if (it.is_dir) return "";
-  const n = baseName(it.path);
-  const dot = n.lastIndexOf(".");
-  return dot > 0 ? n.slice(dot) : "";
-}
-
-/** "Base (n).ext" for each item, in list order. */
-export function batchNames(base: string, items: BatchItem[]): string[] {
-  return items.map((it, i) => `${base.trim()} (${i + 1})${extOf(it)}`);
-}
-
-async function commitBatchImpl(base: string) {
+/// Rename the batch to `names` (renamerules.ts), in list order.
+async function commitBatchImpl(names: string[]) {
   const items = batch.items;
   batch.open = false;
-  const names = batchNames(base, items);
   let res: { from: string; to: string; error: string | null }[];
   try {
     res = await invoke("rename_many", { items: items.map((it, i) => [it.path, names[i]]) });
@@ -646,6 +633,13 @@ export async function propertiesSel() {
   } catch (e) {
     app.status = String(e);
   }
+}
+
+/// Copy to / Move to another window's folder (the dual-pane workflow).
+export async function sendSelTo(dest: string, move: boolean) {
+  if (move ? !can("change") : isArchive(app.path)) return;
+  const items = await withSel((sel) => invoke<BatchItem[]>("sel_items", { sel })).catch((e) => ((app.status = String(e)), [] as BatchItem[]));
+  if (items.length) await dropOn(items.map((it) => it.path), dest, move ? "move" : "copy");
 }
 
 /// Pin (or unpin) every selected folder, not just the first.

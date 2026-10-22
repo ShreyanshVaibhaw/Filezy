@@ -1,17 +1,26 @@
 <script lang="ts">
-  import { dialog } from "./ask.svelte";
+  import { dialog, setPromptText } from "./ask.svelte";
 
   let okBtn: HTMLButtonElement | undefined = $state();
+  let field: HTMLInputElement | undefined = $state();
+  let text = $state("");
   let returnFocus: Element | null = null;
 
   $effect(() => {
     if (dialog.ask) {
       returnFocus = document.activeElement;
-      queueMicrotask(() => okBtn?.focus());
+      text = dialog.ask.value ?? "";
+      queueMicrotask(() => {
+        if (field) {
+          field.focus();
+          field.select();
+        } else okBtn?.focus();
+      });
     }
   });
 
   function answer(ok: boolean) {
+    setPromptText(text);
     dialog.ask?.resolve(ok);
     (returnFocus as HTMLElement | null)?.focus?.();
   }
@@ -23,9 +32,12 @@
     if (ev.key === "Escape") {
       ev.preventDefault();
       answer(false);
+    } else if (ev.key === "Enter" && ev.target === field) {
+      ev.preventDefault();
+      answer(true);
     } else if (ev.key === "Tab") {
-      // Keep focus on the two buttons.
-      const btns = [...document.querySelectorAll<HTMLButtonElement>(".dlg button")];
+      // Keep focus inside the dialog.
+      const btns = [...document.querySelectorAll<HTMLElement>(".dlg input, .dlg button")];
       const i = btns.indexOf(document.activeElement as HTMLButtonElement);
       btns[(i + (ev.shiftKey ? btns.length - 1 : 1)) % btns.length]?.focus();
       ev.preventDefault();
@@ -40,6 +52,9 @@
     <div class="dlg" role="alertdialog" aria-modal="true" aria-labelledby="dlg-title" aria-describedby="dlg-msg">
       <h2 id="dlg-title">{dialog.ask.title}</h2>
       <p id="dlg-msg">{dialog.ask.message}</p>
+      {#if dialog.ask.value !== undefined}
+        <input class="field" bind:this={field} bind:value={text} spellcheck="false" aria-labelledby="dlg-msg" />
+      {/if}
       <div class="btns">
         <button class="btn primary" class:danger={dialog.ask.danger} bind:this={okBtn} onclick={() => answer(true)}>
           {dialog.ask.ok}
@@ -51,6 +66,17 @@
 {/if}
 
 <style>
+  .field {
+    width: 100%;
+    height: 32px;
+    margin: -8px 0 20px;
+    padding: 0 10px;
+    background: var(--input-bg);
+    border: 1px solid var(--stroke);
+    border-bottom: 2px solid var(--accent);
+    border-radius: 4px;
+    user-select: text;
+  }
   .scrim {
     position: fixed;
     inset: 0;

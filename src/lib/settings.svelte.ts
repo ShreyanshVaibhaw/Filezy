@@ -69,7 +69,7 @@ const KEY = "settings";
 // Allowed values for the settings that are a choice, so a stored value from a
 // newer or hand-edited blob can't put the UI into a state it can't render.
 const CHOICES: Partial<Record<keyof Settings, string[]>> = {
-  defaultView: ["details", "content", "list", "tiles", "icons_s", "icons_m", "icons_l", "icons_xl"],
+  defaultView: ["details", "content", "list", "tiles", "icons_s", "icons_m", "icons_l", "icons_xl", "gallery"],
   defaultSort: ["name", "modified", "type", "size", "created"],
   searchScope: ["folder", "subfolders"],
 };

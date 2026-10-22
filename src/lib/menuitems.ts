@@ -38,6 +38,10 @@ export const MENU_GROUPS: MenuGroup[] = [
       { id: "file.favorite", label: "Add to / Remove from Favorites (files)", glyph: "\uE734" },
       { id: "file.compress", label: "Compress to ZIP file", glyph: "\uF012" },
       { id: "file.copypath", label: "Copy as path", glyph: "\uE8C8" },
+      { id: "file.sendto", label: "Copy to / Move to another window's folder", glyph: "\uE8F0" },
+      { id: "file.checksum", label: "Checksums", glyph: "\uE8D7" },
+      { id: "file.compare", label: "Compare files (two files)", glyph: "\uE8F1" },
+      { id: "file.size", label: "Calculate size", glyph: "\uEDA2" },
       { id: "file.shortcut", label: "Create shortcut", glyph: "\uE71B" },
       { id: "file.share", label: "Share", glyph: "\uE72D" },
       { id: "file.properties", label: "Properties", glyph: "\uE90F" },
@@ -55,6 +59,7 @@ export const MENU_GROUPS: MenuGroup[] = [
       { id: "blank.new", label: "New", glyph: "\uE710" },
       { id: "blank.selectall", label: "Select all", glyph: "\uE8B3" },
       { id: "blank.terminal", label: "Open in Terminal", glyph: "\uE756" },
+      { id: "blank.sizes", label: "Folder sizes", glyph: "\uEDA2" },
     ],
   },
   {

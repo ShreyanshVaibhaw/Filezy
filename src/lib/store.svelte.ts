@@ -353,8 +353,8 @@ export const SORT_KEYS = [
   "name", "modified", "type", "size", "created", "author", "category", "tags", "title",
   "location", "attributes", "status", "dimensions", "duration",
 ];
-export const VIEW_KEYS = ["details", "content", "list", "tiles", "icons_s", "icons_m", "icons_l", "icons_xl"];
-export const GROUP_KEYS = ["none", "name", "modified", "created", "type", "size"];
+export const VIEW_KEYS = ["details", "content", "list", "tiles", "icons_s", "icons_m", "icons_l", "icons_xl", "gallery"];
+export const GROUP_KEYS = ["none", "name", "modified", "created", "type", "size", "month"];
 
 function validPrefs(v: unknown): v is FolderPrefs {
   const p = v as FolderPrefs;
@@ -385,6 +385,7 @@ function loadFolderPrefs(): Record<string, FolderPrefs> {
 
 /// Fallback view for a folder the user has never customized, from Settings.
 function defaultPrefs(): FolderPrefs {
+  if (settings.defaultView === "gallery") return { s: "modified", a: false, v: "gallery", g: "month" };
   return { s: settings.defaultSort, a: settings.defaultAsc, v: settings.defaultView, g: "none" };
 }
 let folderPrefs: Record<string, FolderPrefs> = loadFolderPrefs();
@@ -432,9 +433,22 @@ function prefsFor(p: string): { sort: string; asc: boolean; view: string; group:
   return { sort: prefs.s, asc: prefs.a, view: prefs.v, group: auto ? prefs.s : prefs.g, auto };
 }
 
-export function setView(v: string) {
+/// Gallery brings its own arrangement, newest first in month groups; leaving
+/// it drops the month groups again.
+export async function setView(v: string) {
+  const was = app.view;
   app.view = v;
-  savePrefs();
+  if (v === "gallery" && app.groupKey !== "month") {
+    Object.assign(app, { sortKey: "modified", asc: false, groupKey: "month" });
+  } else if (was === "gallery" && v !== "gallery" && app.groupKey === "month") {
+    app.groupKey = "none";
+  } else {
+    return savePrefs();
+  }
+  groupAuto = false;
+  collapsedGroups.clear();
+  if (!app.search) savePrefs();
+  await arrangeNow(true);
 }
 
 // Reopen-closed-tab stack (Ctrl+Shift+T), session-only.

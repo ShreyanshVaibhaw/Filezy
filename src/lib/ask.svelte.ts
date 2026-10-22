@@ -7,6 +7,8 @@ export interface Ask {
   cancel: string;
   /** Destructive actions get a red OK button. */
   danger: boolean;
+  /** Set for a question that takes a line of text (prompt()). */
+  value?: string;
   resolve: (ok: boolean) => void;
 }
 
@@ -31,4 +33,29 @@ export function confirm(
       },
     };
   });
+}
+
+/** Ask for a line of text; null when cancelled or left blank. */
+export async function prompt(title: string, message: string, initial = "", ok = "Save"): Promise<string | null> {
+  dialog.ask?.resolve(false);
+  const answered = await new Promise<boolean>((resolve) => {
+    dialog.ask = {
+      title,
+      message,
+      ok,
+      cancel: "Cancel",
+      danger: false,
+      value: initial,
+      resolve: (yes) => {
+        dialog.ask = null;
+        resolve(yes);
+      },
+    };
+  });
+  return answered ? (last.trim() || null) : null;
+}
+// The prompt's text as the dialog last had it (the ask object is gone by then).
+let last = "";
+export function setPromptText(v: string) {
+  last = v;
 }

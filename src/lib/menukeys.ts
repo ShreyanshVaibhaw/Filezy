@@ -18,10 +18,18 @@ export function menuKeys(node: HTMLElement, close: () => void) {
       (b) => !b.disabled && b.closest(".menu") === node,
     );
 
-  for (const b of items()) {
-    if (!b.getAttribute("role")) b.setAttribute("role", "menuitem");
-    if (b.closest(".subwrap") && b.querySelector(".subchev")) b.setAttribute("aria-haspopup", "menu");
-  }
+  // Every entry is a menu item, including disabled ones and those that render
+  // after the menu opens (the selection's file check, shell extension entries).
+  const label = () => {
+    for (const b of node.querySelectorAll<HTMLButtonElement>("button")) {
+      if (b.closest(".menu") !== node) continue;
+      if (!b.getAttribute("role")) b.setAttribute("role", "menuitem");
+      if (b.closest(".subwrap") && b.querySelector(".subchev")) b.setAttribute("aria-haspopup", "menu");
+    }
+  };
+  label();
+  const watcher = new MutationObserver(label);
+  watcher.observe(node, { childList: true, subtree: true });
   // Mouse-opened menus focus too, so the keyboard can take over at any point.
   queueMicrotask(() => items()[0]?.focus({ preventScroll: true }));
 
@@ -86,6 +94,7 @@ export function menuKeys(node: HTMLElement, close: () => void) {
   node.addEventListener("keydown", onKey);
   return {
     destroy() {
+      watcher.disconnect();
       fitted.destroy();
       node.removeEventListener("keydown", onKey);
       // Give focus back unless the user already moved it somewhere else.

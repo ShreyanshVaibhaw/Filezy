@@ -417,6 +417,13 @@ pub fn group_bucket(e: &Entry, key: &str, now_ms: u64, tz_off_ms: i64) -> (u32, 
                 (7, "A long time ago".into())
             }
         }
+        // Gallery: one group per calendar month of the modified date, newest first.
+        "month" => {
+            const MONTHS: [&str; 12] =
+                ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+            let (y, m, _) = civil_from_days((e.modified as i64 + tz_off_ms).div_euclid(86_400_000));
+            (u32::MAX - (y as u32 * 12 + m), format!("{} {y}", MONTHS[m as usize - 1]))
+        }
         "size" => {
             if e.is_dir {
                 return (0, "Unspecified".into());
@@ -563,5 +570,9 @@ mod tests {
         assert_eq!(at(3), "Earlier this week");
         assert_eq!(at(7), "Last week");
         assert_eq!(at(4000), "A long time ago");
+        let month = |days_ago: u64| group_bucket(&e("x", false, 0, now - days_ago * DAY), "month", now, 0);
+        assert_eq!(month(0).1, "October 2024");
+        assert_eq!(month(31).1, "September 2024");
+        assert!(month(0).0 < month(31).0, "newest month first");
     }
 }

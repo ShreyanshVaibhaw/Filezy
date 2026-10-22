@@ -16,6 +16,15 @@
   import { invoke } from "@tauri-apps/api/core";
   import { selectNone, invertSelection } from "./selection.svelte";
   import { THEMES, setTheme, toggleCompact, settings, setSetting, showPane } from "./settings.svelte";
+  import { saved, saveSearch, runSearch, saveWorkspace, openWorkspace } from "./saved.svelte";
+  import { analyzeFolder } from "./tools.svelte";
+  import { isVirtual } from "./paths";
+
+  /// Dual pane: this window on the left half of the screen, a second one on the right.
+  function dualPane() {
+    invoke("split_view", { path: isVirtual(app.path) ? null : app.path }).catch((e) => (app.status = String(e)));
+  }
+  let workSubOpen = $state(false);
 
   let openMenu = $state<"" | "new" | "sort" | "view" | "more" | "search">("");
   let themeSubOpen = $state(false);
@@ -51,6 +60,7 @@
     menuY = r.bottom + 4;
     openMenu = id;
     themeSubOpen = false;
+    workSubOpen = false;
     if (id === "new") loadNewItems();
   }
 
@@ -116,6 +126,14 @@
           : [{ ...base, id: -1, text: "No recent searches", disabled: true }],
       ),
       entry("Clear search history", clearSearchHistory),
+      sep,
+      entry("Save search...", saveSearch),
+      sub(
+        "Saved searches",
+        saved.searches.length
+          ? saved.searches.map((s) => entry(s.name, () => runSearch(s)))
+          : [{ ...base, id: -1, text: "No saved searches", disabled: true }],
+      ),
       sep,
       entry("Close search", () => { app.filter = ""; clearSearch(); }),
     ];
@@ -253,13 +271,13 @@
         <span class="check">{!app.asc ? "●" : ""}</span> {msg("Descending")}
       </button>
       <div class="menu-sep"></div>
-      {#each [["none", "Group: None"], ["name", "Group by Name"], ["modified", "Group by Date"], ["type", "Group by Type"], ["size", "Group by Size"]] as [gkey, glabel] (gkey)}
+      {#each [["none", "Group: None"], ["name", "Group by Name"], ["modified", "Group by Date"], ["type", "Group by Type"], ["size", "Group by Size"], ["month", "Group by Month"]] as [gkey, glabel] (gkey)}
         <button class="menu-item" onclick={() => { openMenu = ""; setGroup(gkey); }}>
           <span class="check">{app.groupKey === gkey ? "●" : ""}</span> {msg(glabel)}
         </button>
       {/each}
     {:else if openMenu === "view"}
-      {#each [["icons_xl", "Extra large icons"], ["icons_l", "Large icons"], ["icons_m", "Medium icons"], ["icons_s", "Small icons"], ["list", "List"], ["details", "Details"], ["content", "Content"], ["tiles", "Tiles"]] as [vkey, vlabel] (vkey)}
+      {#each [["icons_xl", "Extra large icons"], ["icons_l", "Large icons"], ["icons_m", "Medium icons"], ["icons_s", "Small icons"], ["list", "List"], ["details", "Details"], ["content", "Content"], ["tiles", "Tiles"], ["gallery", "Gallery"]] as [vkey, vlabel] (vkey)}
         <button class="menu-item" onclick={() => { openMenu = ""; setView(vkey); }}>
           <span class="check">{app.view === vkey ? "●" : ""}</span> {msg(vlabel)}
         </button>
@@ -268,6 +286,9 @@
         <span class="check">{settings.compact ? "●" : ""}</span> {msg("Compact view")}
       </button>
       <div class="menu-sep"></div>
+      <button class="menu-item" onclick={() => { openMenu = ""; dualPane(); }}>
+        <span class="glyph">&#xE8A9;</span> {msg("Dual pane (side-by-side windows)")}
+      </button>
       <button class="menu-item" onclick={() => { openMenu = ""; showPane(settings.previewPane ? null : "preview"); }}>
         <span class="check">{settings.previewPane ? "●" : ""}</span> {msg("Preview pane")}
       </button>
@@ -314,6 +335,31 @@
       <button class="menu-item" onclick={() => { openMenu = ""; refresh(); }}>
         <span class="glyph">&#xE72C;</span> {msg("Refresh")}
       </button>
+      <button class="menu-item" disabled={!can("new") || inArchive || !!app.search} onclick={() => { openMenu = ""; analyzeFolder(); }}>
+        <span class="glyph">&#xEDA2;</span> {msg("Folder sizes")}
+      </button>
+      <div class="menu-sep"></div>
+      <button class="menu-item" onclick={() => { openMenu = ""; saveWorkspace(); }}>
+        <span class="glyph">&#xE74E;</span> {msg("Save tabs as workspace...")}
+      </button>
+      <div class="subwrap" role="none" onmouseenter={() => (workSubOpen = true)} onmouseleave={() => (workSubOpen = false)}>
+        <button class="menu-item wide" aria-haspopup="menu" aria-expanded={workSubOpen}>
+          <span class="glyph">&#xE737;</span>
+          <span class="mtext">{msg("Workspaces")}</span>
+          <span class="glyph subchev">&#xE76C;</span>
+        </button>
+        {#if workSubOpen}
+          <div class="menu submenu" use:menuKeys={() => (workSubOpen = false)}>
+            {#each saved.workspaces as w (w.name)}
+              <button class="menu-item" onclick={() => { openMenu = ""; openWorkspace(w); }} title={w.tabs.join(", ")}>
+                <span class="glyph">&#xE737;</span> {w.name}
+              </button>
+            {:else}
+              <button class="menu-item" disabled>{msg("No saved workspaces")}</button>
+            {/each}
+          </div>
+        {/if}
+      </div>
       {#if app.path === THIS_PC || app.path === NETWORK}
         <div class="menu-sep"></div>
         <button class="menu-item" onclick={() => { openMenu = ""; mapDrive(); }}>
