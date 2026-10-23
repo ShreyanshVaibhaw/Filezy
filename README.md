@@ -15,7 +15,7 @@ Filezy uses Windows shell operations for copying, moving, conflicts, progress di
 - Home, Quick access, Favorites, Recent files, drive and network browsing, Libraries and registered cloud roots.
 - Text, image, audio, video and PDF previews, plus installed Windows preview handlers.
 - ZIP creation and extraction, plus read and extraction support for 7z, tar and tar.gz.
-- Streaming search with metadata filters, Windows Search integration and an optional NTFS MFT index.
+- Streaming search with metadata filters, Windows Search integration and, when run as administrator, whole-drive search from the NTFS MFT.
 - Resizable panes, keyboard navigation, high-contrast styles, optional single-click opening and per-folder preferences.
 
 Devices use a separate shell adapter with browse and copy-out commands.
@@ -36,6 +36,7 @@ The renderer navigation-to-load interval was 368 ms; this excludes process and W
 A later 23 October production build, started with a 1,000-file folder by `node scripts/e2e/startup.mjs`, showed its first rows a median of 1.42 s after process launch across five starts (1.29-1.59 s), and 1.39 s on the first start with a new WebView2 profile.
 Those starts used a warm OS cache; cold-cache listing and startup remain unmeasured.
 The retained ExtraCursor case in `scripts/e2e/extracursor-cases.mjs` exercises the production UI without test hooks.
+`node scripts/e2e/extracursor-cases.mjs --prepare-perf` makes its 100,000-file fixture under `scratchpad/`, `--json <fixture> --ui-perf` prints the case, and `--clean` removes the fixtures.
 
 On 12 October 2026, a release build opened 100,000 empty files in a median of 197 ms across five runs with a warm OS cache.
 Scrolling had a median frame time of 18.3 ms and a 95th percentile of 39.4 ms.
@@ -50,6 +51,17 @@ Download the installer from [Releases](https://github.com/ShreyanshVaibhaw/Filez
 
 An installed copy updates itself: **Settings → About → Check for updates** downloads the next release, verifies its signature, and installs it, then offers a restart.
 A copy run straight from a folder says so instead, since only an installed copy can be replaced.
+
+## Where Filezy keeps data
+
+- `%APPDATA%\Filezy`: `pins.json` (pinned folders), `favorites.json` (Favorites) and `window.json` (where the window last closed).
+- `%LOCALAPPDATA%\com.filezy.app`: WebView2's storage, which holds the settings, per-folder views, saved searches, workspaces, search history and the tabs to reopen.
+- `%TEMP%\Filezy\Open`: read-only copies of files opened from inside an archive.
+  Filezy deletes copies older than a day when it starts.
+
+Uninstalling with **Delete the application data** ticked removes `%APPDATA%\Filezy`, `%APPDATA%\com.filezy.app` and `%LOCALAPPDATA%\com.filezy.app`.
+Without it, or when an update reinstalls Filezy, all of them stay.
+Uninstalling never touches `%TEMP%\Filezy\Open`; Windows' temporary-file cleanup or a manual delete removes it.
 
 ## Settings
 
@@ -99,32 +111,37 @@ npm run tauri dev            # development
 npm run tauri build          # release + NSIS installer
 npm run tauri build -- --no-bundle   # release exe only
 npm run check:menuids        # context-menu registry drift check
-npm run verify               # checks, unit tests and a frontend build
-npm run build:e2e            # release exe with the end-to-end test hooks
-npm run test:e2e             # drives that exe through Windows (scripts/e2e)
+npm run verify               # checks, unit tests, a frontend build and the Rust tests
+npm run build:e2e            # optimized exe with the end-to-end test hooks (-- --debug for a debug one)
+npm run test:e2e             # drives that exe through Windows (scripts/e2e; -- --debug for the debug one)
 ```
 
 The release binary lands at `src-tauri/target/release/filezy.exe`.
+`build:e2e` writes to `src-tauri/target-e2e` instead, so it never replaces the release binary.
 The end-to-end hooks exist only in the `build:e2e` exe, so a shipped build can't be driven by them.
-The legacy E2E runner includes tests that can foreground windows or change the clipboard.
+The E2E runner includes tests that can foreground windows or change the clipboard.
 Use ExtraCursor for interactive desktop testing while someone is using the computer, with background dispatch and a disposable profile.
-Do not run the legacy input tests during that session.
-The Windows x64 CI job checks the frontend, Rust tests and NSIS packaging on Windows Server 2022.
+Do not run the E2E input tests during that session.
+The Windows x64 CI job runs `cargo fmt --check`, `npm run verify`, clippy with and without the `e2e` feature, and NSIS packaging on Windows Server 2022.
 Its unsigned installer is a packaging artifact, not a signed updater release.
 
 ### Cutting a release
 
-Updates are signed, so the build needs the private key (kept outside the repo, in `%USERPROFILE%\.tauri`):
+Updates are signed, so the build needs the private key (kept outside the repo, in `%USERPROFILE%\.tauri`).
+Build from a clean checkout of the release commit, tagged with its version:
 
 ```sh
+git tag v0.1.0
 $env:TAURI_SIGNING_PRIVATE_KEY_PATH = "$env:USERPROFILE\.tauri\filezy.key"
 $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
 npm run tauri build
 npm run release:manifest -- "what changed"
+git push origin v0.1.0
 gh release create v0.1.0 "src-tauri/target/release/bundle/nsis/Filezy_0.1.0_x64-setup.exe" latest.json
 ```
 
 The app fetches `releases/latest/download/latest.json`, so each release only carries its own manifest.
+The manifest tool refuses a working tree with uncommitted or untracked files, and a HEAD that isn't tagged `v<version>`.
 The manifest tool requires one installer with the exact version and architecture in its Tauri filename and the matching `.exe.sig` file.
 It checks that the package, Cargo and Tauri versions agree and verifies the Minisign signature against the app's bundled public key.
 Stale, ambiguous, mismatched or modified artifacts fail before a manifest is written.
@@ -140,7 +157,9 @@ Before publishing a release, check fresh installation, upgrade with settings pre
 Record the Windows build, DPI, hardware, exact build and dataset with native acceptance and performance results.
 CI packaging alone does not establish those installation or device results.
 
-Machine-wide search uses the NTFS MFT and needs the app elevated once to index; without elevation it falls back to a recursive walk automatically.
+A search of a whole drive (one search root that is a bare drive, such as `C:\`) reads that drive's NTFS MFT when Filezy runs as administrator.
+The index lives in memory until Filezy closes, so each new elevated session reads the MFT again.
+Without elevation, and for "All drives" on a machine with more than one drive, search walks the folders instead.
 
 ## Author
 
