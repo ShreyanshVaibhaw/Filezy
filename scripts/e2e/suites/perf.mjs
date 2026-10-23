@@ -42,7 +42,7 @@ export default [
         const ms = await t.ev(`(async () => {
           const t0 = performance.now();
           await __e2e.navigate(${JSON.stringify(d)});
-          while (!__e2e.idle() || !__e2e.rows[0]) await new Promise((r) => setTimeout(r, 1));
+          while (!__e2e.idle() || !__e2e.rowAt(0)) await new Promise((r) => setTimeout(r, 1));
           return performance.now() - t0;
         })()`);
         return Math.round(ms);

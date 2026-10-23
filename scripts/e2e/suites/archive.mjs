@@ -224,7 +224,7 @@ export default [
       await t.nav(d);
       await t.select([`notes-${t.token}`, "loose.txt"]);
       // The zip is named after the item the menu was opened on.
-      await t.ev(`__e2e.app.focus = __e2e.rows.findIndex((r) => r?.name === ${JSON.stringify(`notes-${t.token}`)})`);
+      await t.ev(`__e2e.app.focus = [...Array(__e2e.app.total).keys()].findIndex((i) => __e2e.rowAt(i)?.name === ${JSON.stringify(`notes-${t.token}`)})`);
       await t.ev("__e2e.hooks.contextMenu()");
       await t.waitFor("!!document.querySelector('.ctxmenu')", 3000, "the item menu");
       await t.click(".ctxmenu .menu-item", { where: { has: "Compress to ZIP file" } });

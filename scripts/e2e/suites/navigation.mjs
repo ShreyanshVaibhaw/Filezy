@@ -70,7 +70,7 @@ export default [
       await t.waitFor("__e2e.app.total === 4", 5000, "watcher refresh");
       await t.settle();
       t.eq(await t.selectedNames(), ["b.txt"], "selection");
-      t.ok(await t.ev("__e2e.rows[__e2e.app.renaming]?.name === 'b.txt'"), "rename still on b.txt");
+      t.ok(await t.ev("__e2e.rowAt(__e2e.app.renaming)?.name === 'b.txt'"), "rename still on b.txt");
       t.eq(await t.ev("document.querySelector('input.rename')?.value"), "b-renamed", "typed text");
       await t.key("Escape");
       t.ok(t.exists(path.join(d, "b.txt")), "Escape keeps the old name");

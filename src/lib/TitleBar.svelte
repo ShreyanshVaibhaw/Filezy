@@ -1,13 +1,13 @@
 <script lang="ts">
   import { msg } from "./i18n.svelte";
-  import { menuKeys, fitMenu } from "./menukeys";
+  import { menuKeys } from "./menukeys";
   import { tick } from "svelte";
   import { dropTab, otherTabWindows, transferTab } from "./tabtransfer";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { nativeCaption } from "./caption";
   import {
     app, tabs, extMeta, folderName, newTab, switchTab, closeTab,
-    duplicateTab, closeOtherTabs, closeTabsRight, moveTabToWindow, shellIcon,
+    duplicateTab, closeOtherTabs, closeTabsRight, shellIcon,
     HOME, THIS_PC, RECYCLE, SETTINGS, RECYCLE_GUID,
   } from "./store.svelte";
   import { menuOn, anyMenuOn } from "./settings.svelte";
@@ -110,14 +110,14 @@
 />
 
 {#if tabCtx}
-  <div class="menu" style="left:{tabCtx.x}px; top:{tabCtx.y}px" use:fitMenu use:menuKeys={() => (tabCtx = null)}>
+  <div class="menu" style="left:{tabCtx.x}px; top:{tabCtx.y}px" use:menuKeys={() => (tabCtx = null)}>
     {#if menuOn("tab.duplicate")}
       <button class="menu-item" onclick={() => { duplicateTab(tabCtx!.id); tabCtx = null; }}>
         <span class="glyph" aria-hidden="true">&#xE8C8;</span>{msg("Duplicate tab")}
       </button>
     {/if}
     {#if menuOn("tab.movewindow")}
-      <button class="menu-item" onclick={() => { moveTabToWindow(tabCtx!.id); tabCtx = null; }}>
+      <button class="menu-item" onclick={() => { transferTab(tabCtx!.id); tabCtx = null; }}>
         <span class="glyph" aria-hidden="true">&#xE737;</span>{msg("Move to new window")}
       </button>
       {#each targets as target (target.id)}
@@ -147,7 +147,7 @@
   </div>
 {/if}
 {#if tabOverflow}
-  <div class="menu tabmenu" style="left:8px;top:40px" use:fitMenu use:menuKeys={() => tabOverflow = false}>
+  <div class="menu tabmenu" style="left:8px;top:40px" use:menuKeys={() => tabOverflow = false}>
     {#each tabs as t (t.id)}
       <button class="menu-item" title={t.path} role="menuitemradio" aria-checked={t.id === app.activeTab} onclick={() => { switchTab(t.id); tabOverflow = false; }}>
         {folderName(t.path) || "Home"}

@@ -3,7 +3,7 @@
   import { menuKeys, fitMenu } from "./menukeys";
   import { COLUMNS, colDef, columnsFor, saveColumns, SEARCH_KEY, attrLetters, type Col, type ColKey } from "./columns";
   import {
-    app, rows, sel, ensureRange, requestMeta, requestProps, propOf, iconOf, typeOf, fmtDate, fmtSizeKB,
+    app, rowAt, cachedRows, sel, ensureRange, requestMeta, requestProps, propOf, iconOf, typeOf, fmtDate, fmtSizeKB,
     openEntry, sortBy, hooks, refresh, selectAll, isSelected, clearSel, withSel, firstSel,
     refreshClipState, requestThumb, thumbOf, entryPath, collapsedGroups, loadNewItems, newItems,
     extMeta, isPinned, isCut, displayName, newTab, isHidden, can, up, folderName,
@@ -16,7 +16,7 @@
   import { checksumsSel, compareSel, sizesSel, analyzeFolder } from "./tools.svelte";
   import { otherTabWindows } from "./tabtransfer";
   import { selectRange, toggleRow, focusedRow, openSelection } from "./selection.svelte";
-  import type { Entry } from "./store.svelte";
+  import type { Entry, Group } from "./store.svelte";
   import { settings, menuOn, anyMenuOn } from "./settings.svelte";
   import ShellItems from "./ShellItems.svelte";
   import { filterExtras, followMenu, OUR_VERBS, type ShellItem, type ShellMenu } from "./shellmenu";
@@ -207,11 +207,6 @@
     if (d === s.d) return { header: s.g, idx: -1 };
     return { idx: s.g.start + (d - s.d - 1) };
   }
-  interface Group {
-    label: string;
-    start: number;
-    count: number;
-  }
   function toggleGroup(label: string) {
     if (collapsedGroups.has(label)) collapsedGroups.delete(label);
     else collapsedGroups.add(label);
@@ -297,7 +292,7 @@
     const props = propCols;
     const status = !grid && statusCol;
     for (let i = entrySpan.first; i < entrySpan.last; i++) {
-      const e = rows[i];
+      const e = rowAt(i);
       if (!e) continue;
       untrack(() => {
         requestMeta(e);
@@ -397,7 +392,7 @@
     scroller?.focus({ preventScroll: true });
     // Middle-click a folder: open it in a new tab (Explorer/browser behavior).
     if (ev.button === 1) {
-      const e = rows[i];
+      const e = rowAt(i);
       if (e?.is_dir) newTab(entryPath(e));
       return;
     }
@@ -510,7 +505,7 @@
     const seq = ++ctxSeq;
     if (i !== null) {
       // One loaded row answers at once; larger selections ask the backend.
-      const one = !app.allSelected && sel.size === 1 ? rows[i] : undefined;
+      const one = !app.allSelected && sel.size === 1 ? rowAt(i) : undefined;
       ctxFilesOnly = !!one && !one.is_dir;
       if (!one) {
         withSel((s) => invoke<{ count: number; files: number }>("selection_stats", { sel: s }))
@@ -553,7 +548,7 @@
   /// Run a shell verb Filezy implements itself. False when it isn't one.
   async function runVerb(v: string): Promise<boolean> {
     const first = firstSel();
-    const fe = first === undefined ? undefined : rows[first];
+    const fe = first === undefined ? undefined : rowAt(first);
     switch (v) {
       case "open":
         await openSelection();
@@ -703,7 +698,7 @@
       const active = document.activeElement;
       if (active instanceof HTMLInputElement && active.classList.contains("rename")) return;
       // The row is between listings (or scrolled away); its box comes back with the text.
-      if (app.renaming >= 0 && !rows[app.renaming]) return;
+      if (app.renaming >= 0 && !rowAt(app.renaming)) return;
       if (app.renaming >= 0 && renameKey === key) commitRename(app.renaming, renameValue);
     }, 0);
   }
@@ -779,8 +774,7 @@
     measurer.font = getComputedStyle(cell).font;
     let widest = measurer.measureText(colDef(k).label).width + 16; // room for the sort caret
     let n = 0;
-    for (const e of rows) {
-      if (!e) continue;
+    for (const e of cachedRows()) {
       // Status also draws its 16px icon and a 6px gap.
       widest = Math.max(widest, measurer.measureText(cellText(e, k)).width + (k === "status" && statusOf(e) ? 22 : 0));
       if (++n >= 20_000) break;
@@ -1007,7 +1001,6 @@
       {#each columns as c (c.k)}
         <button
           class="hcell"
-          class:right={colDef(c.k).right}
           class:coldragging={colDrag?.key === c.k && colDrag.moved}
           data-meta={c.k}
           onmousedown={(ev) => startColDrag(c.k, ev)}
@@ -1090,7 +1083,7 @@
       {#each visible as d (app.version + ":" + app.view + ":" + d)}
         {@const item = displayItem(d)}
         {@const i = item.idx}
-        {@const e = i >= 0 ? rows[i] : undefined}
+        {@const e = i >= 0 ? rowAt(i) : undefined}
         {#if !v.grid && item.header}
           {@const hdr = item.header}
           <div
@@ -1188,7 +1181,6 @@
           <div
             class="gcell"
             class:vert={v.vertical}
-            class:tile={v.tile}
             class:gallery={v.gallery}
             class:selected={isSelected(i)}
             class:focused={app.focus === i}
@@ -1335,7 +1327,7 @@
     {/if}
     {#if ctx.onRow}
       {@const fi = firstSel()}
-      {@const fe = fi !== undefined ? rows[fi] : undefined}
+      {@const fe = fi !== undefined ? rowAt(fi) : undefined}
       {@const multi = app.allSelected ? app.total : sel.size}
       {#if menuOn("file.open")}
         <button class="menu-item" onclick={() => { ctx = null; if (fi !== undefined) openEntry(fi); }}>
@@ -1565,7 +1557,6 @@
   .header,
   .vrow {
     display: grid;
-    grid-template-columns: minmax(200px, 1fr) 170px 150px 110px;
   }
   .header {
     flex-shrink: 0;

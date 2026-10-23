@@ -18,7 +18,7 @@
   import {
     app, tabs, refresh, back, forward, up, selectAll, hooks, firstSel, newTab, closeTab, switchTab,
     searchUpdate, loadPins, reopenClosedTab, onFsChanged, can, navigate, refreshClipState,
-    THIS_PC, HOME, RECYCLE, SETTINGS, NETWORK, loadDrives, saveSession, restoreSession,
+    THIS_PC, HOME, RECYCLE, SETTINGS, NETWORK, loadDrives, saveSession, restoreSession, trackSelStats,
   } from "./lib/store.svelte";
 
   // Keep the record for "Reopen tabs from last time" current as tabs open,
@@ -45,6 +45,7 @@
   import { isShellLocation } from "./lib/shellplaces";
 
   let addressEdit: { focus: () => void; focusSearch: () => void } | undefined = $state();
+  trackSelStats();
 
   let viewportWidth = $state(innerWidth);
   // Leave enough room for the list even when both saved panes are wide.

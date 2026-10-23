@@ -2,10 +2,10 @@
 // and "Show extracted files when complete"), extracting what's selected inside
 // an archive, and Compress to ZIP file. archive.rs does the work.
 import { invoke } from "@tauri-apps/api/core";
-import { app, rows, firstSel, selCount, entryPath, newTab, refresh, withSel } from "./store.svelte";
+import { app, rowAt, firstSel, selCount, entryPath, newTab, refresh, withSel } from "./store.svelte";
 import { focusedRow } from "./selection.svelte";
 import { baseName, isArchive, isArchiveName, isVirtual, isWithin, joinPath, parentPath, splitArchive } from "./paths";
-import { note, recordMade, showResult, type OpItem } from "./ops.svelte";
+import { note, plural, recordMade, showResult, type OpItem } from "./ops.svelte";
 
 interface Made {
   path: string;
@@ -40,7 +40,6 @@ export const extractDlg = $state({
   show: true,
 });
 
-const plural = (n: number, word = "item") => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
 
 /// Where Extract all suggests: a folder named after the archive, beside it.
 function defaultDest(file: string): string {
@@ -53,7 +52,7 @@ export function extractTarget(): string | null {
   if (a) return a.file;
   if (selCount() !== 1 || isVirtual(app.path)) return null;
   const i = firstSel();
-  const e = i === undefined ? undefined : rows[i];
+  const e = i === undefined ? undefined : rowAt(i);
   return e && !e.is_dir && isArchiveName(e.name) ? entryPath(e) : null;
 }
 
@@ -129,7 +128,7 @@ export async function runExtract() {
 export async function compressSel() {
   if (!selCount() || isVirtual(app.path) || isArchive(app.path)) return;
   const i = focusedRow();
-  const e = i === undefined ? undefined : rows[i];
+  const e = i === undefined ? undefined : rowAt(i);
   if (!e) return;
   let r: Compressed;
   try {

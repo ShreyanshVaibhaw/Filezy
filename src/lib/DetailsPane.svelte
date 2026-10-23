@@ -7,8 +7,8 @@
   import { invoke } from "@tauri-apps/api/core";
   import { untrack } from "svelte";
   import {
-    app, rows, sel, entryPath, requestMeta, requestThumb, thumbOf, typeOf, fmtDate, fmtSizeAuto,
-    selCount, selRef, folderName, refresh, withSel, requestStatus, statusOf,
+    app, rowAt, sel, entryPath, requestMeta, requestThumb, thumbOf, typeOf, fmtDate, fmtSizeAuto,
+    selCount, selRef, folderName, refresh, requestStatus, statusOf, selStats,
   } from "./store.svelte";
   import type { Entry } from "./store.svelte";
   import { baseName, isArchive } from "./paths";
@@ -37,9 +37,9 @@
   const picked = $derived.by((): Entry[] => {
     const out: Entry[] = [];
     if (app.allSelected) {
-      for (let i = 0; i < app.total && out.length < SAMPLE; i++) if (rows[i]) out.push(rows[i]!);
+      for (let i = 0; i < app.total && out.length < SAMPLE; i++) if (rowAt(i)) out.push(rowAt(i)!);
     } else {
-      for (const i of [...sel].sort((a, b) => a - b).slice(0, SAMPLE)) if (rows[i]) out.push(rows[i]!);
+      for (const i of [...sel].sort((a, b) => a - b).slice(0, SAMPLE)) if (rowAt(i)) out.push(rowAt(i)!);
     }
     return out;
   });
@@ -49,7 +49,8 @@
   let values = $state<Record<string, string>>({});
   let writable = $state<string[]>([]);
   let target = $state<string | null>(null);
-  let stats = $state<{ bytes: number; files: number; oldest: number; newest: number } | null>(null);
+  // Totals for several items, once the shared stats describe this selection.
+  const stats = $derived(count > 1 && selStats.v?.count === count ? selStats.v : null);
   let seq = 0;
   /** The items shown: a refresh of the same ones keeps their values until new ones arrive. */
   let shown = "";
@@ -67,7 +68,6 @@
       values = {};
       writable = [];
       target = null;
-      stats = null;
     }
     if (!items.length) return;
     // Untracked: the helpers read the caches they fill, which would re-run this.
@@ -100,11 +100,6 @@
     if (n === 1 && items[0].ext === "lnk" && !isArchive(app.path)) {
       invoke<string | null>("link_target", { path: entryPath(items[0]) })
         .then((t) => s === seq && (target = t))
-        .catch(() => {});
-    }
-    if (n > 1) {
-      withSel((ref) => invoke<{ bytes: number; files: number; oldest: number; newest: number }>("selection_stats", { sel: ref }))
-        .then((st) => s === seq && (stats = st))
         .catch(() => {});
     }
   });

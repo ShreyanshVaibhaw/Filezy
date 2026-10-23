@@ -1,25 +1,9 @@
 <script lang="ts">
   import { msg } from "./i18n.svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { app, sel, fmtSizeAuto, selRef, setView, stopSearch } from "./store.svelte";
+  import { app, sel, fmtSizeAuto, selStats, setView, stopSearch } from "./store.svelte";
 
-  let selSize = $state(0);
   const selN = $derived(app.allSelected ? app.total : sel.size);
-
-  let statsSeq = 0;
-  $effect(() => {
-    void sel.size;
-    void app.allSelected;
-    void app.rev;
-    const seq = ++statsSeq;
-    if (!selN) {
-      selSize = 0;
-      return;
-    }
-    invoke<{ count: number; files: number; bytes: number }>("selection_stats", { sel: selRef() })
-      .then((s) => seq === statsSeq && (selSize = s.bytes))
-      .catch(() => {});
-  });
+  const selSize = $derived(selN && selStats.v?.count === selN ? selStats.v.bytes : 0);
 
   // What a finished or running search covered, said plainly.
   const searchNote = $derived.by(() => {

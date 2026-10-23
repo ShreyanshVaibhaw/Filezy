@@ -110,4 +110,3 @@ export const MENU_GROUPS: MenuGroup[] = [
   },
 ];
 
-export const ALL_MENU_IDS: string[] = MENU_GROUPS.flatMap((g) => g.items.map((i) => i.id));

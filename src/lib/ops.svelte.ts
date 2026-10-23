@@ -2,12 +2,12 @@
 // activity list with retry, and undo/redo built only from verified outcomes.
 import { invoke } from "@tauri-apps/api/core";
 import {
-  app, rows, selCount, firstSel, can, refresh, refreshClipState, entryPath, navigate, say, withSel,
-  newTab, pinAdd, pinRemove, selectKeys,
+  app, rowAt, selCount, firstSel, can, refresh, refreshClipState, entryPath, navigate, say, withSel,
+  addTabs, pinAdd, pinRemove, selectKeys,
 } from "./store.svelte";
 import { settings } from "./settings.svelte";
 import { confirm } from "./ask.svelte";
-import { baseName, isArchive, isLibrary, joinPath, parentPath, samePath, pathKey } from "./paths";
+import { baseName, isArchive, isLibrary, parentPath, samePath, pathKey } from "./paths";
 
 export type ItemState = "done" | "skipped" | "failed" | "unattempted";
 export interface OpItem {
@@ -36,7 +36,7 @@ interface Stamp {
   modified: number;
 }
 
-const plural = (n: number, word = "item") => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
+export const plural = (n: number, word = "item") => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
 
 // ---- activity: what recent operations did, with retry for what didn't work ----
 
@@ -191,15 +191,6 @@ const LABEL: Record<UndoEntry["kind"], string> = {
   recycle: "delete",
   new: "new item",
 };
-export function undoLabel(): string {
-  const e = history.undo.at(-1);
-  return e ? `Undo ${LABEL[e.kind]}` : "Undo";
-}
-export function redoLabel(): string {
-  const e = history.redo.at(-1);
-  return e ? `Redo ${LABEL[e.kind]}` : "Redo";
-}
-
 const names = (items: UndoItem[], key: "from" | "to") =>
   items.slice(0, 5).map((i) => baseName(i[key])).join("\n") + (items.length > 5 ? `\n…and ${items.length - 5} more` : "");
 
@@ -493,7 +484,7 @@ async function newFileImpl(ext: string) {
 /// name and the extension is kept, as in Explorer.
 async function commitRenameImpl(index: number, typed: string) {
   app.renaming = -1;
-  const e = rows[index];
+  const e = rowAt(index);
   if (!e || !typed.trim()) return;
   const keepExt = !settings.showExt && !e.is_dir && e.ext;
   const newName = keepExt ? `${typed.trim()}.${e.ext}` : typed;
@@ -511,7 +502,7 @@ async function commitRenameImpl(index: number, typed: string) {
   try {
     const oldPath = entryPath(e);
     const newPath = await invoke<string>("rename_item", { path: oldPath, newName });
-    if (!samePath(newPath, oldPath) || newPath !== oldPath) {
+    if (newPath !== oldPath) {
       const [s] = await invoke<Stamp[]>("path_stamps", { paths: [newPath] });
       pushUndo({ kind: "rename", items: [{ from: oldPath, to: newPath, size: s?.size ?? 0, modified: s?.modified ?? 0, replaced: false }] });
     }
@@ -541,7 +532,12 @@ export interface BatchItem {
   path: string;
   is_dir: boolean;
 }
-export const batch = $state<{ items: BatchItem[]; open: boolean }>({ items: [], open: false });
+class Batch {
+  /** Replaced whole for each batch, so raw: the items never become proxies. */
+  items = $state.raw<BatchItem[]>([]);
+  open = $state(false);
+}
+export const batch = new Batch();
 
 export async function openBatchRename() {
   const items = await withSel((sel) => invoke<BatchItem[]>("sel_items", { sel })).catch((e) => {
@@ -584,7 +580,7 @@ async function commitBatchImpl(names: string[]) {
 /// Open the selected folders in new tabs (Explorer's "Open in new tab").
 export async function openInNewTabs() {
   const items = await withSel((sel) => invoke<BatchItem[]>("sel_items", { sel })).catch(() => [] as BatchItem[]);
-  for (const it of items) if (it.is_dir) await newTab(it.path);
+  await addTabs(items.filter((it) => it.is_dir).map((it) => it.path));
 }
 
 export async function openInNewWindow() {

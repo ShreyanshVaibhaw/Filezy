@@ -1,15 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
-import { settings, setSetting, setTheme } from "./settings.svelte";
+import { untrack } from "svelte";
+import { settings, setSetting } from "./settings.svelte";
 import { baseName, isArchive, isServer, isVirtual, joinPath, parentPath, samePath, pathKey } from "./paths";
 import { formatWith, type LocaleFormats } from "./datefmt";
 import { clearColumns } from "./columns";
 import { withFilter, withoutFilters } from "./searchquery";
 import { DEVICES, isShellLocation, shellLocation, shellParsing, type ShellFolder } from "./shellplaces";
-import { transferTab } from "./tabtransfer";
-
-export { joinPath } from "./paths";
 
 export interface Entry {
   name: string;
@@ -21,9 +19,7 @@ export interface Entry {
   attrs: number; // FILE_ATTRIBUTE_* bits
   parent?: string; // set on search results
 }
-export const ATTR_READONLY = 0x1;
 export const ATTR_HIDDEN = 0x2;
-export const ATTR_REPARSE = 0x400;
 
 export interface ExtMeta {
   icon: string | null;
@@ -191,20 +187,75 @@ export function selCount(): number {
 export function selRef(): Keep {
   return app.allSelected ? { rev: app.rev, all: true } : { rev: app.rev, idx: [...sel] };
 }
+/** What the backend says about the selection (selection_stats in main.rs). */
+export interface SelStats {
+  count: number;
+  files: number;
+  bytes: number;
+  /** Oldest and newest modified times (0 when none). */
+  oldest: number;
+  newest: number;
+}
+/** Totals for the current selection, shared by the status bar, command bar and Details pane. */
+export const selStats = $state<{ v: SelStats | null }>({ v: null });
+
+/// Keep selStats current, asking at most once a frame however fast the
+/// selection changes (Shift+arrow over a big folder). Call once, from App.
+export function trackSelStats() {
+  let seq = 0;
+  let timer = 0;
+  $effect(() => {
+    void app.rev;
+    const ref = selRef();
+    const s = ++seq;
+    clearTimeout(timer);
+    if (!(ref.all ? app.total : ref.idx?.length)) {
+      selStats.v = null;
+      return;
+    }
+    timer = window.setTimeout(() => {
+      invoke<SelStats>("selection_stats", { sel: ref })
+        .then((st) => s === seq && (selStats.v = st))
+        .catch(() => {});
+    }, 16);
+  });
+}
+
 export function firstSel(): number | undefined {
   if (app.allSelected) return app.total ? 0 : undefined;
   let min = -1;
   for (const k of sel) if (min < 0 || k < min) min = k;
   return min < 0 ? undefined : min;
 }
-function selectOnly(i: number) {
-  clearSel();
-  sel.add(i);
-  app.anchor = i;
+
+// Sparse cache of listing rows, in chunks of CHUNK; holes are unfetched, and it
+// never holds more than what was scrolled past. One signal per chunk: a deep
+// $state array made every row a proxy with a signal per field, which cost
+// seconds and hundreds of MB in a 100,000-row folder.
+const chunks = new SvelteMap<number, (Entry | undefined)[]>();
+
+/** Cached row i, or undefined while it isn't fetched. */
+export function rowAt(i: number): Entry | undefined {
+  return chunks.get(Math.floor(i / CHUNK))?.[i % CHUNK];
 }
 
-// Sparse cache of listing rows; holes are unfetched. Never holds more than what was scrolled past.
-export const rows = $state<(Entry | undefined)[]>([]);
+/** Every cached row, for measuring columns. */
+export function* cachedRows(): Generator<Entry> {
+  for (const c of chunks.values()) for (const e of c) if (e) yield e;
+}
+
+/// Store fetched rows from index `start`; each chunk they touch gets a new array.
+function putRows(start: number, got: Entry[]) {
+  for (let k = 0; k < got.length; ) {
+    const c = Math.floor((start + k) / CHUNK);
+    const off = (start + k) % CHUNK;
+    const n = Math.min(CHUNK - off, got.length - k);
+    const chunk = [...(untrack(() => chunks.get(c)) ?? [])];
+    for (let j = 0; j < n; j++) chunk[off + j] = got[k + j];
+    chunks.set(c, chunk);
+    k += n;
+  }
+}
 export const extMeta = new SvelteMap<string, ExtMeta>();
 export const pathIcons = new SvelteMap<string, string | null>();
 
@@ -408,14 +459,10 @@ export function folderPrefsCount(): number {
 // True while the current grouping came from date-sorting, not a user choice.
 let groupAuto = false;
 
-function prefKey(p: string): string {
-  return pathKey(p);
-}
-
 function savePrefs() {
   if (!app.path || isVirtual(app.path)) return;
   // Auto date-grouping is derived from the sort, so it is stored as "none".
-  folderPrefs[prefKey(app.path)] = {
+  folderPrefs[pathKey(app.path)] = {
     s: app.sortKey,
     a: app.asc,
     v: app.view,
@@ -433,7 +480,7 @@ function isDateKey(k: string): boolean {
 
 /// The arrangement a folder opens with: its saved prefs or the configured default.
 function prefsFor(p: string): { sort: string; asc: boolean; view: string; group: string; auto: boolean } {
-  const prefs = folderPrefs[prefKey(p)] ?? defaultPrefs();
+  const prefs = folderPrefs[pathKey(p)] ?? defaultPrefs();
   // Explorer behavior: date-sorted folders group by date automatically.
   const auto = prefs.g === "none" && isDateKey(prefs.s);
   return { sort: prefs.s, asc: prefs.a, view: prefs.v, group: auto ? prefs.s : prefs.g, auto };
@@ -507,11 +554,14 @@ export interface RecycleItem {
   deleted: string;
   size: string;
 }
-export const recycleItems = $state<{ list: RecycleItem[]; total: number; loading: boolean }>({
-  list: [],
-  total: 0,
-  loading: false,
-});
+// The list is replaced whole on every load, so it is raw state: up to 5,000
+// rows don't each become a proxy.
+class RecycleItems {
+  list = $state.raw<RecycleItem[]>([]);
+  total = $state(0);
+  loading = $state(false);
+}
+export const recycleItems = new RecycleItems();
 
 export interface RecentFile {
   name: string;
@@ -608,8 +658,7 @@ export async function pinRemove(path: string) {
 function resetRows(total: number) {
   app.total = total;
   app.version++;
-  rows.length = 0;
-  rows.length = total;
+  chunks.clear();
 }
 
 interface Prefetched {
@@ -631,7 +680,7 @@ async function prefetch(rev: number, total: number, keepScroll: boolean): Promis
 
 function installRows(total: number, pre: Prefetched) {
   resetRows(total);
-  pre.rows.forEach((e, k) => (rows[pre.start + k] = e));
+  putRows(pre.start, pre.rows);
 }
 
 /// The drives for This PC and the navigation pane, read again whenever
@@ -750,7 +799,7 @@ export interface NavOpts {
   /** Same folder again: keep scroll, and unless `select` says otherwise, the
    * selection, anchor and an open rename. */
   refresh?: boolean;
-  /** Select these items (identity keys, see keyOf) after listing; the first is
+  /** Select these items (identity keys, listing.rs Entry::key) after listing; the first is
    * scrolled into view. E.g. the folder Up came from, or a new folder. */
   select?: string[];
 }
@@ -925,7 +974,7 @@ function selSignature(): string {
 /** Identity keys of the selected rows we have (and of the focused row), from the old rows. */
 function selectionKeys(): { sel: string[]; focus: string | null; all: boolean } {
   const key = (i: number) => {
-    const e = rows[i];
+    const e = rowAt(i);
     return e ? (e.parent ? joinPath(e.parent, e.name) : e.name) : null;
   };
   return {
@@ -1074,6 +1123,23 @@ export async function newTab(path?: string) {
   }
 }
 
+/// A tab record for `path` that hasn't been listed yet; showTab lists it.
+const unlistedTab = (path: string): Tab => ({ id: nextTabId++, path, hist: [path], histIdx: 0, scroll: 0, pending: 0, query: "", keepKeys: [], keepAll: false });
+
+/// New tabs for several locations at once (Open in new tab on many folders, a
+/// workspace): only the last, which becomes active, is listed now; the others
+/// list when they are shown, as restored tabs do.
+export async function addTabs(paths: string[]) {
+  if (!paths.length) return;
+  await leaveTab();
+  const made = paths.map(unlistedTab);
+  tabs.push(...made);
+  const shown = made[made.length - 1];
+  app.activeTab = shown.id;
+  syncNav();
+  await showTab(shown);
+}
+
 /// Remember what the outgoing tab shows (scroll, selection, search) so it can be
 /// listed again exactly when reselected.
 async function leaveTab() {
@@ -1154,7 +1220,7 @@ export async function restoreSession(): Promise<boolean> {
   const paths = s?.tabs;
   if (s?.v !== SESSION_V || !Array.isArray(paths) || !paths.length || !paths.every((p) => typeof p === "string" && p)) return false;
   const list = (paths as string[]).slice(0, SESSION_MAX);
-  const made = list.map((p) => ({ id: nextTabId++, path: p, hist: [p], histIdx: 0, scroll: 0, pending: 0, query: "", keepKeys: [], keepAll: false }));
+  const made = list.map(unlistedTab);
   tabs.push(...made);
   const at = typeof s.active === "number" && s.active >= 0 && s.active < made.length ? s.active : 0;
   app.activeTab = made[at].id;
@@ -1179,13 +1245,6 @@ export function closeTab(id: number) {
     showTab(next);
   }
 }
-/// Move a tab to a window of its own: a new window opens its location (a new
-/// Filezy process, as Ctrl+N makes) and the tab closes here. Its history
-/// stays behind, as when Explorer opens a folder in a new window.
-export async function moveTabToWindow(id: number) {
-  await transferTab(id);
-}
-
 /** Snapshot the tab's navigation and selection before handing it to a window. */
 export async function exportTab(id: number) {
   if (id === app.activeTab) await leaveTab();
@@ -1213,7 +1272,9 @@ export function duplicateTab(id: number) {
   if (t) newTab(t.path);
 }
 
-export function closeOtherTabs(id: number) {
+export async function closeOtherTabs(id: number) {
+  // Show the kept tab first, so closing the others lists nothing in between.
+  await switchTab(id);
   for (const t of [...tabs]) if (t.id !== id) closeTab(t.id);
 }
 
@@ -1476,7 +1537,6 @@ export function searchUpdate(u: SearchUpdate) {
   }
   if (u.rev !== app.rev) return;
   app.total = u.total;
-  rows.length = u.total;
   s.skipped = u.skipped;
   s.capped = u.capped;
   s.provider = u.provider;
@@ -1503,13 +1563,14 @@ export function ensureRange(start: number, end: number) {
     if (pending.has(key)) continue;
     const cStart = c * CHUNK;
     const cEnd = Math.min(app.total, cStart + CHUNK);
-    if (rows[cStart] !== undefined && rows[cEnd - 1] !== undefined) continue;
+    const have = untrack(() => chunks.get(c));
+    if (have?.[0] !== undefined && have[cEnd - cStart - 1] !== undefined) continue;
     pending.add(key);
     const v = app.version;
     invoke<Entry[]>("get_range", { rev: app.rev, start: cStart, count: CHUNK })
       .then((got) => {
         if (app.version !== v) return;
-        for (let i = 0; i < got.length; i++) rows[cStart + i] = got[i];
+        putRows(cStart, got);
       })
       .catch(() => {}) // stale revision: a newer listing is on its way
       .finally(() => pending.delete(key));
@@ -1615,7 +1676,7 @@ export function fmtSizeAuto(bytes: number): string {
 // ---- operations ----
 
 export function openEntry(i: number) {
-  const e = rows[i];
+  const e = rowAt(i);
   if (!e) return;
   const p = entryPath(e);
   if (e.is_dir) navigate(p);

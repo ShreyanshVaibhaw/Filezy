@@ -1,5 +1,6 @@
-// Test hook for the native E2E runner (scripts/e2e). Installed only when the
-// app was started with FILEZY_E2E=1, so normal runs expose nothing extra.
+// Test hook for the native E2E runner (scripts/e2e). Installed only in a build
+// with the `e2e` feature that was started with FILEZY_E2E=1; a shipped build
+// exposes nothing extra.
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import * as store from "./store.svelte";
@@ -10,7 +11,8 @@ import { settings, setSetting, setTheme } from "./settings.svelte";
 import { dialog } from "./ask.svelte";
 import type { Entry } from "./store.svelte";
 import { setMessages } from "./i18n.svelte";
-import { transferTab, dropTab, otherTabWindows } from "./tabtransfer";
+import { transferTab } from "./tabtransfer";
+import { closeTool } from "./tools.svelte";
 
 let fetching = 0;
 /// Every row of the current listing. A watcher refresh can replace the listing
@@ -44,8 +46,7 @@ invoke<boolean>("e2e_enabled")
       setTheme,
       setMessages,
       transferTab,
-      dropTab,
-      otherTabWindows,
+      closeTool,
       dialog,
       invoke,
       idle: () => store.listingIdle() && !ops.opsBusy() && !fetching,

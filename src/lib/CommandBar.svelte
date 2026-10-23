@@ -4,7 +4,7 @@
   import {
     app, sel, sortBy, setGroup, refresh, toggleHidden, setView, selectAll, loadNewItems, newItems,
     extMeta, navigate, can, SETTINGS, THIS_PC, NETWORK, loadDrives, applyFilter, setSearchScope, clearSearchHistory, startSearch, clearSearch,
-    type SearchScope,
+    selStats, type SearchScope,
   } from "./store.svelte";
   import ShellItems from "./ShellItems.svelte";
   import type { ShellItem } from "./shellmenu";
@@ -35,20 +35,7 @@
   const hasSel = $derived(selN > 0);
 
   // Share works for files only, as in Explorer: count the folders in the selection.
-  let filesOnly = $state(false);
-  let shareSeq = 0;
-  $effect(() => {
-    void selN;
-    void app.rev;
-    const seq = ++shareSeq;
-    if (!selN) {
-      filesOnly = false;
-      return;
-    }
-    invoke<{ count: number; files: number }>("selection_stats", { sel: app.allSelected ? { rev: app.rev, all: true } : { rev: app.rev, idx: [...sel] } })
-      .then((s) => seq === shareSeq && (filesOnly = s.files === s.count))
-      .catch(() => {});
-  });
+  const filesOnly = $derived(!!selStats.v && selStats.v.files === selStats.v.count);
 
   function toggle(id: typeof openMenu, ev: MouseEvent) {
     if (openMenu === id) {
@@ -335,7 +322,7 @@
       <button class="menu-item" onclick={() => { openMenu = ""; refresh(); }}>
         <span class="glyph" aria-hidden="true">&#xE72C;</span>{msg("Refresh")}
       </button>
-      <button class="menu-item" disabled={!can("new") || inArchive || !!app.search} onclick={() => { openMenu = ""; analyzeFolder(); }}>
+      <button class="menu-item" disabled={!can("new")} onclick={() => { openMenu = ""; analyzeFolder(); }}>
         <span class="glyph" aria-hidden="true">&#xEDA2;</span>{msg("Folder sizes")}
       </button>
       <div class="menu-sep"></div>

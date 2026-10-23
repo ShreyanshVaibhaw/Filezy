@@ -111,6 +111,7 @@ async function reset() {
     const e = __e2e;
     e.extractDlg.open = false;
     e.batch.open = false;
+    e.closeTool();
     e.activity.open = false;
     e.activity.current = null;
     // Keep the shown tab: switching to another would re-run that tab's search.

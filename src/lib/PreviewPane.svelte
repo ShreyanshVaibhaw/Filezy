@@ -4,7 +4,7 @@
   // files go to Windows' own preview handler (Word, Excel, fonts...), whose
   // window the backend keeps over this pane (src-tauri/src/preview.rs).
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-  import { app, sel, rows, entryPath, openPath } from "./store.svelte";
+  import { app, sel, rowAt, entryPath, openPath } from "./store.svelte";
   import { isArchive } from "./paths";
 
   type Kind = "text" | "image" | "thumb" | "audio" | "video" | "pdf" | "native" | "none";
@@ -35,10 +35,10 @@
 
   // First selected row (lowest index); undefined when nothing usable is selected.
   const current = $derived.by(() => {
-    if (app.allSelected) return app.total ? rows[0] : undefined;
+    if (app.allSelected) return app.total ? rowAt(0) : undefined;
     let min = -1;
     for (const i of sel) if (min < 0 || i < min) min = i;
-    return min < 0 ? undefined : rows[min];
+    return min < 0 ? undefined : rowAt(min);
   });
   const path = $derived(current && !current.is_dir ? entryPath(current) : null);
   /// What the preview depends on: a refresh that leaves the file as it was

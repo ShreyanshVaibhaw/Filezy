@@ -84,12 +84,11 @@ function load(): Record<string, Col[]> {
 
 let saved: Record<string, Col[]> = load();
 
-const keyOf = pathKey;
 
 /// The columns a folder (or the search results, SEARCH_KEY) opens with. A
 /// folder a cloud provider syncs also shows Status first, as in Explorer.
 export function columnsFor(path: string, cloud = false): Col[] {
-  const own = saved[keyOf(path)];
+  const own = saved[pathKey(path)];
   if (own) return own.map((c) => ({ ...c }));
   const keys = path === SEARCH_KEY ? SEARCH : cloud ? (["status", ...DEFAULT] as ColKey[]) : DEFAULT;
   return keys.map((k) => ({ k, w: colDef(k).width }));
@@ -97,7 +96,7 @@ export function columnsFor(path: string, cloud = false): Col[] {
 
 export function saveColumns(path: string, cols: Col[]) {
   if (!valid(cols)) return;
-  saved[keyOf(path)] = cols.map((c) => ({ k: c.k, w: Math.round(c.w) }));
+  saved[pathKey(path)] = cols.map((c) => ({ k: c.k, w: Math.round(c.w) }));
   const keys = Object.keys(saved);
   // ponytail: drop the oldest insertion when the map grows unbounded
   if (keys.length > 500) delete saved[keys[0]];

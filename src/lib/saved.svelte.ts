@@ -1,7 +1,7 @@
 // Saved searches and workspaces (O01): named local configurations the user
 // makes, renames and deletes. Kept apart from settings because they're lists
 // of records, validated here on load so a damaged blob drops only bad entries.
-import { app, tabs, navigate, newTab, startSearch, setSearchScope } from "./store.svelte";
+import { app, tabs, navigate, addTabs, startSearch, setSearchScope } from "./store.svelte";
 import { prompt } from "./ask.svelte";
 import { parseSaved, type SavedSearch, type Workspace } from "./savedparse";
 export type { SavedSearch, Workspace };
@@ -45,7 +45,7 @@ export async function saveWorkspace() {
 }
 
 export async function openWorkspace(w: Workspace) {
-  for (const p of w.tabs) await newTab(p);
+  await addTabs(w.tabs);
 }
 
 export async function renameSaved(kind: "searches" | "workspaces", i: number) {

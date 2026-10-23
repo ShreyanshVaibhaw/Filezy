@@ -2,7 +2,8 @@
   import { msg } from "./i18n.svelte";
   import { menuKeys } from "./menukeys";
   import { invoke } from "@tauri-apps/api/core";
-  import { app, navigate, openPath, back, forward, up, refresh, setFilter, clearSearch, startSearch, rememberSearch, folderName, joinPath, can, THIS_PC, HOME, RECYCLE, SETTINGS, NETWORK } from "./store.svelte";
+  import { joinPath } from "./paths";
+  import { app, navigate, openPath, back, forward, up, refresh, setFilter, clearSearch, startSearch, rememberSearch, folderName, can, THIS_PC, HOME, RECYCLE, SETTINGS, NETWORK } from "./store.svelte";
   import { settings } from "./settings.svelte";
   import { crumbs, displayPath, isArchive, isUnc, isVirtual, isWsl } from "./paths";
   import { isShellLocation } from "./shellplaces";

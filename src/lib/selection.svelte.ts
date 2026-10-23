@@ -3,7 +3,7 @@
 // selected set.
 import { invoke } from "@tauri-apps/api/core";
 import {
-  app, sel, clearSel, hooks, rows, selCount, firstSel, withSel, newTab, openEntry, openPath,
+  app, sel, clearSel, hooks, rowAt, selCount, firstSel, withSel, addTabs, openEntry, openPath,
 } from "./store.svelte";
 import { confirm } from "./ask.svelte";
 
@@ -104,7 +104,7 @@ export async function openSelection() {
   if (!n) return;
   if (n === 1) {
     const i = firstSel();
-    if (i !== undefined && rows[i]) return openEntry(i);
+    if (i !== undefined && rowAt(i)) return openEntry(i);
   }
   if (n > 15 && !(await confirm("Open", `Are you sure you want to open ${n.toLocaleString()} items?`, { ok: "Open" }))) {
     return;
@@ -115,10 +115,8 @@ export async function openSelection() {
       return [];
     },
   );
-  for (const it of items) {
-    if (it.is_dir) await newTab(it.path);
-    else await openPath(it.path, true);
-  }
+  for (const it of items) if (!it.is_dir) await openPath(it.path, true);
+  await addTabs(items.filter((it) => it.is_dir).map((it) => it.path));
 }
 
 /** The row the keyboard is on, or the first selected one. */

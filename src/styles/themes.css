@@ -4,7 +4,6 @@
 
 [data-theme="win11-dark"] {
   color-scheme: dark;
-  --bg: #202020;
   --text: #ffffff;
   --text-2: rgba(255, 255, 255, 0.786);
   --text-3: rgba(255, 255, 255, 0.55);
@@ -27,7 +26,6 @@
 
 [data-theme="win11-light"] {
   color-scheme: light;
-  --bg: #f3f3f3;
   --text: #1a1a1a;
   --text-2: rgba(0, 0, 0, 0.78);
   --text-3: rgba(0, 0, 0, 0.55);
@@ -50,7 +48,6 @@
 
 [data-theme="catppuccin-mocha"] {
   color-scheme: dark;
-  --bg: #1e1e2e;
   --text: #cdd6f4;
   --text-2: #bac2de;
   --text-3: #a6adc8;
@@ -73,7 +70,6 @@
 
 [data-theme="catppuccin-latte"] {
   color-scheme: light;
-  --bg: #eff1f5;
   --text: #4c4f69;
   --text-2: #5c5f77;
   --text-3: #5c5f77;
@@ -96,7 +92,6 @@
 
 [data-theme="dracula"] {
   color-scheme: dark;
-  --bg: #282a36;
   --text: #f8f8f2;
   --text-2: #e6e6dc;
   --text-3: #9ea8c7;
@@ -119,7 +114,6 @@
 
 [data-theme="nord"] {
   color-scheme: dark;
-  --bg: #2e3440;
   --text: #eceff4;
   --text-2: #d8dee9;
   --text-3: #aab2c0;
@@ -142,7 +136,6 @@
 
 [data-theme="tokyo-night"] {
   color-scheme: dark;
-  --bg: #1a1b26;
   --text: #c0caf5;
   --text-2: #a9b1d6;
   --text-3: #8c91b3;
@@ -165,7 +158,6 @@
 
 [data-theme="gruvbox-dark"] {
   color-scheme: dark;
-  --bg: #282828;
   --text: #ebdbb2;
   --text-2: #d5c4a1;
   --text-3: #a89984;
