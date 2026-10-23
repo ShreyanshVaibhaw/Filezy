@@ -3,7 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
   app, rows, selCount, firstSel, can, refresh, refreshClipState, entryPath, navigate, say, withSel,
-  newTab, pinAdd, pinRemove,
+  newTab, pinAdd, pinRemove, selectKeys,
 } from "./store.svelte";
 import { settings } from "./settings.svelte";
 import { confirm } from "./ask.svelte";
@@ -293,8 +293,9 @@ async function undoImpl() {
   busyUndo = true;
   try {
     const { undone, left, notes } = await reverse(e);
-    history.undo.pop();
-    if (left.length) history.undo.push({ ...e, items: left });
+    // By identity: an operation that finished meanwhile pushed its own entry on top.
+    const at = history.undo.lastIndexOf(e);
+    if (at >= 0) history.undo.splice(at, 1, ...(left.length ? [{ ...e, items: left }] : []));
     // Copies and moves can be redone; new items cannot.
     if (undone.length && e.kind !== "new") history.redo.push({ ...e, items: undone });
     const head = undone.length
@@ -361,13 +362,21 @@ export async function copySel(cut = false) {
   await refreshClipState();
 }
 
-/// Re-list and select items (by name) in the current folder, as Explorer
-/// selects what was just pasted, created or renamed.
+/// Re-list and select what was just pasted, created or renamed, as Explorer
+/// does. With `rename`, a single new item opens its rename box.
 export async function showResult(paths: string[], rename = false) {
-  // In a library, results land in its save location, one of the folders it shows.
-  const here = paths.filter((p) => isLibrary(app.path) || samePath(parentPath(p) ?? "", app.path)).map(baseName);
-  await navigate(app.path, false, { refresh: true, select: here.length ? here : undefined });
-  if (rename && here.length === 1) app.renaming = app.anchor;
+  // Rows of a library or of search results carry their folder, so the backend
+  // keys them by full path (listing.rs Entry::key); a folder's rows by name.
+  const byPath = isLibrary(app.path) || !!app.search;
+  const keys = byPath ? paths : paths.filter((p) => samePath(parentPath(p) ?? "", app.path)).map(baseName);
+  if (app.search) {
+    // Re-listing would put the search's folder under the search box; run the search again.
+    await refresh();
+    await selectKeys(keys);
+  } else {
+    await navigate(app.path, false, { refresh: true, select: keys.length ? keys : undefined });
+  }
+  if (rename && keys.length === 1 && app.focus >= 0) app.renaming = app.focus;
 }
 
 /// Paste whatever files are on the clipboard right now. The clipboard is read

@@ -5,6 +5,7 @@
 <script lang="ts">
   import { msg } from "./i18n.svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { untrack } from "svelte";
   import {
     app, rows, sel, entryPath, requestMeta, requestThumb, thumbOf, typeOf, fmtDate, fmtSizeAuto,
     selCount, selRef, folderName, refresh, withSel, requestStatus, statusOf,
@@ -69,11 +70,12 @@
       stats = null;
     }
     if (!items.length) return;
-    for (const e of items.slice(0, 1)) {
-      requestMeta(e);
-      requestThumb(e, 96);
-      requestStatus(e);
-    }
+    // Untracked: the helpers read the caches they fill, which would re-run this.
+    untrack(() => {
+      requestMeta(items[0]);
+      requestThumb(items[0], 96);
+      requestStatus(items[0]);
+    });
     // An archive's entries have only what the archive lists: name, size, date.
     const files = isArchive(app.path) ? [] : items.filter((e) => !e.is_dir);
     const keys = PROPS.map(([k]) => k);
@@ -96,7 +98,9 @@
         .then((ws) => s === seq && (writable = [...new Set(ws.flat())]));
     }
     if (n === 1 && items[0].ext === "lnk" && !isArchive(app.path)) {
-      invoke<string | null>("link_target", { path: entryPath(items[0]) }).then((t) => s === seq && (target = t));
+      invoke<string | null>("link_target", { path: entryPath(items[0]) })
+        .then((t) => s === seq && (target = t))
+        .catch(() => {});
     }
     if (n > 1) {
       withSel((ref) => invoke<{ bytes: number; files: number; oldest: number; newest: number }>("selection_stats", { sel: ref }))

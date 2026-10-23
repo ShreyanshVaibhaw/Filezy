@@ -1,11 +1,11 @@
 <script lang="ts">
+  import { opener } from "./opener";
   import { msg } from "./i18n.svelte";
   import { invoke } from "@tauri-apps/api/core";
-  import { SvelteMap } from "svelte/reactivity";
   import { untrack } from "svelte";
   import {
     app, navigate, newTab, openPath, recentFiles, fmtDate, folderName, shellIcon, pinRemove, movePin,
-    isFavorite, setFavorite, removeRecent, type ExtMeta,
+    isFavorite, setFavorite, removeRecent, extMeta, requestExtMeta,
   } from "./store.svelte";
   import { openFileLocation } from "./ops.svelte";
   import { menuKeys, fitMenu } from "./menukeys";
@@ -27,15 +27,11 @@
 
   // Per-extension icons for the file lists, fetched once each (outside
   // rendering, which mustn't change state).
-  const icons = new SvelteMap<string, ExtMeta>();
   $effect(() => {
-    for (const ext of new Set([...favorites, ...recentFiles.list].map((f) => f.ext))) {
-      if (untrack(() => icons.has(ext))) continue;
-      icons.set(ext, { icon: null, type_name: "" });
-      invoke<ExtMeta>("ext_meta", { ext, isDir: false }).then((m) => icons.set(ext, m));
-    }
+    const exts = new Set([...favorites, ...recentFiles.list].map((f) => f.ext));
+    untrack(() => exts.forEach(requestExtMeta));
   });
-  const iconFor = (ext: string) => icons.get(ext)?.icon ?? null;
+  const iconFor = (ext: string) => extMeta.get(ext)?.icon ?? null;
 
   /** Where an item lives, as Explorer's Home words it: the cloud folder's
    *  name for anything in one, "Stored locally" for the standard folders,
@@ -65,7 +61,10 @@
 
   // ---- pins are dragged to reorder them, as in Explorer's Quick access ----
   let drag = $state<{ from: number; x: number; y: number; moved: boolean } | null>(null);
+  // A drag that moved a pin doesn't also open it with the click its release makes.
+  let dragged = false;
   function pinDown(ev: MouseEvent, i: number) {
+    dragged = false;
     if (ev.button === 0) drag = { from: i, x: ev.clientX, y: ev.clientY, moved: false };
   }
   function pinMove(ev: MouseEvent) {
@@ -86,7 +85,7 @@
 
 <svelte:window
   onmousemove={pinMove}
-  onmouseup={() => (drag = null)}
+  onmouseup={() => { dragged = !!drag?.moved; drag = null; }}
   onmousedown={(e) => { if (menu && !(e.target as HTMLElement).closest(".menu")) menu = null; }}
 />
 
@@ -141,10 +140,10 @@
 <div class="homepane">
   <div class="section">{msg("Quick access")}</div>
   <div class="qtiles">
-    {#each app.specials as [name, path] (path)}
+    {#each app.specials as [name, path] (name)}
       <button
         class="qtile"
-        ondblclick={() => navigate(path)}
+        {...opener(() => navigate(path))}
         oncontextmenu={(e) => openMenu(e, path, { folder: true })}
         title={path}
         aria-label={path}
@@ -167,7 +166,7 @@
       <button
         class="qtile"
         class:dragging={drag?.moved && drag.from === i}
-        ondblclick={() => navigate(p)}
+        {...opener(() => !dragged && navigate(p))}
         onmousedown={(e) => pinDown(e, i)}
         oncontextmenu={(e) => openMenu(e, p, { folder: true, pin: true })}
         title={p}
@@ -196,7 +195,7 @@
   {:else}
     <div class="recent" aria-label={msg("Favorites")}>
       {#each favorites as f (f.path)}
-        <button class="rrow" ondblclick={() => openPath(f.path)} oncontextmenu={(e) => openMenu(e, f.path, {})} title={f.path} aria-label={f.path}>
+        <button class="rrow" {...opener(() => openPath(f.path))} oncontextmenu={(e) => openMenu(e, f.path, {})} title={f.path} aria-label={f.path}>
           {#if iconFor(f.ext)}
             <img class="ricon" src={iconFor(f.ext)} alt="" width="16" height="16" />
           {:else}
@@ -215,7 +214,7 @@
   {:else}
     <div class="recent" aria-label={msg("Recent files")}>
       {#each recentFiles.list as f (f.path)}
-        <button class="rrow" ondblclick={() => openPath(f.path)} oncontextmenu={(e) => openMenu(e, f.path, { recent: true })} title={f.path} aria-label={f.path}>
+        <button class="rrow" {...opener(() => openPath(f.path))} oncontextmenu={(e) => openMenu(e, f.path, { recent: true })} title={f.path} aria-label={f.path}>
           {#if iconFor(f.ext)}
             <img class="ricon" src={iconFor(f.ext)} alt="" width="16" height="16" />
           {:else}

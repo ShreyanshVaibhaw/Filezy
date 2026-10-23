@@ -2,7 +2,7 @@
 // and "Show extracted files when complete"), extracting what's selected inside
 // an archive, and Compress to ZIP file. archive.rs does the work.
 import { invoke } from "@tauri-apps/api/core";
-import { app, rows, firstSel, selCount, entryPath, newTab, navigate, withSel } from "./store.svelte";
+import { app, rows, firstSel, selCount, entryPath, newTab, refresh, withSel } from "./store.svelte";
 import { focusedRow } from "./selection.svelte";
 import { baseName, isArchive, isArchiveName, isVirtual, isWithin, joinPath, parentPath, splitArchive } from "./paths";
 import { note, recordMade, showResult, type OpItem } from "./ops.svelte";
@@ -121,7 +121,7 @@ export async function runExtract() {
   }
   if (!r.made.length) return;
   if (d.show) await newTab(r.dest);
-  else if (isWithin(r.dest, app.path)) await navigate(app.path, false, { refresh: true });
+  else if (isWithin(r.dest, app.path)) await refresh();
 }
 
 /// Compress the selection into a ZIP beside it, named after the item the

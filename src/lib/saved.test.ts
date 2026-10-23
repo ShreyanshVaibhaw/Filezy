@@ -12,3 +12,12 @@ test("saved searches and workspaces keep only well-formed entries", () => {
   assert.deepEqual(parseSaved("{not json"), { searches: [], workspaces: [] });
   assert.deepEqual(parseSaved(null), { searches: [], workspaces: [] });
 });
+
+test("a name saved twice keeps only its first entry", () => {
+  const r = parseSaved(JSON.stringify({
+    searches: [{ name: "Big", root: "C:\a", query: "a", scope: "folder" }, { name: "big", root: "C:\b", query: "b", scope: "folder" }],
+    workspaces: [{ name: "W", tabs: ["C:\a"] }, { name: "W", tabs: ["C:\b"] }],
+  }));
+  assert.deepEqual(r.searches.map((s) => s.root), ["C:\a"]);
+  assert.deepEqual(r.workspaces.map((w) => w.tabs[0]), ["C:\a"]);
+});

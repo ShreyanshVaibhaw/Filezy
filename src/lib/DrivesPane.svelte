@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { opener } from "./opener";
   import { msg } from "./i18n.svelte";
   import { menuKeys, fitMenu } from "./menukeys";
   import { invoke } from "@tauri-apps/api/core";
@@ -161,7 +162,7 @@
         class="drivetile"
         data-drop={d.path}
         data-drop-label={d.name}
-        ondblclick={() => navigate(d.path)}
+        {...opener(() => navigate(d.path))}
         oncontextmenu={(e) => onContext(e, d.path)}
         title={d.path}
       >

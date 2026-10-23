@@ -42,16 +42,34 @@ export const tool = $state({
   algos: ["SHA-256"] as string[],
   hashes: [] as HashResult[],
   compared: null as Compared | null,
-  sizes: [] as Size[],
   /** Measuring what's in one folder (the storage view), not a selection. */
   dir: "",
   error: "",
 });
 
+// Folder sizes arrive as one event per item. They collect in a plain map and
+// reach the dialog at most once a frame, sorted largest first, so thousands of
+// items cost one render each frame rather than one each.
+const sizeMap = new Map<string, Size>();
+let sizeList = $state.raw<Size[]>([]);
+let sizeFrame = 0;
+export const sizes = {
+  get list() {
+    return sizeList;
+  },
+};
+function publishSizes() {
+  cancelAnimationFrame(sizeFrame);
+  sizeFrame = 0;
+  sizeList = [...sizeMap.values()].sort((a, b) => b.bytes - a.bytes);
+}
+
 let nextJob = 1;
 function begin(kind: typeof tool.kind, title: string) {
   stopTool();
-  Object.assign(tool, { kind, title, job: nextJob++, busy: true, done: 0, total: 0, hashes: [], compared: null, sizes: [], dir: "", error: "" });
+  Object.assign(tool, { kind, title, job: nextJob++, busy: true, done: 0, total: 0, hashes: [], compared: null, dir: "", error: "" });
+  sizeMap.clear();
+  publishSizes();
   return tool.job;
 }
 
@@ -72,9 +90,8 @@ export function onProgress(p: { job: number; done: number; total: number }) {
 
 export function onSize(s: Size) {
   if (s.job !== tool.job) return;
-  const i = tool.sizes.findIndex((x) => x.path === s.path);
-  if (i >= 0) tool.sizes[i] = s;
-  else tool.sizes.push(s);
+  sizeMap.set(s.path, s);
+  sizeFrame ||= requestAnimationFrame(publishSizes);
 }
 
 const selItems = () => withSel((sel) => invoke<BatchItem[]>("sel_items", { sel })).catch((e) => ((app.status = String(e)), [] as BatchItem[]));
@@ -123,7 +140,10 @@ async function measure(dir: string | null, paths: string[]) {
   } catch (e) {
     if (job === tool.job) tool.error = String(e);
   } finally {
-    if (job === tool.job) tool.busy = false;
+    if (job === tool.job) {
+      tool.busy = false;
+      publishSizes();
+    }
   }
 }
 
@@ -135,16 +155,4 @@ export async function sizesSel() {
 /** The storage view: everything directly in the current folder, largest first. */
 export function analyzeFolder() {
   if (app.path) void measure(app.path, []);
-}
-
-export function fmtBytes(n: number): string {
-  if (n < 1024) return `${n} bytes`;
-  const units = ["KB", "MB", "GB", "TB"];
-  let v = n / 1024;
-  let u = 0;
-  while (v >= 1024 && u < units.length - 1) {
-    v /= 1024;
-    u++;
-  }
-  return `${v < 10 ? v.toFixed(2) : v < 100 ? v.toFixed(1) : Math.round(v)} ${units[u]}`;
 }

@@ -2,8 +2,8 @@
   import { msg } from "./i18n.svelte";
   import { onMount } from "svelte";
   import { listen } from "@tauri-apps/api/event";
-  import { tool, ALGOS, runHashes, stopTool, closeTool, onProgress, onSize, analyzeFolder, fmtBytes, type Size } from "./tools.svelte";
-  import { navigate, openPath } from "./store.svelte";
+  import { tool, sizes, ALGOS, runHashes, stopTool, closeTool, onProgress, onSize, analyzeFolder, type Size } from "./tools.svelte";
+  import { navigate, openPath, fmtSizeAuto as fmtBytes } from "./store.svelte";
   import { baseName } from "./paths";
 
   onMount(() => {
@@ -32,7 +32,7 @@
     navigator.clipboard.writeText(v).then(() => {
       copied = v;
       setTimeout(() => copied === v && (copied = ""), 1500);
-    });
+    }).catch((e) => (tool.error = `Couldn't copy. ${e}`));
   }
   function toggleAlgo(a: string) {
     const on = tool.algos.includes(a);
@@ -41,11 +41,18 @@
     runHashes();
   }
 
-  // Sizes, largest first; the bar is relative to the largest.
-  const sorted = $derived([...tool.sizes].sort((a, b) => b.bytes - a.bytes));
-  const largest = $derived(Math.max(1, ...tool.sizes.map((s) => s.bytes)));
+  // Sizes, largest first; the bar is relative to the largest. Long lists show
+  // their largest items until "Show all".
+  const SHOWN = 200;
+  let showAll = $state(false);
+  $effect(() => {
+    void tool.job;
+    showAll = false;
+  });
+  const shown = $derived(showAll ? sizes.list : sizes.list.slice(0, SHOWN));
+  const largest = $derived(Math.max(1, sizes.list[0]?.bytes ?? 0));
   const sum = $derived(
-    tool.sizes.reduce((t, s) => ({ bytes: t.bytes + s.bytes, files: t.files + s.files, folders: t.folders + s.folders + (tool.dir && s.is_dir ? 1 : 0), skipped: t.skipped + s.skipped, links: t.links + s.links }), { bytes: 0, files: 0, folders: 0, skipped: 0, links: 0 }),
+    sizes.list.reduce((t, s) => ({ bytes: t.bytes + s.bytes, files: t.files + s.files, folders: t.folders + s.folders + (tool.dir && s.is_dir ? 1 : 0), skipped: t.skipped + s.skipped, links: t.links + s.links }), { bytes: 0, files: 0, folders: 0, skipped: 0, links: 0 }),
   );
   function openItem(s: Size) {
     if (s.is_dir) {
@@ -134,7 +141,7 @@
         {/if}
       {:else}
         <div class="list sizes" role="list">
-          {#each sorted as s (s.path)}
+          {#each shown as s (s.path)}
             <div class="srow" role="listitem" ondblclick={() => openItem(s)}>
               <span class="glyph kind" aria-hidden="true">{s.is_dir ? "" : ""}</span>
               <span class="sname" title={s.path}>{baseName(s.path)}</span>
@@ -145,6 +152,9 @@
           {:else}
             <div class="dim pad">{tool.busy ? msg("Measuring…") : msg("This folder is empty.")}</div>
           {/each}
+          {#if shown.length < sizes.list.length}
+            <button class="btn more" onclick={() => (showAll = true)}>{msg("Show all")} ({sizes.list.length.toLocaleString()})</button>
+          {/if}
         </div>
         <p class="verdict" role="status">
           {fmtBytes(sum.bytes)} {msg("in")} {sum.files.toLocaleString()} {msg("files and")} {sum.folders.toLocaleString()} {msg("folders")}{tool.busy ? "…" : "."}
@@ -253,6 +263,10 @@
   }
   .pad {
     padding: 8px 4px;
+  }
+  .more {
+    display: block;
+    margin: 6px auto 2px;
   }
   .hash {
     display: grid;

@@ -313,9 +313,11 @@ export function shellIcon(path: string, size: number): string | null {
     queueMicrotask(() => {
       if (shellIcons.has(key)) return;
       shellIcons.set(key, null);
-      invoke<string | null>("path_thumb", { path, size }).then((ic) => {
-        if (ic) shellIcons.set(key, ic);
-      });
+      invoke<string | null>("path_thumb", { path, size })
+        .then((ic) => {
+          if (ic) shellIcons.set(key, ic);
+        })
+        .catch(() => {});
     });
   }
   return v ?? null;
@@ -433,19 +435,29 @@ function prefsFor(p: string): { sort: string; asc: boolean; view: string; group:
   return { sort: prefs.s, asc: prefs.a, view: prefs.v, group: auto ? prefs.s : prefs.g, auto };
 }
 
+// The arrangement a folder had before Gallery replaced it, to go back to.
+let beforeGallery: { path: string; sort: string; asc: boolean; group: string; auto: boolean } | null = null;
+
 /// Gallery brings its own arrangement, newest first in month groups; leaving
-/// it drops the month groups again.
+/// it brings back the folder's arrangement from before, or just drops the
+/// month groups when the folder opened in Gallery.
 export async function setView(v: string) {
   const was = app.view;
   app.view = v;
+  let auto = false;
   if (v === "gallery" && app.groupKey !== "month") {
+    beforeGallery = { path: app.path, sort: app.sortKey, asc: app.asc, group: app.groupKey, auto: groupAuto };
     Object.assign(app, { sortKey: "modified", asc: false, groupKey: "month" });
+  } else if (was === "gallery" && v !== "gallery" && beforeGallery && samePath(beforeGallery.path, app.path)) {
+    Object.assign(app, { sortKey: beforeGallery.sort, asc: beforeGallery.asc, groupKey: beforeGallery.group });
+    auto = beforeGallery.auto;
+    beforeGallery = null;
   } else if (was === "gallery" && v !== "gallery" && app.groupKey === "month") {
     app.groupKey = "none";
   } else {
     return savePrefs();
   }
-  groupAuto = false;
+  groupAuto = auto;
   collapsedGroups.clear();
   if (!app.search) savePrefs();
   await arrangeNow(true);
@@ -625,12 +637,16 @@ export async function loadDrives() {
 }
 
 /** What the Network page shows: the computers Windows found, once it has looked. */
-export const network = $state<{ places: Place[]; loading: boolean }>({ places: [], loading: false });
+export const network = $state<{ places: Place[]; loading: boolean; error: string }>({ places: [], loading: false, error: "" });
 
 export async function loadNetwork() {
   network.loading = true;
+  network.error = "";
   try {
     network.places = await invoke<Place[]>("network_places");
+  } catch (e) {
+    network.places = [];
+    network.error = String(e);
   } finally {
     network.loading = false;
   }
@@ -640,7 +656,11 @@ async function loadVirtual(p: string) {
   if (isShellLocation(p)) await loadShell(p);
   if (p === THIS_PC) loadDrives();
   if (p === NETWORK) loadNetwork();
-  if (p === HOME) invoke<RecentFile[]>("recent_files").then((r) => (recentFiles.list = r));
+  if (p === HOME) {
+    invoke<RecentFile[]>("recent_files")
+      .then((r) => (recentFiles.list = r))
+      .catch((e) => (app.status = `Recent files couldn't be read. ${e}`));
+  }
   if (p === RECYCLE) loadRecycle();
 }
 
@@ -715,8 +735,12 @@ function pushHistory(t: Tab, p: string) {
   }
   t.hist.splice(t.histIdx + 1);
   t.hist.push(p);
+  // Bounded, so a long session's tab still moves to another window (importTab
+  // takes at most 1,000 entries).
+  if (t.hist.length > HIST_MAX) t.hist.splice(0, t.hist.length - HIST_MAX);
   t.histIdx = t.hist.length - 1;
 }
+const HIST_MAX = 200;
 
 export interface NavOpts {
   /** Same folder again: keep scroll, and unless `select` says otherwise, the
@@ -759,7 +783,9 @@ export async function navigate(p: string, push = true, opts: NavOpts = {}): Prom
     return true;
   }
 
-  const refreshing = !!opts.refresh;
+  // A refresh keeps the search UI; listing the plain folder under it would make
+  // the folder's items look like results, so that counts as a fresh navigation.
+  const refreshing = !!opts.refresh && !app.search;
   const prefs = refreshing
     ? { sort: app.sortKey, asc: app.asc, view: app.view, group: app.groupKey, auto: groupAuto }
     : prefsFor(p);
@@ -918,6 +944,15 @@ async function reselect(k: { sel: string[]; focus: string | null; all: boolean }
   const f = k.focus ? (at[k.sel.length] ?? -1) : -1;
   app.focus = f;
   if (f >= 0) app.anchor = f;
+}
+
+/// Select rows by identity key (listing.rs Entry::key) once the listing and a
+/// running search have settled; the first one gets the focus.
+export async function selectKeys(keys: string[]) {
+  await settle(() => app.searching || activeTab()?.pending || arranging, 10_000);
+  if (!keys.length) return;
+  await reselect({ sel: keys, focus: keys[0], all: false });
+  if (app.focus >= 0) hooks.scrollToIndex?.(app.focus);
 }
 
 /// The current selection, anchor and open rename, to carry through a re-list.
@@ -1216,12 +1251,13 @@ export function listingIdle(): boolean {
   return !activeTab()?.pending && !app.loading && !app.searching && !arranging && pending.size === 0;
 }
 
-/// Wait (briefly) until no re-list or re-sort of the active tab is in flight.
-async function listingSettled() {
-  for (let i = 0; i < 150 && (activeTab()?.pending || arranging); i++) {
-    await new Promise((r) => setTimeout(r, 20));
-  }
+/// Wait while `busy` holds, for at most `ms`.
+async function settle(busy: () => unknown, ms: number) {
+  for (const end = Date.now() + ms; busy() && Date.now() < end; ) await new Promise((r) => setTimeout(r, 20));
 }
+
+/// Wait (briefly) until no re-list or re-sort of the active tab is in flight.
+const listingSettled = () => settle(() => activeTab()?.pending || arranging, 3000);
 
 /// Run a command on the selection. A folder that changes often (a download in
 /// progress) re-lists under the user; wait out a re-list in flight, and if the
@@ -1342,8 +1378,12 @@ export async function startSearch(q: string, again = false) {
   clearTimeout(filterTimer);
   const t = activeTab();
   if (!t) return;
-  const root = app.search?.root ?? app.path;
   const query = q.trim();
+  // Typed while a folder is still opening: search that folder once it's open,
+  // not the one being left.
+  if (query) await settle(() => app.loading, 15_000);
+  if (t.id !== app.activeTab) return;
+  const root = app.search?.root ?? app.path;
   if (!query) {
     endWideScope();
     if (app.search) {
@@ -1356,6 +1396,8 @@ export async function startSearch(q: string, again = false) {
   if (!again && app.search && app.search.query === query) return;
   const seq = seqCounter >= 0 ? ++seqCounter : await firstSeq();
   t.pending = seq;
+  // This supersedes a navigation that is still loading; its strip goes too.
+  app.loading = false;
   let res: { rev: number; root: string };
   try {
     res = await invoke("search_start", {
@@ -1401,7 +1443,7 @@ export function clearSearch() {
 }
 
 export function stopSearch() {
-  if (app.search && app.searching) invoke("search_stop", { seq: app.search.seq });
+  if (app.search && app.searching) invoke("search_stop", { seq: app.search.seq }).catch(() => {});
 }
 
 interface SearchUpdate {
@@ -1477,9 +1519,9 @@ export function requestMeta(e: Entry) {
   const key = e.is_dir ? "//dir" : e.ext;
   if (!extMeta.has(key)) {
     extMeta.set(key, { icon: null, type_name: "" });
-    invoke<ExtMeta>("ext_meta", { ext: e.is_dir ? "" : e.ext, isDir: e.is_dir }).then((m) =>
-      extMeta.set(key, m),
-    );
+    invoke<ExtMeta>("ext_meta", { ext: e.is_dir ? "" : e.ext, isDir: e.is_dir })
+      .then((m) => extMeta.set(key, m))
+      .catch(() => {});
   }
   if (!e.is_dir && PATH_ICON_EXTS.has(e.ext)) {
     const p = entryPath(e);
@@ -1487,7 +1529,9 @@ export function requestMeta(e: Entry) {
     if (!pathIcons.has(key)) {
       if (pathIcons.size > 2000) pathIcons.clear(); // ponytail: dumb cap; LRU if it ever matters
       pathIcons.set(key, null);
-      invoke<string | null>("path_icon", { path: p }).then((ic) => pathIcons.set(key, ic));
+      invoke<string | null>("path_icon", { path: p })
+        .then((ic) => pathIcons.set(key, ic))
+        .catch(() => {});
     }
   }
 }
@@ -1603,7 +1647,9 @@ export async function loadNewItems() {
 export function requestExtMeta(ext: string) {
   if (extMeta.has(ext)) return;
   extMeta.set(ext, { icon: null, type_name: "" });
-  invoke<ExtMeta>("ext_meta", { ext, isDir: false }).then((m) => extMeta.set(ext, m));
+  invoke<ExtMeta>("ext_meta", { ext, isDir: false })
+    .then((m) => extMeta.set(ext, m))
+    .catch(() => {});
 }
 
 export function selectAll() {

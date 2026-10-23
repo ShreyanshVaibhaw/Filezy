@@ -86,8 +86,8 @@
       setTimeout(() => invoke("shell_menu_paths", { paths: [app.home] }).catch(() => {}), 2500);
     }
     loadDrives();
-    invoke<typeof app.specials>("special_dirs").then((s) => (app.specials = s));
-    invoke<typeof app.cloudRoots>("cloud_roots").then((r) => (app.cloudRoots = r));
+    invoke<typeof app.specials>("special_dirs").then((s) => (app.specials = s)).catch(() => {});
+    invoke<typeof app.cloudRoots>("cloud_roots").then((r) => (app.cloudRoots = r)).catch(() => {});
     return () => { stopTransfers(); unlisten.forEach((u) => u.then((f) => f())); };
   });
 
@@ -104,6 +104,12 @@
   function listFocused(el: EventTarget | null): boolean {
     if (!(el instanceof HTMLElement) || el === document.body) return true;
     return !!el.closest("[data-filelist]");
+  }
+
+  function textSelectedOutsideList(): boolean {
+    const s = getSelection();
+    const at = s?.anchorNode instanceof Element ? s.anchorNode : s?.anchorNode?.parentElement;
+    return !!s && !s.isCollapsed && !!at && !at.closest("[data-filelist]");
   }
 
   /// F6 / Shift+F6: move between the address bar, the folder tree and the
@@ -172,6 +178,9 @@
 
     // ---- file list ----
     if (typing || !listFocused(ev.target)) return;
+    // Text selected in a preview, the Details pane or a message: Ctrl+C and X
+    // act on that text as in any page, not on the selected files.
+    if (ctrl && (k === "c" || k === "x") && textSelectedOutsideList()) return;
     if (!can("select")) return;
     const mods = { shift: ev.shiftKey, ctrl: ev.ctrlKey };
     const cur = focusedRow() ?? -1;

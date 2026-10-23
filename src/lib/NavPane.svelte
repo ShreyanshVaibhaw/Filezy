@@ -4,7 +4,9 @@
   import { app, navigate, folderName, pinRemove, movePin, shellIcon, treeDirty, THIS_PC, HOME, RECYCLE, RECYCLE_GUID, NETWORK } from "./store.svelte";
   import { menuOn, settings } from "./settings.svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { untrack } from "svelte";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
+  import { joinPath, samePath } from "./paths";
   import { dropHover } from "./drag";
   import { DEVICES } from "./shellplaces";
 
@@ -16,10 +18,6 @@
   // Lazy folder tree: path -> children names (null = loading).
   const kids = new SvelteMap<string, string[] | null>();
   const open = new SvelteSet<string>();
-
-  function joinDir(parent: string, name: string): string {
-    return parent.replace(/\\$/, "") + "\\" + name;
-  }
 
   function load(path: string) {
     if (!kids.has(path)) kids.set(path, null);
@@ -39,25 +37,31 @@
     load(path);
   }
 
+  // Re-read the open folders `which` picks and forget the closed ones. Runs
+  // untracked: load() reads and writes `kids`, so an effect that tracked it
+  // would re-run on every reply and list the folder again, forever.
+  function reload(which: (path: string) => boolean) {
+    untrack(() => {
+      for (const k of [...kids.keys()]) {
+        if (!which(k)) continue;
+        if (open.has(k)) load(k);
+        else kids.delete(k);
+      }
+    });
+  }
+
   // A folder's contents changed: re-read it if the tree shows it, forget it otherwise.
   $effect(() => {
     void treeDirty.n;
-    const p = treeDirty.path.replace(/\\+$/, "").toLowerCase();
-    for (const k of [...kids.keys()]) {
-      if (k.replace(/\\+$/, "").toLowerCase() !== p) continue;
-      if (open.has(k)) load(k);
-      else kids.delete(k);
-    }
+    const p = treeDirty.path;
+    reload((k) => samePath(k, p));
   });
 
   // Hidden-item settings change which folders the tree shows.
   $effect(() => {
     void settings.showHidden;
     void settings.showProtected;
-    for (const k of [...kids.keys()]) {
-      if (open.has(k)) load(k);
-      else kids.delete(k);
-    }
+    reload(() => true);
   });
 
   const specialGlyphs: Record<string, string> = {
@@ -69,9 +73,7 @@
     Videos: "",
   };
 
-  function isActive(p: string): boolean {
-    return app.path.replace(/\\$/, "").toLowerCase() === p.replace(/\\$/, "").toLowerCase();
-  }
+  const isActive = (p: string) => samePath(app.path, p);
 
   const folderGlyph = String.fromCharCode(0xe8b7);
 
@@ -205,7 +207,7 @@
       <div class="loading" style="padding-left: {28 + (depth + 1) * 16}px">…</div>
     {:else}
       {#each kids.get(path) ?? [] as child (child)}
-        {@render treeNode(joinDir(path, child), child, "", depth + 1)}
+        {@render treeNode(joinPath(path, child), child, "", depth + 1)}
       {/each}
     {/if}
   {/if}
@@ -249,7 +251,7 @@
     </button>
   {/each}
 
-  {#each app.specials as [name, path] (path)}
+  {#each app.specials as [name, path] (name)}
     <button
       class="navitem"
       class:active={isActive(path)}

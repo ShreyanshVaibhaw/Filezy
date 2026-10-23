@@ -243,9 +243,12 @@
         >
           {seg.name}
         </button>
-        <button class="crumbchevbtn" disabled={isShellLocation(seg.path)} aria-label={msg("Folders in {name}", { name: seg.name })} title={isShellLocation(seg.path) ? msg("Open device folders from the list.") : msg("Folders in {name}", { name: seg.name })} onclick={(e) => openCrumbMenu(seg.path, e)}>
-          <span class="glyph crumbchev">&#xE76C;</span>
-        </button>
+        <!-- Home, Settings and the like have no folders to list. -->
+        {#if !isVirtual(seg.path) || seg.path === THIS_PC || isShellLocation(seg.path)}
+          <button class="crumbchevbtn" disabled={isShellLocation(seg.path)} aria-label={msg("Folders in {name}", { name: seg.name })} title={isShellLocation(seg.path) ? msg("Open device folders from the list.") : msg("Folders in {name}", { name: seg.name })} onclick={(e) => openCrumbMenu(seg.path, e)}>
+            <span class="glyph crumbchev">&#xE76C;</span>
+          </button>
+        {/if}
       {/each}
       <div class="crumbfill" role="none" onclick={startEdit}></div>
     {/if}

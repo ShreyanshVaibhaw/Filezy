@@ -52,10 +52,14 @@ export async function renameSaved(kind: "searches" | "workspaces", i: number) {
   const item = saved[kind][i];
   if (!item) return;
   const name = await prompt("Rename", "New name:", item.name, "Rename");
-  if (name) {
-    item.name = name;
-    store();
+  if (!name) return;
+  // Names key the menus' lists, so two entries can't share one.
+  if (saved[kind].some((x, j) => j !== i && x.name.toLowerCase() === name.toLowerCase())) {
+    app.status = `There's already one named "${name}". Choose another name.`;
+    return;
   }
+  item.name = name;
+  store();
 }
 
 export function deleteSaved(kind: "searches" | "workspaces", i: number) {

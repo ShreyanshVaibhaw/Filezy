@@ -21,6 +21,7 @@
   import ShellItems from "./ShellItems.svelte";
   import { filterExtras, followMenu, OUR_VERBS, type ShellItem, type ShellMenu } from "./shellmenu";
   import { invoke } from "@tauri-apps/api/core";
+  import { untrack } from "svelte";
   import { displayPath, isArchive, isArchiveName, isServer, isVirtual } from "./paths";
   import { compressSel, extractAll, extractSelected } from "./archive.svelte";
 
@@ -64,8 +65,12 @@
   let scroller: HTMLDivElement | undefined = $state();
   let scrollTop = $state(0);
   let scrollLeft = $state(0);
-  let viewH = $state(600);
-  let gridW = $state(800);
+  // The scroller's content box: what's left beside and under its scrollbars.
+  // bind:clientWidth watches the border box, which a scrollbar appearing
+  // doesn't change, so it went stale by the scrollbar's width.
+  let box: DOMRectReadOnly | undefined = $state();
+  const viewH = $derived(box?.height ?? 600);
+  const gridW = $derived(box?.width ?? 800);
 
   // Compact view tightens the row-based views (details/list), like Explorer's.
   const v = $derived.by(() => {
@@ -284,14 +289,21 @@
   $effect(() => {
     ensureRange(entrySpan.first, entrySpan.last);
   });
+  // The request helpers read and fill their caches; untracked, so each icon
+  // or thumbnail that arrives doesn't re-run this over every visible row.
   $effect(() => {
+    const { icon, grid } = v;
+    const props = propCols;
+    const status = !grid && statusCol;
     for (let i = entrySpan.first; i < entrySpan.last; i++) {
       const e = rows[i];
       if (!e) continue;
-      requestMeta(e);
-      if (v.icon >= 32) requestThumb(e, v.icon);
-      if (!v.grid) requestProps(e, propCols);
-      if (!v.grid && statusCol) requestStatus(e);
+      untrack(() => {
+        requestMeta(e);
+        if (icon >= 32) requestThumb(e, icon);
+        if (!grid) requestProps(e, props);
+        if (status) requestStatus(e);
+      });
     }
   });
   $effect(() => {
@@ -1002,8 +1014,7 @@
   <div
     class="scroller"
     bind:this={scroller}
-    bind:clientHeight={viewH}
-    bind:clientWidth={gridW}
+    bind:contentRect={box}
     class:colflow={v.flow === "column"}
     onscroll={() => { scrollTop = scroller!.scrollTop; scrollLeft = scroller!.scrollLeft; }}
     onmousedown={(e) => { if (blankTarget(e)) marqueeStart(e); }}

@@ -2,6 +2,7 @@
      it finds none (network discovery off, or a computer that doesn't announce
      itself). A computer opens as its shares; a share as a folder. -->
 <script lang="ts">
+  import { opener } from "./opener";
   import { msg } from "./i18n.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { app, network, loadNetwork, navigate, openPath, loadDrives } from "./store.svelte";
@@ -43,6 +44,8 @@
   </div>
   {#if network.loading}
     <p class="note">{msg("Looking for computers on the network…")}</p>
+  {:else if network.error}
+    <p class="note">{msg("Couldn't look for computers on the network.")} {network.error}</p>
   {:else if !network.places.length}
     <p class="note">
       {msg("No computers were found. Network discovery may be off in Windows' network settings, or nothing here is shared. A computer can still be opened by its name above, like \\\\PC-NAME.")}
@@ -50,7 +53,7 @@
   {/if}
   <div class="tiles">
     {#each network.places as p (p.path)}
-      <button class="nettile" ondblclick={() => navigate(p.path)} onkeydown={(e) => e.key === "Enter" && navigate(p.path)} title={p.path}>
+      <button class="nettile" {...opener(() => navigate(p.path))} title={p.path}>
         <span class="glyph icon">&#xE7F8;</span>
         <span class="name">{p.name}</span>
       </button>

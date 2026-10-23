@@ -3,7 +3,7 @@
   import { getVersion } from "@tauri-apps/api/app";
   import appIcon from "../../app-icon.png";
   import {
-    settings, setSetting, setTheme, THEMES,
+    settings, setSetting, setTheme, THEMES, showPane,
     menuOn, setMenuOn, resetMenu, setExtraOn, forgetExtras, resetAll,
   } from "./settings.svelte";
   import { MENU_GROUPS } from "./menuitems";
@@ -167,10 +167,14 @@
         <div class="row">
           <span class="glyph rowicon">&#xE890;</span>
           <div class="rowlabel">
-            <div class="rowname">{msg("Preview pane")}</div>
-            <div class="rowdesc">{msg("Show a preview of the selected file (Alt+P)")}</div>
+            <div class="rowname">{msg("Side pane")}</div>
+            <div class="rowdesc">{msg("A preview of the selected file (Alt+P) or its details (Alt+Shift+P)")}</div>
           </div>
-          <Toggle label={msg("Preview pane")} checked={settings.previewPane} onchange={(v) => setSetting("previewPane", v)} />
+          <select class="combo" aria-label={msg("Side pane")} value={settings.previewPane ? "preview" : settings.detailsPane ? "details" : "none"} onchange={(e) => { const v = e.currentTarget.value; showPane(v === "none" ? null : (v as "preview" | "details")); }}>
+            <option value="none">{msg("None")}</option>
+            <option value="preview">{msg("Preview")}</option>
+            <option value="details">{msg("Details")}</option>
+          </select>
         </div>
       {:else if cat === "files"}
         <h2 class="section">{msg("Display")}</h2>
