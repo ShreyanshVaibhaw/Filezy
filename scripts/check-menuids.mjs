@@ -8,13 +8,17 @@ import { join } from "node:path";
 const LIB = "src/lib";
 const registry = readFileSync(join(LIB, "menuitems.ts"), "utf8");
 const declared = new Set([...registry.matchAll(/id:\s*"([^"]+)"/g)].map((m) => m[1]));
+// Every menu's prefix ("file", "home"...), so a quoted "<prefix>.<name>" in a
+// component is an id, used or misspelled, whichever menu it belongs to.
+const prefixes = [...new Set([...declared].map((id) => id.split(".")[0]))];
+const idPattern = new RegExp(`"((?:${prefixes.join("|")})\\.[a-zA-Z]+)"`, "g");
 
 const used = new Map(); // id -> file
 for (const f of readdirSync(LIB).filter((f) => f.endsWith(".svelte"))) {
   const src = readFileSync(join(LIB, f), "utf8");
   for (const m of src.matchAll(/\b(?:menuOn|setMenuOn)\("([^"]+)"/g)) used.set(m[1], f);
   // Ids listed in the anyMenuOn() guard arrays count as used too.
-  for (const m of src.matchAll(/"((?:file|blank|drive|nav|tab)\.[a-z]+)"/g)) {
+  for (const m of src.matchAll(idPattern)) {
     if (!used.has(m[1])) used.set(m[1], f);
   }
 }
