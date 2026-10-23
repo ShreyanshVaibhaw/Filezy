@@ -3,7 +3,7 @@
 //! The page draws text, images, audio, video and PDF itself. Text is decoded
 //! here the way Notepad decodes it: a byte-order mark, else UTF-16 without
 //! one, else UTF-8, else the ANSI code page. Media and PDF come through the
-//! asset protocol, which serves only files this module has let through. PDF
+//! `preview` scheme (`serve`), which serves only the file shown last. PDF
 //! uses WebView2's own viewer, because Edge's PDF previewer draws a blank page
 //! when anything but Explorer hosts it.
 //!
@@ -17,9 +17,10 @@ use crate::paths;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
+use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 use windows::core::{w, Interface, GUID, HSTRING, PWSTR};
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{CreateSolidBrush, DeleteObject, FillRect, HDC};
@@ -78,10 +79,14 @@ pub struct Info {
     untrusted: bool,
 }
 
-/// Decide how to preview `path`. Media it returns is let through the asset
-/// protocol. `download` says the user agreed to download an online-only file:
+/// The one file the `preview` scheme serves: the media or PDF shown last.
+static SERVED: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+/// Decide how to preview `path`. Media and PDF it returns become the file the
+/// `preview` scheme serves, in place of the one before. `download` says the user agreed to download an online-only file:
 /// it is downloaded here, before anything reads it, so a failure says why.
-pub fn info(app: &AppHandle, path: &str, download: bool) -> Result<Info, String> {
+pub fn info(path: &str, download: bool) -> Result<Info, String> {
+    *SERVED.lock().unwrap() = None;
     let native = paths::to_native(path);
     let attrs = unsafe { windows::Win32::Storage::FileSystem::GetFileAttributesW(&HSTRING::from(&native)) };
     let mut online_only = attrs != u32::MAX && attrs & (ATTR_OFFLINE | ATTR_RECALL_ON_OPEN | ATTR_RECALL_ON_DATA_ACCESS) != 0;
@@ -115,10 +120,9 @@ pub fn info(app: &AppHandle, path: &str, download: bool) -> Result<Info, String>
         "none"
     };
     if readable && matches!(kind, "image" | "audio" | "video" | "pdf") {
-        // The protocol compares canonical paths; allow exactly that one.
-        if let Ok(canon) = std::fs::canonicalize(&native) {
-            let _ = app.asset_protocol_scope().allow_file(canon);
-        }
+        // Requests are compared by canonical path, so another spelling of the
+        // same file is served and nothing else is.
+        *SERVED.lock().unwrap() = std::fs::canonicalize(&native).ok();
     }
     Ok(Info { kind, online_only, untrusted: matches!(kind, "native" | "pdf") && zone(&native) >= 3 })
 }
@@ -553,6 +557,103 @@ pub fn place(app: &AppHandle, place: Option<Place>) {
     }
 }
 
+/// Answer a `preview` request, which names a file the way the page's
+/// convertFileSrc(path, "preview") does: percent-encoded after the host. Only
+/// the file `info` chose last is served, in the ranges a media element asks for.
+pub fn serve(request: &tauri::http::Request<Vec<u8>>) -> tauri::http::Response<Vec<u8>> {
+    use std::io::{Read, Seek, SeekFrom};
+    use tauri::http::{header, Response, StatusCode};
+    let status = |code: StatusCode| Response::builder().status(code).body(Vec::new()).unwrap();
+    let Some(path) = percent_decode(request.uri().path().trim_start_matches('/')) else { return status(StatusCode::BAD_REQUEST) };
+    let Ok(canon) = std::fs::canonicalize(paths::to_native(&path)) else { return status(StatusCode::NOT_FOUND) };
+    if SERVED.lock().unwrap().as_ref() != Some(&canon) {
+        return status(StatusCode::FORBIDDEN);
+    }
+    let Ok(mut file) = std::fs::File::open(&canon) else { return status(StatusCode::NOT_FOUND) };
+    let Ok(len) = file.metadata().map(|m| m.len()) else { return status(StatusCode::NOT_FOUND) };
+    let range = request.headers().get(header::RANGE).and_then(|v| v.to_str().ok()).map(|v| byte_range(v, len));
+    let (start, end) = match range {
+        None => (0, len),
+        Some(Some(r)) => r,
+        Some(None) => {
+            return Response::builder()
+                .status(StatusCode::RANGE_NOT_SATISFIABLE)
+                .header(header::CONTENT_RANGE, format!("bytes */{len}"))
+                .body(Vec::new())
+                .unwrap()
+        }
+    };
+    let mut body = Vec::with_capacity((end - start) as usize);
+    if file.seek(SeekFrom::Start(start)).and_then(|_| file.take(end - start).read_to_end(&mut body)).is_err() {
+        return status(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+    let mut response = Response::builder()
+        .header(header::CONTENT_TYPE, mime(&ext_of(&path)))
+        .header(header::ACCEPT_RANGES, "bytes")
+        .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff");
+    if range.is_some() && !body.is_empty() {
+        let last = start + body.len() as u64 - 1;
+        response = response.status(StatusCode::PARTIAL_CONTENT).header(header::CONTENT_RANGE, format!("bytes {start}-{last}/{len}"));
+    }
+    response.body(body).unwrap()
+}
+
+/// Most a ranged response carries; the player asks for the rest as it needs it.
+const RANGE_MAX: u64 = 4 << 20;
+
+/// The first range of a Range header as [start, end) within `len`, at most
+/// RANGE_MAX long; None when it can't be satisfied.
+fn byte_range(header: &str, len: u64) -> Option<(u64, u64)> {
+    let first = header.strip_prefix("bytes=")?.split(',').next()?.trim();
+    let (a, b) = first.split_once('-')?;
+    let (start, end) = match (a.trim(), b.trim()) {
+        ("", n) => (len.saturating_sub(n.parse().ok()?), len),
+        (s, "") => (s.parse().ok()?, len),
+        (s, e) => (s.parse().ok()?, e.parse::<u64>().ok()?.saturating_add(1).min(len)),
+    };
+    (start < end).then(|| (start, end.min(start + RANGE_MAX)))
+}
+
+fn percent_decode(s: &str) -> Option<String> {
+    let mut out = Vec::with_capacity(s.len());
+    let mut bytes = s.bytes();
+    while let Some(b) = bytes.next() {
+        out.push(if b == b'%' {
+            let hex = [bytes.next()?, bytes.next()?];
+            u8::from_str_radix(std::str::from_utf8(&hex).ok()?, 16).ok()?
+        } else {
+            b
+        });
+    }
+    String::from_utf8(out).ok()
+}
+
+fn mime(ext: &str) -> &'static str {
+    match ext {
+        "png" => "image/png",
+        "jpg" | "jpeg" | "jfif" => "image/jpeg",
+        "gif" => "image/gif",
+        "bmp" => "image/bmp",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "ico" => "image/x-icon",
+        "avif" => "image/avif",
+        "mp3" => "audio/mpeg",
+        "wav" => "audio/wav",
+        "ogg" | "oga" | "opus" => "audio/ogg",
+        "m4a" => "audio/mp4",
+        "aac" => "audio/aac",
+        "flac" => "audio/flac",
+        "weba" => "audio/webm",
+        "mp4" | "m4v" => "video/mp4",
+        "webm" => "video/webm",
+        "ogv" => "video/ogg",
+        "mov" => "video/quicktime",
+        "pdf" => "application/pdf",
+        _ => "application/octet-stream",
+    }
+}
+
 /// Unload whatever handler is showing.
 pub fn close(app: &AppHandle) {
     SEQ.fetch_add(1, Ordering::SeqCst);
@@ -579,6 +680,54 @@ mod tests {
         assert!(decode(b"caf\xE9 au lait", false).unwrap().starts_with("caf"));
         assert!(decode(b"MZ\x90\0\x03\0\0\0", false).is_none());
         assert!(decode(&[1, 2, 3, 4, 5, 6, 7, 8, b'a'], false).is_none());
+    }
+
+    #[test]
+    fn preview_requests() {
+        assert_eq!(byte_range("bytes=0-", 10), Some((0, 10)));
+        assert_eq!(byte_range("bytes=2-4", 10), Some((2, 5)));
+        assert_eq!(byte_range("bytes=-3", 10), Some((7, 10)));
+        assert_eq!(byte_range("bytes=5-100", 10), Some((5, 10)));
+        assert_eq!(byte_range("bytes=0-", 100 << 20), Some((0, RANGE_MAX)));
+        assert_eq!(byte_range("bytes=10-", 10), None);
+        assert_eq!(byte_range("items=0-1", 10), None);
+        assert_eq!(percent_decode("C%3A%5CMy%20Files%5C%C3%BC.png").as_deref(), Some(r"C:\My Files\ü.png"));
+        assert_eq!(percent_decode("bad%2"), None);
+    }
+
+    #[test]
+    fn serves_only_the_file_shown_last() {
+        use tauri::http::{Request, StatusCode};
+        let dir = std::env::temp_dir().join(format!("filezy-preview-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (shown, other) = (dir.join("shown.png"), dir.join("other.png"));
+        std::fs::write(&shown, b"0123456789").unwrap();
+        std::fs::write(&other, b"secret").unwrap();
+        let url = |p: &std::path::Path| {
+            let enc: String = p.to_string_lossy().bytes().map(|b| format!("%{b:02X}")).collect();
+            format!("http://preview.localhost/{enc}")
+        };
+        let get = |p: &std::path::Path, range: Option<&str>| {
+            let mut r = Request::builder().uri(url(p));
+            if let Some(range) = range {
+                r = r.header("range", range);
+            }
+            serve(&r.body(Vec::new()).unwrap())
+        };
+        assert_eq!(info(&shown.to_string_lossy(), false).unwrap().kind, "image");
+        let full = get(&shown, None);
+        assert_eq!((full.status(), full.body().as_slice()), (StatusCode::OK, &b"0123456789"[..]));
+        assert_eq!(full.headers()["content-type"], "image/png");
+        let part = get(&shown, Some("bytes=2-4"));
+        assert_eq!((part.status(), part.body().as_slice()), (StatusCode::PARTIAL_CONTENT, &b"234"[..]));
+        assert_eq!(part.headers()["content-range"], "bytes 2-4/10");
+        assert_eq!(get(&shown, Some("bytes=20-")).status(), StatusCode::RANGE_NOT_SATISFIABLE);
+        assert_eq!(get(&other, None).status(), StatusCode::FORBIDDEN);
+        // Showing something else withdraws the first file.
+        assert_eq!(info(&other.to_string_lossy(), false).unwrap().kind, "image");
+        assert_eq!(get(&shown, None).status(), StatusCode::FORBIDDEN);
+        assert_eq!(get(&other, None).status(), StatusCode::OK);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

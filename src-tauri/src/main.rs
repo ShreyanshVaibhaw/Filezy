@@ -810,8 +810,8 @@ async fn recent_clear() -> Result<usize, String> {
 
 /// How the preview pane shows a file (preview.rs).
 #[tauri::command]
-async fn preview_info(path: String, download: Option<bool>, app: AppHandle) -> Result<preview::Info, String> {
-    tauri::async_runtime::spawn_blocking(move || preview::info(&app, &path, download.unwrap_or(false))).await.map_err(|e| e.to_string())?
+async fn preview_info(path: String, download: Option<bool>) -> Result<preview::Info, String> {
+    tauri::async_runtime::spawn_blocking(move || preview::info(&path, download.unwrap_or(false))).await.map_err(|e| e.to_string())?
 }
 
 /// The start of a text file, decoded; None when it isn't text.
@@ -1421,6 +1421,10 @@ fn main() {
         .plugin(tauri_plugin_process::init())
         .manage(AppState::default())
         .manage(shellmenu::ShellMenu::default())
+        // The preview pane's media and PDF (preview::serve).
+        .register_asynchronous_uri_scheme_protocol("preview", |_ctx, request, responder| {
+            tauri::async_runtime::spawn_blocking(move || responder.respond(preview::serve(&request)));
+        })
         .setup(|app| {
             clip::watch(app.handle().clone());
             drives::watch(app.handle().clone());
