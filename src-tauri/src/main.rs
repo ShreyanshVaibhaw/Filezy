@@ -649,9 +649,9 @@ async fn create_folder(dir: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn new_menu_items() -> Result<Vec<newmenu::NewItem>, ()> {
+async fn new_menu_items() -> Vec<newmenu::NewItem> {
     // First call scans HKCR (~100ms); cached afterwards.
-    Ok(tauri::async_runtime::spawn_blocking(newmenu::items).await.unwrap_or_default())
+    tauri::async_runtime::spawn_blocking(newmenu::items).await.unwrap_or_default()
 }
 
 #[tauri::command]

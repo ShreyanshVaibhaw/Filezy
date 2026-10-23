@@ -240,7 +240,7 @@ fn true_case(p: &str) -> String {
     if out.len() == 2 { format!("{out}\\") } else { out }
 }
 
-fn expand_env(s: &str) -> String {
+pub fn expand_env(s: &str) -> String {
     use windows::Win32::System::Environment::ExpandEnvironmentStringsW;
     let w = wide(s);
     unsafe {

@@ -1,7 +1,8 @@
 //! Explorer's "New >" submenu, rebuilt from the same source: HKCR ShellNew
 //! registrations. Each extension registers one of four creation methods:
 //! NullFile (empty file), Data (inline bytes), FileName (copy a template),
-//! or Command (run a wizard, e.g. the Shortcut wizard).
+//! or Command (run a program). Types Explorer creates through a COM Handler
+//! (Shortcut, Library) are left out.
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -14,6 +15,8 @@ enum Method {
     Data(Vec<u8>),
     FileName(String),
     Command(String),
+    /// A COM handler Explorer runs instead; not offered (see shellnew_method).
+    Handler,
 }
 
 #[derive(Clone)]
@@ -36,6 +39,12 @@ fn templates() -> &'static [Template] {
 }
 
 fn shellnew_method(key: &RegKey) -> Option<Method> {
+    // A Handler is a COM object Explorer runs instead (the Shortcut wizard,
+    // New Library). Such types often add an empty NullFile beside it, but an
+    // empty .lnk or .library-ms is a broken file, so they aren't offered.
+    if key.get_raw_value("Handler").is_ok() {
+        return Some(Method::Handler);
+    }
     if let Ok(cmd) = key.get_value::<String, _>("Command") {
         return Some(Method::Command(cmd));
     }
@@ -48,7 +57,7 @@ fn shellnew_method(key: &RegKey) -> Option<Method> {
     if key.get_raw_value("NullFile").is_ok() {
         return Some(Method::NullFile);
     }
-    None // Handler-only (COM) entries are skipped
+    None
 }
 
 fn scan() -> Vec<Template> {
@@ -80,7 +89,7 @@ fn scan() -> Vec<Template> {
                     shellnew_method(&k)
                 })
             });
-        let Some(method) = method else { continue };
+        let Some(method) = method.filter(|m| !matches!(m, Method::Handler)) else { continue };
         let ext = ext_name.trim_start_matches('.').to_lowercase();
         if ext.is_empty() {
             continue;
@@ -115,38 +124,10 @@ pub fn items() -> Vec<NewItem> {
     templates().iter().map(|t| NewItem { ext: t.ext.clone(), name: t.name.clone() }).collect()
 }
 
-fn expand_env(s: &str) -> String {
-    let mut out = String::new();
-    let mut rest = s;
-    while let Some(i) = rest.find('%') {
-        out.push_str(&rest[..i]);
-        match rest[i + 1..].find('%') {
-            Some(j) => {
-                let var = &rest[i + 1..i + 1 + j];
-                match std::env::var(var) {
-                    Ok(v) => out.push_str(&v),
-                    Err(_) => {
-                        out.push('%');
-                        out.push_str(var);
-                        out.push('%');
-                    }
-                }
-                rest = &rest[i + j + 2..];
-            }
-            None => {
-                out.push_str(&rest[i..]);
-                rest = "";
-            }
-        }
-    }
-    out.push_str(rest);
-    out
-}
-
 /// Resolve a ShellNew FileName value: absolute path, or a name looked up in the
 /// user's Templates folder then %SystemRoot%\ShellNew (Explorer's search order).
 fn find_template(file: &str) -> Option<PathBuf> {
-    let f = expand_env(file);
+    let f = crate::paths::expand_env(file);
     let p = Path::new(&f);
     if p.is_absolute() {
         return p.exists().then(|| p.to_path_buf());
@@ -168,7 +149,7 @@ pub fn create(dir: &str, ext: &str) -> Result<Option<String>, String> {
 
     if let Method::Command(cmd) = &t.method {
         let quoted = format!("\"{dir}\"");
-        let cmd = expand_env(cmd).replace("\"%1\"", "%1").replace("%1", &quoted);
+        let cmd = crate::paths::expand_env(cmd).replace("\"%1\"", "%1").replace("%1", &quoted);
         std::process::Command::new("cmd")
             .args(["/C", &cmd])
             .spawn()
@@ -195,7 +176,32 @@ pub fn create(dir: &str, ext: &str) -> Result<Option<String>, String> {
             let tpl = find_template(f).ok_or_else(|| format!("Template not found: {f}"))?;
             std::fs::copy(&tpl, &dest).map_err(|e| e.to_string())?;
         }
-        Method::Command(_) => unreachable!(),
+        Method::Command(_) | Method::Handler => unreachable!(),
     }
     Ok(Some(name))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use winreg::enums::HKEY_CURRENT_USER;
+
+    #[test]
+    fn handler_types_are_not_offered() {
+        // As .lnk and .library-ms register it: a Handler with an empty NullFile.
+        let path = format!(r"Software\FilezyTests\ShellNew-{}", std::process::id());
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let (key, _) = hkcu.create_subkey(&path).unwrap();
+        key.set_value("Handler", &"{ceefea1b-3e29-4ef1-b34c-fec79c4f70af}").unwrap();
+        key.set_value("NullFile", &"").unwrap();
+        let method = shellnew_method(&key);
+        key.delete_value("Handler").unwrap();
+        let plain = shellnew_method(&key);
+        let _ = hkcu.delete_subkey_all(r"Software\FilezyTests");
+        assert!(matches!(method, Some(Method::Handler)));
+        assert!(matches!(plain, Some(Method::NullFile)));
+        let exts: Vec<String> = items().into_iter().map(|i| i.ext).collect();
+        assert!(!exts.iter().any(|e| e == "lnk" || e == "library-ms"), "{exts:?}");
+        assert!(exts.iter().any(|e| e == "txt"), "{exts:?}");
+    }
 }
