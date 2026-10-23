@@ -848,10 +848,11 @@ async fn path_icon(path: String) -> Option<String> {
 }
 
 /// Thumbnail or large icon for a file, by path, so a late answer can only ever
-/// land on the item it was asked for.
+/// land on the item it was asked for. `px` is the size in device pixels: the
+/// drawn size times devicePixelRatio.
 #[tauri::command]
-async fn thumb(path: String, size: i32) -> Option<String> {
-    tauri::async_runtime::spawn_blocking(move || icons::thumbnail(&path, size))
+async fn thumb(path: String, px: i32) -> Option<String> {
+    tauri::async_runtime::spawn_blocking(move || icons::thumbnail(&path, px))
         .await
         .unwrap_or(None)
 }
@@ -937,7 +938,13 @@ fn special_dirs() -> Vec<(String, String)> {
         (n.to_string(), path)
     })
     .filter(|(_, p)| std::path::Path::new(p).is_dir())
-    .collect()
+    .fold(Vec::new(), |mut out: Vec<(String, String)>, (n, p)| {
+        // Two known folders can share a path; the page lists each folder once.
+        if !out.iter().any(|(_, q)| paths::identity(q) == paths::identity(&p)) {
+            out.push((n, p));
+        }
+        out
+    })
 }
 
 #[tauri::command]
@@ -999,7 +1006,7 @@ fn folder(path: &str) -> Result<String, String> {
 async fn paste(dest: String, app: AppHandle) -> Result<OpResult, String> {
     let seq = clip::sequence();
     let Some((srcs, cut)) = clip::get_files() else {
-        return Ok(OpResult { kind: "copy", items: vec![], aborted: false, cancelled: false, error: None, children: 0, clipboard: None });
+        return Ok(OpResult { kind: "copy", items: vec![], cancelled: false, error: None, clipboard: None });
     };
     let dest = folder(&dest)?;
     let op = if cut { Op::Move { srcs: srcs.clone(), dest } } else { Op::Copy { srcs: srcs.clone(), dest } };
@@ -1039,7 +1046,7 @@ async fn drop_paths(paths: Vec<String>, dest: String, op: String, app: AppHandle
         .filter(|p| !mv || paths::parent(p).is_none_or(|parent| paths::identity(&parent) != home))
         .collect();
     if srcs.is_empty() {
-        return Ok(OpResult { kind: "move", items: vec![], aborted: false, cancelled: false, error: None, children: 0, clipboard: None });
+        return Ok(OpResult { kind: "move", items: vec![], cancelled: false, error: None, clipboard: None });
     }
     run_op(if mv { Op::Move { srcs, dest } } else { Op::Copy { srcs, dest } }, &app).await
 }
@@ -1078,6 +1085,13 @@ async fn delete_items(sel: Keep, permanent: bool, state: State<'_, AppState>, ap
 #[tauri::command]
 async fn recycle_paths(paths: Vec<String>, app: AppHandle) -> Result<OpResult, String> {
     run_op(Op::Recycle { paths }, &app).await
+}
+
+/// Retry of a failed permanent delete (Shift+Delete): the same operation on the
+/// items that are left, after Windows' own confirmation.
+#[tauri::command]
+async fn delete_paths(paths: Vec<String>, app: AppHandle) -> Result<OpResult, String> {
+    run_op(Op::Delete { paths }, &app).await
 }
 
 /// Undo of a move or rename: put each item back at its exact old path, through
@@ -1391,7 +1405,7 @@ fn open_terminal(dir: String) -> Result<(), String> {
 #[tauri::command]
 async fn list_dirs(path: String, show_hidden: bool, show_protected: bool) -> Result<Vec<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        // Folders inside an archive too: shown ("C:.zip|docs") or typed ("C:.zip\docs").
+        // Folders inside an archive too: shown ("C:\a.zip|docs") or typed ("C:\a.zip\docs").
         let inside = archive::split(&path).map(|(f, i)| (f.to_string(), i.to_string())).or_else(|| {
             match paths::attributes(&path) {
                 Ok(a) if a & listing::ATTR_DIRECTORY == 0 && archive::kind_of(&path).is_some() => Some((path.clone(), String::new())),
@@ -1555,6 +1569,7 @@ fn main() {
             #[cfg(feature = "e2e")]
             e2e_drag_outcome,
             recycle_paths,
+            delete_paths,
             move_back,
             move_into,
             copy_into,

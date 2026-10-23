@@ -49,9 +49,10 @@ pub fn path_icon(path: &str) -> Option<String> {
 }
 
 /// Explorer-quality thumbnail/large icon via IShellItemImageFactory (images get real
-/// picture thumbnails, everything else gets its high-res icon).
-pub fn thumbnail(path: &str, size: i32) -> Option<String> {
-    image_of(path, size, false)
+/// picture thumbnails, everything else gets its high-res icon). `px` is in device
+/// pixels, which is what the factory works in.
+pub fn thumbnail(path: &str, px: i32) -> Option<String> {
+    image_of(path, px.clamp(16, 1024), false)
 }
 
 /// Force the ICON (never a thumbnail): special-folder icons (Desktop, Documents,

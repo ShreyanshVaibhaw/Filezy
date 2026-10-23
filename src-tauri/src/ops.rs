@@ -103,14 +103,10 @@ pub struct Item {
 pub struct OpResult {
     pub kind: &'static str,
     pub items: Vec<Item>,
-    /// Some work was stopped before completion (cancel, skip, or failure).
-    pub aborted: bool,
     /// The user cancelled.
     pub cancelled: bool,
     /// Why the operation as a whole failed to run.
     pub error: Option<String>,
-    /// Sub-items processed inside folders.
-    pub children: usize,
     /// For a cut-paste, what happened to the clipboard afterwards: "cleared",
     /// "rewritten" (it keeps the items that didn't move), or "changed elsewhere"
     /// (another program replaced it meanwhile, so it was left alone).
@@ -154,7 +150,6 @@ struct Log {
     positions: HashMap<String, usize>,
     /// Destinations that already existed when the engine reached them.
     existed: HashSet<String>,
-    children: usize,
 }
 
 impl Log {
@@ -176,10 +171,8 @@ impl Log {
         if hr.0 == COPYENGINE_S_PENDING {
             return; // not an outcome yet: the conflict dialog decides it
         }
+        // Items inside a folder are part of their top-level item's outcome.
         if !self.is_top(&src) {
-            if hr.is_ok() {
-                self.children += 1;
-            }
             return;
         }
         let (state, error) = classify(hr);
@@ -398,8 +391,7 @@ fn queue(fo: &IFileOperation, op: &Op, log: &mut Log) -> Result<(), String> {
 }
 
 fn perform(op: &Op, owner: isize) -> OpResult {
-    let mut result =
-        OpResult { kind: op.kind(), items: vec![], aborted: false, cancelled: false, error: None, children: 0, clipboard: None };
+    let mut result = OpResult { kind: op.kind(), items: vec![], cancelled: false, error: None, clipboard: None };
     let log = Arc::new(Mutex::new(Log {
         top: op.sources().iter().map(|s| paths::identity(s)).collect(),
         ..Default::default()
@@ -442,14 +434,20 @@ fn perform(op: &Op, owner: isize) -> OpResult {
             }
         }
     };
-    match run() {
-        Ok(aborted) => result.aborted = aborted,
+    let aborted = match run() {
+        Ok(aborted) => aborted,
         Err(e) => {
-            result.aborted = true;
             result.error = Some(e);
+            true
         }
-    }
+    };
     let mut log = std::mem::take(&mut *log.lock().unwrap());
+    // PerformOperations can succeed when the user said no before anything
+    // started (a delete confirmation); only the aborted flag tells. That is a
+    // cancel, not a list of items never attempted.
+    if aborted && result.error.is_none() && log.items.is_empty() {
+        result.cancelled = true;
+    }
     // Requested items the engine never reported on were not attempted.
     let seen: HashSet<String> = log.items.iter().map(|i| paths::identity(&i.src)).collect();
     for s in op.sources() {
@@ -473,7 +471,6 @@ fn perform(op: &Op, owner: isize) -> OpResult {
         }
     }
     result.items = log.items;
-    result.children = log.children;
     result
 }
 
@@ -494,10 +491,8 @@ pub fn run(op: Op, owner: isize) -> OpResult {
     .unwrap_or_else(|_| OpResult {
         kind: "copy",
         items: vec![],
-        aborted: true,
         cancelled: false,
         error: Some("The file operation stopped unexpectedly.".into()),
-        children: 0,
         clipboard: None,
     })
 }
@@ -657,7 +652,7 @@ mod tests {
         assert_eq!(log.items.len(), 1, "the last report replaces earlier ones");
         assert_eq!(log.items[0].state, State::Done);
         log.post(r"C:\s\child.txt".into(), String::new(), HRESULT(0), None);
-        assert_eq!((log.items.len(), log.children), (1, 1), "children are counted, not listed");
+        assert_eq!(log.items.len(), 1, "items inside a folder aren't listed");
     }
 
     fn fixture(tag: &str) -> String {

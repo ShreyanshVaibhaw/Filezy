@@ -89,6 +89,8 @@ pub fn list(max: usize) -> Vec<RecentFile> {
     let lnks = shortcuts();
 
     let mut out = Vec::new();
+    // Two shortcuts can point at one file; the newest stands for it.
+    let mut seen = std::collections::HashSet::new();
     for (lnk, t) in lnks {
         if out.len() >= max {
             break;
@@ -96,7 +98,7 @@ pub fn list(max: usize) -> Vec<RecentFile> {
         let Some(target) = resolve_lnk(&link, &lnk.to_string_lossy()) else { continue };
         let p = std::path::Path::new(&target);
         // Explorer's Recent files list shows files only, and only ones that still exist.
-        if !p.is_file() {
+        if !p.is_file() || !seen.insert(crate::paths::identity(&target)) {
             continue;
         }
         let modified = t
