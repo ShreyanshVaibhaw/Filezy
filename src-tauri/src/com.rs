@@ -60,12 +60,13 @@ fn join(model: COINIT, name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use windows::Win32::System::Com::{CoGetApartmentType, APTTYPE, APTTYPEQUALIFIER, APTTYPE_MTA, APTTYPE_STA};
+    use windows::Win32::System::Com::{CoGetApartmentType, APTTYPE, APTTYPEQUALIFIER, APTTYPE_MAINSTA, APTTYPE_MTA, APTTYPE_STA};
 
     fn apartment() -> APTTYPE {
         let (mut kind, mut qualifier) = (APTTYPE::default(), APTTYPEQUALIFIER::default());
         unsafe { CoGetApartmentType(&mut kind, &mut qualifier) }.unwrap();
-        kind
+        // The process's first STA is its main STA, still an STA.
+        if kind == APTTYPE_MAINSTA { APTTYPE_STA } else { kind }
     }
 
     #[test]
