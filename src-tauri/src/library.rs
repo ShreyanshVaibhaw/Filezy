@@ -18,7 +18,8 @@ fn load(file: &str) -> Result<IShellLibrary, String> {
     unsafe {
         let lib: IShellLibrary = CoCreateInstance(&ShellLibrary, None, CLSCTX_INPROC_SERVER).map_err(|e| e.message())?;
         let item: IShellItem = SHCreateItemFromParsingName(&HSTRING::from(file), None).map_err(|e| e.message())?;
-        lib.LoadLibraryFromItem(&item, STGM_READ.0).map_err(|_| format!("'{}' isn't a library Windows can read.", paths::file_name(file)))?;
+        lib.LoadLibraryFromItem(&item, STGM_READ.0)
+            .map_err(|_| format!("'{}' isn't a library Windows can read.", paths::file_name(file)))?;
         Ok(lib)
     }
 }
@@ -73,7 +74,10 @@ mod tests {
             .enumerate()
             .map(|(i, f)| {
                 let save = if i == 0 { "<isDefaultSaveLocation>true</isDefaultSaveLocation>" } else { "" };
-                format!("<searchConnectorDescription>{save}<simpleLocation><url>{}</url></simpleLocation></searchConnectorDescription>", f.display())
+                format!(
+                    "<searchConnectorDescription>{save}<simpleLocation><url>{}</url></simpleLocation></searchConnectorDescription>",
+                    f.display()
+                )
             })
             .collect();
         let xml = format!(

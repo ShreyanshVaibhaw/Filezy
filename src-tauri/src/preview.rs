@@ -15,32 +15,29 @@
 //! so a child would never be seen.
 use crate::paths;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
-use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use tauri::AppHandle;
 use windows::core::{w, Interface, GUID, HSTRING, PWSTR};
+use windows::Win32::Foundation::POINT;
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
+use windows::Win32::Graphics::Gdi::ClientToScreen;
 use windows::Win32::Graphics::Gdi::{CreateSolidBrush, DeleteObject, FillRect, HDC};
-use windows::Win32::System::Com::{
-    CLSIDFromString, CoCreateInstance, CLSCTX_LOCAL_SERVER, STGM_READ,
-    STGM_SHARE_DENY_NONE,
-};
+use windows::Win32::System::Com::{CLSIDFromString, CoCreateInstance, CLSCTX_LOCAL_SERVER, STGM_READ, STGM_SHARE_DENY_NONE};
 use windows::Win32::UI::Shell::Common::{PERCEIVED, PERCEIVED_TYPE_IMAGE, PERCEIVED_TYPE_TEXT, PERCEIVED_TYPE_VIDEO};
 use windows::Win32::UI::Shell::PropertiesSystem::{IInitializeWithFile, IInitializeWithStream};
 use windows::Win32::UI::Shell::{
     AssocGetPerceivedType, AssocQueryStringW, IInitializeWithItem, IPreviewHandler, IPreviewHandlerVisuals, IShellItem,
     SHCreateItemFromParsingName, SHCreateStreamOnFileEx, ASSOCF_NONE, ASSOCSTR_SHELLEXTENSION,
 };
-use windows::Win32::Foundation::POINT;
-use windows::Win32::Graphics::Gdi::ClientToScreen;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetClientRect, GetWindow, LoadCursorW, PeekMessageW,
-    RegisterClassW, SetWindowPos, ShowWindow, TranslateMessage, GW_HWNDPREV, HWND_TOP, IDC_ARROW, MA_NOACTIVATE, MSG,
-    PM_REMOVE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, WM_ERASEBKGND, WM_MOUSEACTIVATE, WNDCLASSW,
-    WS_CLIPCHILDREN, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_POPUP,
+    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetClientRect, GetWindow, LoadCursorW, PeekMessageW, RegisterClassW, SetWindowPos,
+    ShowWindow, TranslateMessage, GW_HWNDPREV, HWND_TOP, IDC_ARROW, MA_NOACTIVATE, MSG, PM_REMOVE, SWP_NOACTIVATE, SWP_NOMOVE,
+    SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, WM_ERASEBKGND, WM_MOUSEACTIVATE, WNDCLASSW, WS_CLIPCHILDREN, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    WS_POPUP,
 };
 
 /// Images WebView2 decodes itself; other images show as Windows' thumbnail.
@@ -50,10 +47,64 @@ const AUDIO: &[&str] = &["mp3", "wav", "ogg", "oga", "opus", "m4a", "aac", "flac
 const VIDEO: &[&str] = &["mp4", "m4v", "webm", "ogv", "mov"];
 /// Text the page shows even when Windows doesn't call it text.
 const TEXT: &[&str] = &[
-    "txt", "md", "markdown", "log", "json", "jsonc", "xml", "csv", "tsv", "ini", "cfg", "conf", "toml", "yaml", "yml", "js",
-    "mjs", "cjs", "ts", "tsx", "jsx", "rs", "py", "css", "scss", "less", "svelte", "vue", "bat", "cmd", "ps1", "psm1", "sh",
-    "c", "h", "cpp", "hpp", "cc", "cs", "java", "kt", "go", "rb", "php", "lua", "sql", "gitignore", "gitattributes",
-    "editorconfig", "env", "properties", "reg", "inf", "diff", "patch", "tex", "srt", "vtt",
+    "txt",
+    "md",
+    "markdown",
+    "log",
+    "json",
+    "jsonc",
+    "xml",
+    "csv",
+    "tsv",
+    "ini",
+    "cfg",
+    "conf",
+    "toml",
+    "yaml",
+    "yml",
+    "js",
+    "mjs",
+    "cjs",
+    "ts",
+    "tsx",
+    "jsx",
+    "rs",
+    "py",
+    "css",
+    "scss",
+    "less",
+    "svelte",
+    "vue",
+    "bat",
+    "cmd",
+    "ps1",
+    "psm1",
+    "sh",
+    "c",
+    "h",
+    "cpp",
+    "hpp",
+    "cc",
+    "cs",
+    "java",
+    "kt",
+    "go",
+    "rb",
+    "php",
+    "lua",
+    "sql",
+    "gitignore",
+    "gitattributes",
+    "editorconfig",
+    "env",
+    "properties",
+    "reg",
+    "inf",
+    "diff",
+    "patch",
+    "tex",
+    "srt",
+    "vtt",
 ];
 /// Windows' own plain-text previewer: the page's text view does its job.
 const TXT_PREVIEWER: &str = "{1531d583-8375-4d3f-b5fb-d23bbd169f22}";
@@ -106,7 +157,11 @@ pub fn info(path: &str, download: bool) -> Result<Info, String> {
     } else if ext == "pdf" {
         // Only a real PDF: the asset protocol serves a file without PDF's
         // signature as a web page, whose scripts mustn't run in the pane.
-        if !readable || starts_with(&native, b"%PDF") { "pdf" } else { "none" }
+        if !readable || starts_with(&native, b"%PDF") {
+            "pdf"
+        } else {
+            "none"
+        }
     } else if handler(&ext).is_some() {
         "native"
     } else if TEXT.contains(&ext.as_str()) || perceived == PERCEIVED_TYPE_TEXT {
@@ -163,7 +218,14 @@ fn handler(ext: &str) -> Option<GUID> {
     let mut buf = [0u16; 64];
     let mut n = buf.len() as u32;
     let hr = unsafe {
-        AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_SHELLEXTENSION, &HSTRING::from(format!(".{ext}")), PREVIEW_HANDLER_KEY, Some(PWSTR(buf.as_mut_ptr())), &mut n)
+        AssocQueryStringW(
+            ASSOCF_NONE,
+            ASSOCSTR_SHELLEXTENSION,
+            &HSTRING::from(format!(".{ext}")),
+            PREVIEW_HANDLER_KEY,
+            Some(PWSTR(buf.as_mut_ptr())),
+            &mut n,
+        )
     };
     if hr.is_err() || n < 2 {
         return None;
@@ -446,8 +508,21 @@ fn host(top: HWND) -> HWND {
         RegisterClassW(&class);
         // Owned by the main window: always above it, minimized and closed with it.
         let ex = WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
-        let h = CreateWindowExW(ex, w!("FilezyPreviewHost"), w!(""), WS_POPUP | WS_CLIPCHILDREN, 0, 0, 0, 0, Some(top), None, Some(inst.into()), None)
-            .unwrap_or_default();
+        let h = CreateWindowExW(
+            ex,
+            w!("FilezyPreviewHost"),
+            w!(""),
+            WS_POPUP | WS_CLIPCHILDREN,
+            0,
+            0,
+            0,
+            0,
+            Some(top),
+            None,
+            Some(inst.into()),
+            None,
+        )
+        .unwrap_or_default();
         HOST.store(h.0 as isize, Ordering::SeqCst);
         TOP.store(top.0 as isize, Ordering::SeqCst);
         h

@@ -50,7 +50,8 @@ pub fn synced(dir: &str) -> bool {
     }
     let w = crate::fs_list::wide(&crate::paths::to_native(dir));
     let mut id = 0i64; // CF_SYNC_ROOT_BASIC_INFO: the root's file id
-    unsafe { CfGetSyncRootInfoByPath(windows::core::PCWSTR(w.as_ptr()), CF_SYNC_ROOT_INFO_BASIC, &mut id as *mut i64 as *mut _, 8, None) }.is_ok()
+    unsafe { CfGetSyncRootInfoByPath(windows::core::PCWSTR(w.as_ptr()), CF_SYNC_ROOT_INFO_BASIC, &mut id as *mut i64 as *mut _, 8, None) }
+        .is_ok()
 }
 
 /// Item attributes that can mean a cloud state: pinned, unpinned and

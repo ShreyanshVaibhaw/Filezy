@@ -3,15 +3,9 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use windows::core::PCWSTR;
-use windows::Win32::Graphics::Gdi::{
-    DeleteObject, GetDC, GetDIBits, ReleaseDC, BITMAPINFO, BITMAPINFOHEADER, BI_RGB,
-    DIB_RGB_COLORS,
-};
+use windows::Win32::Graphics::Gdi::{DeleteObject, GetDC, GetDIBits, ReleaseDC, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS};
 use windows::Win32::Storage::FileSystem::{FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL};
-use windows::Win32::UI::Shell::{
-    SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_SMALLICON, SHGFI_TYPENAME,
-    SHGFI_USEFILEATTRIBUTES,
-};
+use windows::Win32::UI::Shell::{SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_SMALLICON, SHGFI_TYPENAME, SHGFI_USEFILEATTRIBUTES};
 use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, HICON, ICONINFO};
 
 use crate::fs_list::wide;
@@ -35,11 +29,7 @@ pub fn ext_meta(ext: &str, is_dir: bool) -> ExtMeta {
     let fake = if is_dir { "folder".to_string() } else { format!("f.{ext}") };
     let attrs = if is_dir { FILE_ATTRIBUTE_DIRECTORY } else { FILE_ATTRIBUTE_NORMAL };
     let meta = shell_info(&fake, attrs.0, true);
-    EXT_CACHE
-        .lock()
-        .unwrap()
-        .get_or_insert_with(HashMap::new)
-        .insert(key, meta.clone());
+    EXT_CACHE.lock().unwrap().get_or_insert_with(HashMap::new).insert(key, meta.clone());
     meta
 }
 
@@ -63,27 +53,16 @@ pub fn shell_icon_png(path: &str, size: i32) -> Option<String> {
 
 fn image_of(path: &str, size: i32, icon_only: bool) -> Option<String> {
     use windows::Win32::Foundation::SIZE;
-    use windows::Win32::UI::Shell::{
-        IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF, SIIGBF_BIGGERSIZEOK,
-        SIIGBF_ICONONLY,
-    };
+    use windows::Win32::UI::Shell::{IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF, SIIGBF_BIGGERSIZEOK, SIIGBF_ICONONLY};
     crate::com::sta();
     unsafe {
         let wpath = wide(path);
-        let factory: IShellItemImageFactory =
-            SHCreateItemFromParsingName(PCWSTR(wpath.as_ptr()), None).ok()?;
-        let flags = if icon_only {
-            SIIGBF(SIIGBF_BIGGERSIZEOK.0 | SIIGBF_ICONONLY.0)
-        } else {
-            SIIGBF_BIGGERSIZEOK
-        };
+        let factory: IShellItemImageFactory = SHCreateItemFromParsingName(PCWSTR(wpath.as_ptr()), None).ok()?;
+        let flags = if icon_only { SIIGBF(SIIGBF_BIGGERSIZEOK.0 | SIIGBF_ICONONLY.0) } else { SIIGBF_BIGGERSIZEOK };
         let hbm = factory.GetImage(SIZE { cx: size, cy: size }, flags).ok()?;
 
         let hdc = GetDC(None);
-        let mut header = BITMAPINFOHEADER {
-            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-            ..Default::default()
-        };
+        let mut header = BITMAPINFOHEADER { biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32, ..Default::default() };
         let mut probe = BITMAPINFO { bmiHeader: header, ..Default::default() };
         GetDIBits(hdc, hbm, 0, 0, None, &mut probe, DIB_RGB_COLORS);
         let w = probe.bmiHeader.biWidth;
@@ -100,15 +79,7 @@ fn image_of(path: &str, size: i32, icon_only: bool) -> Option<String> {
         header.biCompression = BI_RGB.0;
         let mut bmi = BITMAPINFO { bmiHeader: header, ..Default::default() };
         let mut pixels = vec![0u8; (w * h * 4) as usize];
-        let got = GetDIBits(
-            hdc,
-            hbm,
-            0,
-            h as u32,
-            Some(pixels.as_mut_ptr() as *mut _),
-            &mut bmi,
-            DIB_RGB_COLORS,
-        );
+        let got = GetDIBits(hdc, hbm, 0, h as u32, Some(pixels.as_mut_ptr() as *mut _), &mut bmi, DIB_RGB_COLORS);
         let _ = DeleteObject(hbm.into());
         ReleaseDC(None, hdc);
         if got == 0 {
@@ -134,10 +105,7 @@ fn encode_png(rgba: &[u8], w: u32, h: u32) -> Option<String> {
         let mut writer = enc.write_header().ok()?;
         writer.write_image_data(rgba).ok()?;
     }
-    Some(format!(
-        "data:image/png;base64,{}",
-        base64::engine::general_purpose::STANDARD.encode(out)
-    ))
+    Some(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(out)))
 }
 
 fn shell_info(path: &str, attrs: u32, by_attr: bool) -> ExtMeta {
@@ -175,10 +143,7 @@ fn hicon_to_data_url(hicon: HICON) -> Option<String> {
         GetIconInfo(hicon, &mut info).ok()?;
         let hdc = GetDC(None);
 
-        let mut header = BITMAPINFOHEADER {
-            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-            ..Default::default()
-        };
+        let mut header = BITMAPINFOHEADER { biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32, ..Default::default() };
         let mut probe = BITMAPINFO { bmiHeader: header, ..Default::default() };
         // First call with no buffer fills in dimensions.
         GetDIBits(hdc, info.hbmColor, 0, 0, None, &mut probe, DIB_RGB_COLORS);
@@ -198,31 +163,14 @@ fn hicon_to_data_url(hicon: HICON) -> Option<String> {
         header.biCompression = BI_RGB.0;
         let mut bmi = BITMAPINFO { bmiHeader: header, ..Default::default() };
         let mut pixels = vec![0u8; (w * h * 4) as usize];
-        let got = GetDIBits(
-            hdc,
-            info.hbmColor,
-            0,
-            h as u32,
-            Some(pixels.as_mut_ptr() as *mut _),
-            &mut bmi,
-            DIB_RGB_COLORS,
-        );
+        let got = GetDIBits(hdc, info.hbmColor, 0, h as u32, Some(pixels.as_mut_ptr() as *mut _), &mut bmi, DIB_RGB_COLORS);
 
         let mut mask_pixels = None;
         if got != 0 && pixels.chunks_exact(4).all(|p| p[3] == 0) {
             // No alpha channel: derive it from the AND mask.
             let mut mp = vec![0u8; (w * h * 4) as usize];
             let mut mbmi = BITMAPINFO { bmiHeader: header, ..Default::default() };
-            if GetDIBits(
-                hdc,
-                info.hbmMask,
-                0,
-                h as u32,
-                Some(mp.as_mut_ptr() as *mut _),
-                &mut mbmi,
-                DIB_RGB_COLORS,
-            ) != 0
-            {
+            if GetDIBits(hdc, info.hbmMask, 0, h as u32, Some(mp.as_mut_ptr() as *mut _), &mut mbmi, DIB_RGB_COLORS) != 0 {
                 mask_pixels = Some(mp);
             }
         }
@@ -250,9 +198,6 @@ fn hicon_to_data_url(hicon: HICON) -> Option<String> {
             let mut writer = enc.write_header().ok()?;
             writer.write_image_data(&pixels).ok()?;
         }
-        Some(format!(
-            "data:image/png;base64,{}",
-            base64::engine::general_purpose::STANDARD.encode(out)
-        ))
+        Some(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(out)))
     }
 }

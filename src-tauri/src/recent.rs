@@ -101,17 +101,11 @@ pub fn list(max: usize) -> Vec<RecentFile> {
         if !p.is_file() || !seen.insert(crate::paths::identity(&target)) {
             continue;
         }
-        let modified = t
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as i64)
-            .unwrap_or(0);
+        let modified = t.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0);
         out.push(RecentFile {
             name: p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
             path: target.clone(),
-            ext: p
-                .extension()
-                .map(|x| x.to_string_lossy().to_lowercase())
-                .unwrap_or_default(),
+            ext: p.extension().map(|x| x.to_string_lossy().to_lowercase()).unwrap_or_default(),
             modified,
         });
     }

@@ -11,8 +11,8 @@ use std::cell::RefCell;
 use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant};
 
-use serde::{Deserialize, Serialize};
 use crate::on_main_wait as on_main;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{DRAGDROP_S_CANCEL, DRAGDROP_S_DROP, HWND, POINT, POINTL};
@@ -20,10 +20,8 @@ use windows::Win32::Graphics::Gdi::ClientToScreen;
 use windows::Win32::System::Com::{IDataObject, DVASPECT_CONTENT, FORMATETC, TYMED_HGLOBAL};
 use windows::Win32::System::DataExchange::RegisterClipboardFormatW;
 use windows::Win32::System::Memory::{GlobalLock, GlobalUnlock};
-use windows::Win32::System::Ole::{
-    IDropTarget, ReleaseStgMedium, DROPEFFECT, DROPEFFECT_COPY, DROPEFFECT_LINK, DROPEFFECT_MOVE,
-};
-use windows::Win32::System::SystemServices::{MODIFIERKEYS_FLAGS, MK_CONTROL, MK_LBUTTON, MK_RBUTTON, MK_SHIFT};
+use windows::Win32::System::Ole::{IDropTarget, ReleaseStgMedium, DROPEFFECT, DROPEFFECT_COPY, DROPEFFECT_LINK, DROPEFFECT_MOVE};
+use windows::Win32::System::SystemServices::{MK_CONTROL, MK_LBUTTON, MK_RBUTTON, MK_SHIFT, MODIFIERKEYS_FLAGS};
 use windows::Win32::UI::Shell::{CFSTR_LOGICALPERFORMEDDROPEFFECT, CFSTR_PERFORMEDDROPEFFECT};
 
 /// What every drag source here permits, as Explorer's does.
@@ -145,7 +143,9 @@ pub fn run(app: &AppHandle, paths: Vec<String>, s: Script) -> Result<Outcome, St
     let top = win.hwnd().map_err(|e| e.to_string())?.0 as isize;
     let screen = |p: &Point| {
         let mut pt = POINT { x: (p.x * scale).round() as i32, y: (p.y * scale).round() as i32 };
-        unsafe { let _ = ClientToScreen(HWND(top as *mut _), &mut pt); }
+        unsafe {
+            let _ = ClientToScreen(HWND(top as *mut _), &mut pt);
+        }
         POINTL { x: pt.x, y: pt.y }
     };
     let (first, last) = match (s.points.first(), s.points.last()) {

@@ -50,7 +50,11 @@ fn join(model: COINIT, name: &str) -> bool {
     let hr = unsafe { CoInitializeEx(None, model) };
     if hr == RPC_E_CHANGED_MODE {
         let thread = std::thread::current();
-        eprintln!("COM: thread {:?} ({}) is in another apartment; {name} work runs there anyway", thread.id(), thread.name().unwrap_or("unnamed"));
+        eprintln!(
+            "COM: thread {:?} ({}) is in another apartment; {name} work runs there anyway",
+            thread.id(),
+            thread.name().unwrap_or("unnamed")
+        );
     } else if hr.is_err() {
         eprintln!("COM: couldn't join a {name} apartment: {}", windows::core::Error::from(hr).message());
     }
@@ -66,7 +70,11 @@ mod tests {
         let (mut kind, mut qualifier) = (APTTYPE::default(), APTTYPEQUALIFIER::default());
         unsafe { CoGetApartmentType(&mut kind, &mut qualifier) }.unwrap();
         // The process's first STA is its main STA, still an STA.
-        if kind == APTTYPE_MAINSTA { APTTYPE_STA } else { kind }
+        if kind == APTTYPE_MAINSTA {
+            APTTYPE_STA
+        } else {
+            kind
+        }
     }
 
     #[test]

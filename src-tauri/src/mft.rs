@@ -16,12 +16,10 @@ use std::sync::{Mutex, OnceLock};
 use tauri::AppHandle;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{CloseHandle, GENERIC_READ, HANDLE};
-use windows::Win32::Storage::FileSystem::{
-    CreateFileW, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
-};
+use windows::Win32::Storage::FileSystem::{CreateFileW, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING};
 use windows::Win32::System::Ioctl::{
-    FSCTL_ENUM_USN_DATA, FSCTL_QUERY_USN_JOURNAL, FSCTL_READ_USN_JOURNAL, MFT_ENUM_DATA_V0,
-    READ_USN_JOURNAL_DATA_V0, USN_JOURNAL_DATA_V0, USN_RECORD_V2,
+    FSCTL_ENUM_USN_DATA, FSCTL_QUERY_USN_JOURNAL, FSCTL_READ_USN_JOURNAL, MFT_ENUM_DATA_V0, READ_USN_JOURNAL_DATA_V0, USN_JOURNAL_DATA_V0,
+    USN_RECORD_V2,
 };
 use windows::Win32::System::IO::DeviceIoControl;
 
@@ -59,7 +57,9 @@ pub fn can_handle(root: &str) -> bool {
 struct Volume(HANDLE);
 impl Drop for Volume {
     fn drop(&mut self) {
-        unsafe { let _ = CloseHandle(self.0); }
+        unsafe {
+            let _ = CloseHandle(self.0);
+        }
     }
 }
 
@@ -261,7 +261,9 @@ pub fn search(app: &AppHandle, req: &SearchReq, q: &Query, note: &str) -> bool {
         return true;
     }
     for node in index.nodes.values() {
-        if !q.words.iter().all(|w| listing::contains_lower(&node.name, w)) || !listing::visible(node.attrs, req.show_hidden, req.show_protected) {
+        if !q.words.iter().all(|w| listing::contains_lower(&node.name, w))
+            || !listing::visible(node.attrs, req.show_hidden, req.show_protected)
+        {
             continue;
         }
         if !index.chain_visible(node.parent, req.show_hidden, req.show_protected) {
@@ -273,17 +275,10 @@ pub fn search(app: &AppHandle, req: &SearchReq, q: &Query, note: &str) -> bool {
         let full = crate::paths::join(&dir, &node.name);
         let Ok(meta) = std::fs::symlink_metadata(crate::paths::to_native(&full)) else { continue };
         let ms = |t: std::io::Result<std::time::SystemTime>| {
-            t.ok()
-                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_millis() as u64)
-                .unwrap_or(0)
+            t.ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_millis() as u64).unwrap_or(0)
         };
         let is_dir = node.attrs & listing::ATTR_DIRECTORY != 0;
-        let ext = if is_dir {
-            String::new()
-        } else {
-            node.name.rsplit_once('.').map(|(_, e)| e.to_lowercase()).unwrap_or_default()
-        };
+        let ext = if is_dir { String::new() } else { node.name.rsplit_once('.').map(|(_, e)| e.to_lowercase()).unwrap_or_default() };
         let e = Entry {
             name: node.name.clone(),
             is_dir,

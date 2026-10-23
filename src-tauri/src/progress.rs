@@ -55,7 +55,9 @@ impl Progress {
 impl Drop for Progress {
     fn drop(&mut self) {
         if let Some(d) = &self.dlg {
-            unsafe { let _ = d.StopProgressDialog(); }
+            unsafe {
+                let _ = d.StopProgressDialog();
+            }
         }
     }
 }

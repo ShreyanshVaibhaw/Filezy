@@ -12,11 +12,9 @@ use crate::search::{max_results, Sink};
 use windows::core::{w, Error, Interface, GUID, HSTRING, PCWSTR, PWSTR};
 use windows::Win32::Foundation::E_FAIL;
 use windows::Win32::Storage::FileSystem::{FindClose, FindFirstFileW, WIN32_FIND_DATAW};
-use windows::Win32::System::Com::{
-    CoCreateInstance, CoTaskMemFree, CLSCTX_INPROC_SERVER, CLSCTX_LOCAL_SERVER,
-};
+use windows::Win32::System::Com::{CoCreateInstance, CoTaskMemFree, CLSCTX_INPROC_SERVER, CLSCTX_LOCAL_SERVER};
 use windows::Win32::System::Search::{
-    CatalogStatus, CSearchManager, IAccessor, ICommandText, IDBCreateCommand, IDBCreateSession, IDBInitialize, IDataInitialize, IRowset,
+    CSearchManager, CatalogStatus, IAccessor, ICommandText, IDBCreateCommand, IDBCreateSession, IDBInitialize, IDataInitialize, IRowset,
     ISearchManager, CLUSION_REASON, DBACCESSOR_ROWDATA, DBBINDING, DBMEMOWNER_CLIENTOWNED, DBPARAMIO_NOTPARAM, DBPART_LENGTH,
     DBPART_STATUS, DBPART_VALUE, DBSTATUS_S_OK, DBTYPE_BYREF, DBTYPE_WSTR, DB_S_ENDOFROWSET, HACCESSOR, MSDAINITIALIZE,
 };
@@ -74,7 +72,11 @@ const DBGUID_DEFAULT: GUID = GUID::from_u128(0xc8b521fb_5cf3_11ce_ade5_00aa00447
 fn scope_url(root: &str) -> String {
     let p = root.trim_end_matches('\\').replace('\\', "/").replace('\'', "''");
     // A drive root keeps its slash: "file:C:/".
-    if p.len() == 2 { format!("file:{p}/") } else { format!("file:{p}") }
+    if p.len() == 2 {
+        format!("file:{p}/")
+    } else {
+        format!("file:{p}")
+    }
 }
 
 /// A string the shell allocated, read and freed.
@@ -187,7 +189,9 @@ fn entry_at(path: &str) -> Option<Entry> {
     let w = wide(&paths::to_native(path));
     let mut data = WIN32_FIND_DATAW::default();
     let h = unsafe { FindFirstFileW(PCWSTR(w.as_ptr()), &mut data) }.ok()?;
-    unsafe { let _ = FindClose(h); }
+    unsafe {
+        let _ = FindClose(h);
+    }
     let mut e = entry_from(&data)?;
     e.parent = paths::parent(path);
     Some(e)
@@ -232,4 +236,3 @@ mod tests {
         assert_eq!(scope_url(r"D:\Bob's files"), "file:D:/Bob''s files");
     }
 }
-

@@ -15,10 +15,7 @@ fn file(kind: &str) -> Result<PathBuf, String> {
 
 pub fn load(kind: &str) -> Vec<String> {
     let Ok(p) = file(kind) else { return Vec::new() };
-    std::fs::read_to_string(p)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+    std::fs::read_to_string(p).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
 }
 
 pub fn save(kind: &str, list: &[String]) -> Result<(), String> {

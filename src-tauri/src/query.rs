@@ -52,8 +52,14 @@ impl Query {
 /// Explorer's kinds, as the extensions the walker can recognize them by.
 fn kind_exts(kind: &str) -> Option<&'static [&'static str]> {
     Some(match kind {
-        "document" | "documents" => &["doc", "docx", "docm", "odt", "rtf", "pdf", "xls", "xlsx", "xlsm", "ods", "csv", "ppt", "pptx", "odp", "txt", "md", "xps", "epub"],
-        "picture" | "pictures" | "image" | "photo" => &["jpg", "jpeg", "png", "gif", "bmp", "tif", "tiff", "webp", "heic", "heif", "avif", "ico", "svg", "raw", "cr2", "nef", "dng", "arw"],
+        "document" | "documents" => &[
+            "doc", "docx", "docm", "odt", "rtf", "pdf", "xls", "xlsx", "xlsm", "ods", "csv", "ppt", "pptx", "odp", "txt", "md", "xps",
+            "epub",
+        ],
+        "picture" | "pictures" | "image" | "photo" => &[
+            "jpg", "jpeg", "png", "gif", "bmp", "tif", "tiff", "webp", "heic", "heif", "avif", "ico", "svg", "raw", "cr2", "nef", "dng",
+            "arw",
+        ],
         "video" | "videos" | "movie" => &["mp4", "mkv", "avi", "mov", "wmv", "webm", "m4v", "mpg", "mpeg", "flv", "3gp", "ts"],
         "music" | "audio" | "song" => &["mp3", "wav", "flac", "aac", "m4a", "ogg", "opus", "wma", "aiff", "mid", "midi"],
         "archive" | "compressed" => &["zip", "7z", "rar", "tar", "gz", "tgz", "bz2", "xz", "cab", "iso"],

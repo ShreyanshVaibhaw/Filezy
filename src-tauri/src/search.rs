@@ -249,7 +249,11 @@ fn in_archive(app: AppHandle, req: SearchReq, file: &str, inner: &str, q: &Query
                 }
                 let lower = it.path.to_lowercase();
                 let parent = it.path.rfind('\\').map_or("", |i| &it.path[..i]);
-                let here = if req.scope == "folder" { parent.eq_ignore_ascii_case(inner.trim_matches('\\')) } else { base.is_empty() || lower.starts_with(&prefix) };
+                let here = if req.scope == "folder" {
+                    parent.eq_ignore_ascii_case(inner.trim_matches('\\'))
+                } else {
+                    base.is_empty() || lower.starts_with(&prefix)
+                };
                 if !here {
                     continue;
                 }
@@ -306,7 +310,8 @@ mod tests {
 
     #[test]
     fn unicode_case_insensitive() {
-        let entry = |n: &str| Entry { name: n.into(), is_dir: false, size: 0, modified: 0, created: 0, ext: String::new(), attrs: 0, parent: None };
+        let entry =
+            |n: &str| Entry { name: n.into(), is_dir: false, size: 0, modified: 0, created: 0, ext: String::new(), attrs: 0, parent: None };
         let q = |s: &str| query::parse(s, 0, 0).unwrap();
         assert!(q("ärger").matches(&entry("Ärger.TXT")));
         assert!(q("σοφια").matches(&entry("ΣΟΦΙΑ.md")));

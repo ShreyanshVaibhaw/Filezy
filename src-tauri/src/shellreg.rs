@@ -72,7 +72,11 @@ mod tests {
         unregister(&classes).unwrap();
         assert!(!registered(&classes, exe));
         unregister(&classes).unwrap(); // twice is fine
-        let theirs: String = hkcu.open_subkey_with_flags(format!(r"{classes}\Directory\shell\SomeoneElse"), KEY_READ | KEY_WRITE).unwrap().get_value("").unwrap();
+        let theirs: String = hkcu
+            .open_subkey_with_flags(format!(r"{classes}\Directory\shell\SomeoneElse"), KEY_READ | KEY_WRITE)
+            .unwrap()
+            .get_value("")
+            .unwrap();
         assert_eq!(theirs, "theirs", "another app's entry stayed");
         hkcu.delete_subkey_all(&root).unwrap();
     }

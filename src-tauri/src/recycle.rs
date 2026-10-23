@@ -8,8 +8,8 @@ use windows::Win32::Foundation::HWND;
 use windows::Win32::System::Com::CoTaskMemFree;
 use windows::Win32::UI::Shell::Common::{ITEMIDLIST, STRRET};
 use windows::Win32::UI::Shell::{
-    IShellFolder, IShellFolder2, SHEmptyRecycleBinW, SHGetDesktopFolder, StrRetToStrW, SHCONTF_FOLDERS,
-    SHCONTF_NONFOLDERS, SHGDN_FORPARSING, SHGDN_INFOLDER,
+    IShellFolder, IShellFolder2, SHEmptyRecycleBinW, SHGetDesktopFolder, StrRetToStrW, SHCONTF_FOLDERS, SHCONTF_NONFOLDERS,
+    SHGDN_FORPARSING, SHGDN_INFOLDER,
 };
 
 #[derive(Serialize)]
@@ -102,8 +102,7 @@ fn walk(folder: &IShellFolder, mut visit: impl FnMut(*const ITEMIDLIST, String) 
 /// List recycle bin contents. Columns: 1 original location, 2 date deleted, 3 size.
 pub fn list() -> Result<RecycleList, String> {
     let folder = bin_folder()?;
-    let f2: IShellFolder2 =
-        windows::core::Interface::cast(&folder).map_err(|e: windows::core::Error| e.message().to_string())?;
+    let f2: IShellFolder2 = windows::core::Interface::cast(&folder).map_err(|e: windows::core::Error| e.message().to_string())?;
     let mut items = Vec::new();
     let mut total = 0usize;
     let detail = |pidl: *const ITEMIDLIST, col: u32| -> String {
@@ -150,19 +149,16 @@ fn invoke(ids: &[String], verb: &str, owner: isize) -> Result<usize, String> {
         });
     }
     let res = unsafe {
-        folder
-            .GetUIObjectOf::<IContextMenu>(HWND::default(), &pidls, None)
-            .map_err(|e| e.message().to_string())
-            .and_then(|icm| {
-                let verb = std::ffi::CString::new(verb).unwrap();
-                let info = CMINVOKECOMMANDINFO {
-                    cbSize: std::mem::size_of::<CMINVOKECOMMANDINFO>() as u32,
-                    hwnd: HWND(owner as *mut _),
-                    lpVerb: windows::core::PCSTR(verb.as_ptr() as *const u8),
-                    ..Default::default()
-                };
-                icm.InvokeCommand(&info).map_err(|e| e.message().to_string())
-            })
+        folder.GetUIObjectOf::<IContextMenu>(HWND::default(), &pidls, None).map_err(|e| e.message().to_string()).and_then(|icm| {
+            let verb = std::ffi::CString::new(verb).unwrap();
+            let info = CMINVOKECOMMANDINFO {
+                cbSize: std::mem::size_of::<CMINVOKECOMMANDINFO>() as u32,
+                hwnd: HWND(owner as *mut _),
+                lpVerb: windows::core::PCSTR(verb.as_ptr() as *const u8),
+                ..Default::default()
+            };
+            icm.InvokeCommand(&info).map_err(|e| e.message().to_string())
+        })
     };
     for p in &pidls {
         unsafe { CoTaskMemFree(Some(*p as *const _)) };

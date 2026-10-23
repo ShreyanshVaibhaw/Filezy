@@ -111,11 +111,7 @@ fn scan() -> Vec<Template> {
         });
     }
     // Explorer pins Shortcut right after Folder; the rest reads best alphabetically.
-    out.sort_by(|a, b| {
-        (a.ext != "lnk")
-            .cmp(&(b.ext != "lnk"))
-            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
-    });
+    out.sort_by(|a, b| (a.ext != "lnk").cmp(&(b.ext != "lnk")).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
     out.dedup_by(|a, b| a.ext == b.ext);
     out
 }
@@ -150,10 +146,7 @@ pub fn create(dir: &str, ext: &str) -> Result<Option<String>, String> {
     if let Method::Command(cmd) = &t.method {
         let quoted = format!("\"{dir}\"");
         let cmd = crate::paths::expand_env(cmd).replace("\"%1\"", "%1").replace("%1", &quoted);
-        std::process::Command::new("cmd")
-            .args(["/C", &cmd])
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        std::process::Command::new("cmd").args(["/C", &cmd]).spawn().map_err(|e| e.to_string())?;
         return Ok(None);
     }
 

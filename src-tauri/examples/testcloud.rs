@@ -50,7 +50,8 @@ unsafe extern "system" fn fetch(info: *const CF_CALLBACK_INFO, params: *const CF
     let info = &*info;
     let fetch = (*params).Anonymous.FetchData;
     // The identity given at creation is the file's name.
-    let name = String::from_utf8_lossy(std::slice::from_raw_parts(info.FileIdentity as *const u8, info.FileIdentityLength as usize)).to_string();
+    let name =
+        String::from_utf8_lossy(std::slice::from_raw_parts(info.FileIdentity as *const u8, info.FileIdentityLength as usize)).to_string();
     if has(&SLOW, &name) {
         std::thread::sleep(std::time::Duration::from_secs(2));
     }
@@ -172,14 +173,16 @@ fn start(id: &str, folder: &str) -> Result<(), String> {
     let root = std::path::Path::new(folder);
     std::fs::create_dir_all(root).map_err(|e| e.to_string())?;
     register(id, folder).map_err(err("register"))?;
-    placeholders(folder, &["online.txt", "local.txt", "pinned.txt", "pending.txt", "broken.txt", "slow.txt"], false).map_err(err("create files"))?;
+    placeholders(folder, &["online.txt", "local.txt", "pinned.txt", "pending.txt", "broken.txt", "slow.txt"], false)
+        .map_err(err("create files"))?;
     placeholders(folder, &["docs"], true).map_err(err("create folder"))?;
     placeholders(&root.join("docs").to_string_lossy(), &["inner.txt"], false).map_err(err("create inner file"))?;
     let table = [
         CF_CALLBACK_REGISTRATION { Type: CF_CALLBACK_TYPE_FETCH_DATA, Callback: Some(fetch) },
         CF_CALLBACK_REGISTRATION { Type: CF_CALLBACK_TYPE_NONE, Callback: None },
     ];
-    let key = unsafe { CfConnectSyncRoot(PCWSTR(wide(folder).as_ptr()), table.as_ptr(), None, CF_CONNECT_FLAG_NONE) }.map_err(err("connect"))?;
+    let key =
+        unsafe { CfConnectSyncRoot(PCWSTR(wide(folder).as_ptr()), table.as_ptr(), None, CF_CONNECT_FLAG_NONE) }.map_err(err("connect"))?;
     *FAIL.lock().unwrap() = Some(HashSet::from(["broken.txt".to_string()]));
     *SLOW.lock().unwrap() = Some(HashSet::from(["slow.txt".to_string()]));
     let at = |n: &str| root.join(n).to_string_lossy().to_string();
@@ -190,7 +193,8 @@ fn start(id: &str, folder: &str) -> Result<(), String> {
     let pinned = handle(&at("pinned.txt")).map_err(|e| e.to_string())?;
     unsafe { CfSetPinState(HANDLE(pinned.as_raw_handle()), CF_PIN_STATE_PINNED, CF_SET_PIN_FLAG_NONE, None) }.map_err(err("pin"))?;
     let pending = handle(&at("pending.txt")).map_err(|e| e.to_string())?;
-    unsafe { CfSetInSyncState(HANDLE(pending.as_raw_handle()), CF_IN_SYNC_STATE_NOT_IN_SYNC, CF_SET_IN_SYNC_FLAG_NONE, None) }.map_err(err("mark not in sync"))?;
+    unsafe { CfSetInSyncState(HANDLE(pending.as_raw_handle()), CF_IN_SYNC_STATE_NOT_IN_SYNC, CF_SET_IN_SYNC_FLAG_NONE, None) }
+        .map_err(err("mark not in sync"))?;
     drop((pinned, pending));
     use notify::Watcher;
     let mut watcher = notify::recommended_watcher(|ev: notify::Result<notify::Event>| {
@@ -208,7 +212,8 @@ fn start(id: &str, folder: &str) -> Result<(), String> {
             "fix" => drop(FAIL.lock().unwrap().get_or_insert_default().remove(name)),
             "insync" => {
                 let f = handle(&at(name)).map_err(|e| e.to_string())?;
-                unsafe { CfSetInSyncState(HANDLE(f.as_raw_handle()), CF_IN_SYNC_STATE_IN_SYNC, CF_SET_IN_SYNC_FLAG_NONE, None) }.map_err(err("mark in sync"))?;
+                unsafe { CfSetInSyncState(HANDLE(f.as_raw_handle()), CF_IN_SYNC_STATE_IN_SYNC, CF_SET_IN_SYNC_FLAG_NONE, None) }
+                    .map_err(err("mark in sync"))?;
             }
             "quit" => break,
             _ => {}

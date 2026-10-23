@@ -135,7 +135,13 @@ fn display_name(root: &str) -> Option<String> {
     let w = wide(root);
     let mut info = SHFILEINFOW::default();
     let ok = unsafe {
-        SHGetFileInfoW(PCWSTR(w.as_ptr()), FILE_FLAGS_AND_ATTRIBUTES(0), Some(&mut info), std::mem::size_of::<SHFILEINFOW>() as u32, SHGFI_DISPLAYNAME)
+        SHGetFileInfoW(
+            PCWSTR(w.as_ptr()),
+            FILE_FLAGS_AND_ATTRIBUTES(0),
+            Some(&mut info),
+            std::mem::size_of::<SHFILEINFOW>() as u32,
+            SHGFI_DISPLAYNAME,
+        )
     };
     let len = info.szDisplayName.iter().position(|&c| c == 0).unwrap_or(0);
     (ok != 0 && len > 0).then(|| String::from_utf16_lossy(&info.szDisplayName[..len]))
@@ -173,8 +179,8 @@ fn net_target(letter: char) -> (Option<String>, bool) {
 /// Whether a fixed drive is a disk on USB (an external drive Explorer can eject).
 fn on_usb(letter: char) -> bool {
     use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::Storage::FileSystem::{CreateFileW, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING};
     use windows::Win32::Storage::FileSystem::BusTypeUsb;
+    use windows::Win32::Storage::FileSystem::{CreateFileW, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING};
     use windows::Win32::System::Ioctl::{
         PropertyStandardQuery, StorageDeviceProperty, IOCTL_STORAGE_QUERY_PROPERTY, STORAGE_DEVICE_DESCRIPTOR, STORAGE_PROPERTY_QUERY,
     };
@@ -182,7 +188,15 @@ fn on_usb(letter: char) -> bool {
     let dev = wide(&format!(r"\\.\{letter}:"));
     unsafe {
         // No access rights needed to ask a device about itself.
-        let Ok(h) = CreateFileW(PCWSTR(dev.as_ptr()), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, None, OPEN_EXISTING, FILE_FLAGS_AND_ATTRIBUTES(0), None) else {
+        let Ok(h) = CreateFileW(
+            PCWSTR(dev.as_ptr()),
+            0,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            None,
+            OPEN_EXISTING,
+            FILE_FLAGS_AND_ATTRIBUTES(0),
+            None,
+        ) else {
             return false;
         };
         let q = STORAGE_PROPERTY_QUERY { PropertyId: StorageDeviceProperty, QueryType: PropertyStandardQuery, ..Default::default() };
@@ -209,21 +223,26 @@ fn on_usb(letter: char) -> bool {
 /// top-level window gets Windows' device broadcasts (message-only windows
 /// don't) and the shell's drive notifications.
 pub fn watch(app: AppHandle) {
+    use windows::core::w;
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::UI::Shell::{
-        SHChangeNotifyEntry, SHChangeNotifyRegister, SHCNE_DRIVEADD, SHCNE_DRIVEREMOVED, SHCNE_MEDIAINSERTED, SHCNE_MEDIAREMOVED,
-        SHCNE_NETSHARE, SHCNE_NETUNSHARE, SHCNE_SERVERDISCONNECT, SHCNRF_InterruptLevel, SHCNRF_ShellLevel,
+        SHCNRF_InterruptLevel, SHCNRF_ShellLevel, SHChangeNotifyEntry, SHChangeNotifyRegister, SHCNE_DRIVEADD, SHCNE_DRIVEREMOVED,
+        SHCNE_MEDIAINSERTED, SHCNE_MEDIAREMOVED, SHCNE_NETSHARE, SHCNE_NETUNSHARE, SHCNE_SERVERDISCONNECT,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, KillTimer, RegisterClassW, SetTimer, MSG, WINDOW_EX_STYLE,
-        WM_APP, WM_DEVICECHANGE, WM_TIMER, WNDCLASSW, WS_POPUP,
+        CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, KillTimer, RegisterClassW, SetTimer, MSG, WINDOW_EX_STYLE, WM_APP,
+        WM_DEVICECHANGE, WM_TIMER, WNDCLASSW, WS_POPUP,
     };
-    use windows::core::w;
     static APP: std::sync::OnceLock<AppHandle> = std::sync::OnceLock::new();
     let _ = APP.set(app);
     const SHELL: u32 = WM_APP + 1;
     const SETTLE: usize = 1;
-    unsafe extern "system" fn proc(h: windows::Win32::Foundation::HWND, m: u32, wp: windows::Win32::Foundation::WPARAM, lp: windows::Win32::Foundation::LPARAM) -> windows::Win32::Foundation::LRESULT {
+    unsafe extern "system" fn proc(
+        h: windows::Win32::Foundation::HWND,
+        m: u32,
+        wp: windows::Win32::Foundation::WPARAM,
+        lp: windows::Win32::Foundation::LPARAM,
+    ) -> windows::Win32::Foundation::LRESULT {
         match m {
             // A burst of changes (a USB disk brings several) becomes one event.
             WM_DEVICECHANGE | SHELL => {
@@ -231,7 +250,9 @@ pub fn watch(app: AppHandle) {
                 windows::Win32::Foundation::LRESULT(1)
             }
             WM_TIMER if wp.0 == SETTLE => {
-                unsafe { let _ = KillTimer(Some(h), SETTLE); }
+                unsafe {
+                    let _ = KillTimer(Some(h), SETTLE);
+                }
                 if let Some(app) = APP.get() {
                     let _ = app.emit("drives-changed", ());
                 }
@@ -245,13 +266,21 @@ pub fn watch(app: AppHandle) {
         let inst = GetModuleHandleW(None).unwrap_or_default();
         let class = WNDCLASSW { lpfnWndProc: Some(proc), hInstance: inst.into(), lpszClassName: w!("FilezyDevices"), ..Default::default() };
         RegisterClassW(&class);
-        let Ok(h) = CreateWindowExW(WINDOW_EX_STYLE(0), w!("FilezyDevices"), w!(""), WS_POPUP, 0, 0, 0, 0, None, None, Some(inst.into()), None) else {
+        let Ok(h) =
+            CreateWindowExW(WINDOW_EX_STYLE(0), w!("FilezyDevices"), w!(""), WS_POPUP, 0, 0, 0, 0, None, None, Some(inst.into()), None)
+        else {
             return;
         };
         // The desktop (an empty ID list), and everything under it.
         let empty = [0u8; 2];
         let entry = SHChangeNotifyEntry { pidl: empty.as_ptr() as *mut _, fRecursive: true.into() };
-        let events = SHCNE_DRIVEADD | SHCNE_DRIVEREMOVED | SHCNE_MEDIAINSERTED | SHCNE_MEDIAREMOVED | SHCNE_NETSHARE | SHCNE_NETUNSHARE | SHCNE_SERVERDISCONNECT;
+        let events = SHCNE_DRIVEADD
+            | SHCNE_DRIVEREMOVED
+            | SHCNE_MEDIAINSERTED
+            | SHCNE_MEDIAREMOVED
+            | SHCNE_NETSHARE
+            | SHCNE_NETUNSHARE
+            | SHCNE_SERVERDISCONNECT;
         SHChangeNotifyRegister(h, SHCNRF_InterruptLevel | SHCNRF_ShellLevel, events.0 as i32, SHELL, 1, &entry);
         let mut msg = MSG::default();
         while GetMessageW(&mut msg, None, 0, 0).as_bool() {

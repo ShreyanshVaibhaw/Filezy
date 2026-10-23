@@ -11,8 +11,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use windows::Win32::Foundation::{HWND, POINT, RECT};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetWindowPlacement, SetWindowPlacement, SW_SHOWMAXIMIZED, SW_SHOWMINIMIZED, SW_SHOWNORMAL, WINDOWPLACEMENT,
-    WPF_RESTORETOMAXIMIZED,
+    GetWindowPlacement, SetWindowPlacement, SW_SHOWMAXIMIZED, SW_SHOWMINIMIZED, SW_SHOWNORMAL, WINDOWPLACEMENT, WPF_RESTORETOMAXIMIZED,
 };
 
 const VERSION: u32 = 1;
@@ -67,8 +66,8 @@ pub fn save(hwnd: isize) {
     }
     let r = wp.rcNormalPosition;
     // Minimized from maximized comes back maximized, as Windows itself restores it.
-    let maximized = wp.showCmd == SW_SHOWMAXIMIZED.0 as u32
-        || (wp.showCmd == SW_SHOWMINIMIZED.0 as u32 && wp.flags.0 & WPF_RESTORETOMAXIMIZED.0 != 0);
+    let maximized =
+        wp.showCmd == SW_SHOWMAXIMIZED.0 as u32 || (wp.showCmd == SW_SHOWMINIMIZED.0 as u32 && wp.flags.0 & WPF_RESTORETOMAXIMIZED.0 != 0);
     let p = Placement { v: VERSION, left: r.left, top: r.top, right: r.right, bottom: r.bottom, maximized };
     if let (Some(f), Ok(json)) = (file(), serde_json::to_string(&p)) {
         let _ = std::fs::create_dir_all(f.parent().unwrap());

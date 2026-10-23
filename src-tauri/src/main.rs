@@ -31,16 +31,16 @@ mod search;
 mod session;
 mod share;
 mod shellmenu;
-mod shellreg;
 mod shellplaces;
+mod shellreg;
 mod tools;
 mod watch;
 
 use listing::{Entry, Group, Keep, Kept, Listing};
+use ops::{Op, OpResult, State as ItemState};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
-use ops::{Op, OpResult, State as ItemState};
 use tauri::{AppHandle, Manager, State};
 
 #[derive(Default)]
@@ -538,9 +538,7 @@ async fn share(sel: Keep, state: State<'_, AppState>, app: AppHandle) -> Result<
 /// in the order of `keys`.
 #[tauri::command]
 async fn props_for(items: Vec<(String, u64)>, keys: Vec<String>) -> Vec<Vec<Option<String>>> {
-    tauri::async_runtime::spawn_blocking(move || items.iter().map(|(p, m)| props::values(p, *m, &keys)).collect())
-        .await
-        .unwrap_or_default()
+    tauri::async_runtime::spawn_blocking(move || items.iter().map(|(p, m)| props::values(p, *m, &keys)).collect()).await.unwrap_or_default()
 }
 
 /// The properties this file lets a person change (Details pane).
@@ -775,9 +773,7 @@ async fn pick_folder(start: String, title: String, app: AppHandle) -> Result<Opt
 /// Real shell icon for an arbitrary path (nav pane, Home tiles, drive tiles).
 #[tauri::command]
 async fn path_thumb(path: String, size: i32) -> Option<String> {
-    tauri::async_runtime::spawn_blocking(move || icons::shell_icon_png(&path, size))
-        .await
-        .unwrap_or(None)
+    tauri::async_runtime::spawn_blocking(move || icons::shell_icon_png(&path, size)).await.unwrap_or(None)
 }
 
 /// Quick access pins, or with `kind` "favorites" the Favorites files (pins.rs).
@@ -852,9 +848,7 @@ async fn path_icon(path: String) -> Option<String> {
 /// drawn size times devicePixelRatio.
 #[tauri::command]
 async fn thumb(path: String, px: i32) -> Option<String> {
-    tauri::async_runtime::spawn_blocking(move || icons::thumbnail(&path, px))
-        .await
-        .unwrap_or(None)
+    tauri::async_runtime::spawn_blocking(move || icons::thumbnail(&path, px)).await.unwrap_or(None)
 }
 
 /// Every drive, each with its state. Off the UI thread: a drive that doesn't
@@ -877,7 +871,10 @@ async fn map_drive(app: AppHandle) -> Result<bool, String> {
     use windows::Win32::Foundation::NO_ERROR;
     use windows::Win32::NetworkManagement::WNet::{WNetConnectionDialog, RESOURCETYPE_DISK};
     let owner = owner(&app);
-    on_main(&app, move || unsafe { WNetConnectionDialog(windows::Win32::Foundation::HWND(owner as *mut _), RESOURCETYPE_DISK.0) == NO_ERROR }).await
+    on_main(&app, move || unsafe {
+        WNetConnectionDialog(windows::Win32::Foundation::HWND(owner as *mut _), RESOURCETYPE_DISK.0) == NO_ERROR
+    })
+    .await
 }
 
 /// Disconnect a network drive ("Z:\"), or with no drive, Windows' Disconnect
@@ -885,11 +882,16 @@ async fn map_drive(app: AppHandle) -> Result<bool, String> {
 #[tauri::command]
 async fn disconnect_drive(path: Option<String>, app: AppHandle) -> Result<(), String> {
     use windows::Win32::Foundation::{ERROR_OPEN_FILES, NO_ERROR};
-    use windows::Win32::NetworkManagement::WNet::{WNetCancelConnection2W, WNetDisconnectDialog, CONNECT_UPDATE_PROFILE, RESOURCETYPE_DISK};
+    use windows::Win32::NetworkManagement::WNet::{
+        WNetCancelConnection2W, WNetDisconnectDialog, CONNECT_UPDATE_PROFILE, RESOURCETYPE_DISK,
+    };
     let owner = owner(&app);
     match path {
         None => {
-            on_main(&app, move || unsafe { let _ = WNetDisconnectDialog(Some(windows::Win32::Foundation::HWND(owner as *mut _)), RESOURCETYPE_DISK.0); }).await?;
+            on_main(&app, move || unsafe {
+                let _ = WNetDisconnectDialog(Some(windows::Win32::Foundation::HWND(owner as *mut _)), RESOURCETYPE_DISK.0);
+            })
+            .await?;
             Ok(())
         }
         Some(p) => {
@@ -916,8 +918,8 @@ async fn eject(path: String, app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn special_dirs() -> Vec<(String, String)> {
     use windows::Win32::UI::Shell::{
-        FOLDERID_Desktop, FOLDERID_Documents, FOLDERID_Downloads, FOLDERID_Music,
-        FOLDERID_Pictures, FOLDERID_Videos, SHGetKnownFolderPath, KF_FLAG_DEFAULT,
+        FOLDERID_Desktop, FOLDERID_Documents, FOLDERID_Downloads, FOLDERID_Music, FOLDERID_Pictures, FOLDERID_Videos, SHGetKnownFolderPath,
+        KF_FLAG_DEFAULT,
     };
     let profile = std::env::var("USERPROFILE").unwrap_or_default();
     // Real known-folder paths (OneDrive redirection etc.), USERPROFILE join fallback.
@@ -993,7 +995,9 @@ fn folder(path: &str) -> Result<String, String> {
     match paths::resolve(path)? {
         paths::Target::Dir(d) => Ok(d),
         paths::Target::File(_) => Err("Items can only go into a folder.".into()),
-        paths::Target::Archive(..) => Err("Filezy can't add items to an archive yet. Extract it, or make a new ZIP with Compress to ZIP file.".into()),
+        paths::Target::Archive(..) => {
+            Err("Filezy can't add items to an archive yet. Extract it, or make a new ZIP with Compress to ZIP file.".into())
+        }
         // As in Explorer, new items go to the library's default save location.
         paths::Target::Library(file) => library::save_folder(&file),
     }
@@ -1041,10 +1045,8 @@ async fn drop_paths(paths: Vec<String>, dest: String, op: String, app: AppHandle
     };
     // Moving items onto their own folder does nothing; a copy there gets new names.
     let home = paths::identity(&dest);
-    let srcs: Vec<String> = paths
-        .into_iter()
-        .filter(|p| !mv || paths::parent(p).is_none_or(|parent| paths::identity(&parent) != home))
-        .collect();
+    let srcs: Vec<String> =
+        paths.into_iter().filter(|p| !mv || paths::parent(p).is_none_or(|parent| paths::identity(&parent) != home)).collect();
     if srcs.is_empty() {
         return Ok(OpResult { kind: "move", items: vec![], cancelled: false, error: None, clipboard: None });
     }
@@ -1147,18 +1149,14 @@ async fn recycle_list() -> Result<recycle::RecycleList, String> {
 #[tauri::command]
 async fn recycle_restore(ids: Vec<String>, app: AppHandle) -> Result<usize, String> {
     let owner = owner(&app);
-    tauri::async_runtime::spawn_blocking(move || recycle::restore(&ids, owner))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || recycle::restore(&ids, owner)).await.map_err(|e| e.to_string())?
 }
 
 /// Delete Recycle Bin items for good, after Windows' confirmation.
 #[tauri::command]
 async fn recycle_delete(ids: Vec<String>, app: AppHandle) -> Result<usize, String> {
     let owner = owner(&app);
-    tauri::async_runtime::spawn_blocking(move || recycle::delete(&ids, owner))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || recycle::delete(&ids, owner)).await.map_err(|e| e.to_string())?
 }
 
 /// Shows Windows' own confirmation dialog before anything is deleted.
@@ -1178,14 +1176,18 @@ fn new_window(path: Option<String>, transfer: Option<String>) -> Result<(), Stri
         cmd.arg(p);
     }
     if let Some(token) = transfer {
-        if token.len() != 36 || !token.chars().all(|c| c.is_ascii_hexdigit() || c == '-') { return Err("Invalid tab transfer token.".into()); }
+        if token.len() != 36 || !token.chars().all(|c| c.is_ascii_hexdigit() || c == '-') {
+            return Err("Invalid tab transfer token.".into());
+        }
         cmd.arg(format!("--filezy-tab={token}"));
     }
     cmd.spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn window_identity(app: AppHandle) -> String { owner(&app).to_string() }
+fn window_identity(app: AppHandle) -> String {
+    owner(&app).to_string()
+}
 
 /// Convert the captured pointer's client coordinates using this window's DPI,
 /// then ask Windows which top-level window is under it, even across monitors.
@@ -1194,13 +1196,19 @@ fn window_at(x: f64, y: f64, scale: Option<f64>, app: AppHandle) -> Result<Strin
     use windows::Win32::Foundation::{HWND, POINT};
     use windows::Win32::Graphics::Gdi::ClientToScreen;
     use windows::Win32::UI::WindowsAndMessaging::{GetAncestor, WindowFromPoint, GA_ROOT};
-    if !x.is_finite() || !y.is_finite() { return Err("Invalid drop point.".into()); }
+    if !x.is_finite() || !y.is_finite() {
+        return Err("Invalid drop point.".into());
+    }
     let window = app.get_webview_window("main").ok_or("No window")?;
     let scale = scale.unwrap_or(window.scale_factor().map_err(|e| e.to_string())?);
-    if !scale.is_finite() || !(0.5..=8.0).contains(&scale) { return Err("Invalid display scale.".into()); }
+    if !scale.is_finite() || !(0.5..=8.0).contains(&scale) {
+        return Err("Invalid display scale.".into());
+    }
     let mut point = POINT { x: (x * scale).round() as i32, y: (y * scale).round() as i32 };
     unsafe {
-        if !ClientToScreen(HWND(owner(&app) as *mut _), &mut point).as_bool() { return Err("The drop point could not be located.".into()); }
+        if !ClientToScreen(HWND(owner(&app) as *mut _), &mut point).as_bool() {
+            return Err("The drop point could not be located.".into());
+        }
         Ok((GetAncestor(WindowFromPoint(point), GA_ROOT).0 as isize).to_string())
     }
 }
@@ -1220,8 +1228,12 @@ async fn caption_place(place: caption::Place, app: AppHandle) -> Result<(), Stri
 #[cfg(feature = "e2e")]
 #[tauri::command]
 fn e2e_zoom(scale: f64, app: AppHandle) -> Result<(), String> {
-    if !e2e() { return Err("not a test session".into()); }
-    if !scale.is_finite() || !(0.5..=2.0).contains(&scale) { return Err("Invalid test scale.".into()); }
+    if !e2e() {
+        return Err("not a test session".into());
+    }
+    if !scale.is_finite() || !(0.5..=2.0).contains(&scale) {
+        return Err("Invalid test scale.".into());
+    }
     app.get_webview_window("main").ok_or("No window")?.set_zoom(scale).map_err(|e| e.to_string())
 }
 
@@ -1231,17 +1243,28 @@ fn e2e_zoom(scale: f64, app: AppHandle) -> Result<(), String> {
 #[cfg(feature = "e2e")]
 #[tauri::command]
 fn e2e_displays(index: Option<usize>, app: AppHandle) -> Result<serde_json::Value, String> {
-    if !e2e() { return Err("not a test session".into()); }
+    if !e2e() {
+        return Err("not a test session".into());
+    }
     let window = app.get_webview_window("main").ok_or("No window")?;
     let monitors = window.available_monitors().map_err(|e| e.to_string())?;
     if let Some(index) = index {
         let monitor = monitors.get(index).ok_or("No such monitor")?;
-        window.set_position(tauri::PhysicalPosition::new(monitor.position().x + 40, monitor.position().y + 40)).map_err(|e| e.to_string())?;
+        window
+            .set_position(tauri::PhysicalPosition::new(monitor.position().x + 40, monitor.position().y + 40))
+            .map_err(|e| e.to_string())?;
     }
-    Ok(serde_json::Value::Array(monitors.iter().map(|m| serde_json::json!({
-        "name": m.name(), "x": m.position().x, "y": m.position().y,
-        "width": m.size().width, "height": m.size().height, "scale": m.scale_factor()
-    })).collect()))
+    Ok(serde_json::Value::Array(
+        monitors
+            .iter()
+            .map(|m| {
+                serde_json::json!({
+                    "name": m.name(), "x": m.position().x, "y": m.position().y,
+                    "width": m.size().width, "height": m.size().height, "scale": m.scale_factor()
+                })
+            })
+            .collect(),
+    ))
 }
 
 #[tauri::command]
@@ -1251,11 +1274,15 @@ async fn shell_list(path: String, devices_only: bool) -> Result<shellplaces::Fol
 }
 
 #[tauri::command]
-fn wsl_roots() -> Vec<(String, String)> { shellplaces::wsl_roots() }
+fn wsl_roots() -> Vec<(String, String)> {
+    shellplaces::wsl_roots()
+}
 
 #[tauri::command]
 async fn shell_copy_out(paths: Vec<String>, app: AppHandle) -> Result<Option<OpResult>, String> {
-    if paths.is_empty() || paths.len() > 10_000 { return Err("Select between 1 and 10,000 device items to copy.".into()); }
+    if paths.is_empty() || paths.len() > 10_000 {
+        return Err("Select between 1 and 10,000 device items to copy.".into());
+    }
     let parent = owner(&app);
     let dest = on_main(&app, move || pick::folder(parent, "", "Copy device items to folder")).await??;
     let Some(dest) = dest else { return Ok(None) };
@@ -1273,7 +1300,11 @@ struct LaunchTarget {
 /// Where "Open in Filezy" goes: this user's classes, or in a test session a
 /// scratch key of its own, so tests never change the user's Explorer menus.
 fn classes_root() -> String {
-    if e2e() { r"Software\FilezyE2E\Classes".into() } else { shellreg::CLASSES.into() }
+    if e2e() {
+        r"Software\FilezyE2E\Classes".into()
+    } else {
+        shellreg::CLASSES.into()
+    }
 }
 
 fn exe_path() -> Result<String, String> {
@@ -1288,7 +1319,11 @@ fn explorer_entry() -> bool {
 
 #[tauri::command]
 fn set_explorer_entry(on: bool) -> Result<(), String> {
-    if on { shellreg::register(&classes_root(), &exe_path()?) } else { shellreg::unregister(&classes_root()) }
+    if on {
+        shellreg::register(&classes_root(), &exe_path()?)
+    } else {
+        shellreg::unregister(&classes_root())
+    }
 }
 
 /// Whether no other Filezy window was open as this one started; only such a
@@ -1308,7 +1343,11 @@ fn launch_target() -> Option<LaunchTarget> {
 fn parse_launch(args: Vec<String>) -> Option<LaunchTarget> {
     // ExtraCursor adds the debugger switch to the app's arguments. It is not
     // part of a requested path, nor is the internal tab-handoff token.
-    let joined = args.into_iter().filter(|s| !s.starts_with("--remote-debugging-port=") && !s.starts_with("--filezy-tab=") && !s.starts_with("--filezy-snap=")).collect::<Vec<_>>().join(" ");
+    let joined = args
+        .into_iter()
+        .filter(|s| !s.starts_with("--remote-debugging-port=") && !s.starts_with("--filezy-tab=") && !s.starts_with("--filezy-snap="))
+        .collect::<Vec<_>>()
+        .join(" ");
     let raw = joined.trim();
     if raw.is_empty() {
         return None;
@@ -1325,11 +1364,7 @@ fn parse_launch(args: Vec<String>) -> Option<LaunchTarget> {
 /// installed copy can be replaced by an update.
 #[tauri::command]
 fn is_installed() -> bool {
-    std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(|dir| dir.join("uninstall.exe")))
-        .map(|p| p.exists())
-        .unwrap_or(false)
+    std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| dir.join("uninstall.exe"))).map(|p| p.exists()).unwrap_or(false)
 }
 
 /// A test session: a build made for the E2E runner (the `e2e` feature) that
@@ -1406,21 +1441,17 @@ fn open_terminal(dir: String) -> Result<(), String> {
 async fn list_dirs(path: String, show_hidden: bool, show_protected: bool) -> Result<Vec<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         // Folders inside an archive too: shown ("C:\a.zip|docs") or typed ("C:\a.zip\docs").
-        let inside = archive::split(&path).map(|(f, i)| (f.to_string(), i.to_string())).or_else(|| {
-            match paths::attributes(&path) {
-                Ok(a) if a & listing::ATTR_DIRECTORY == 0 && archive::kind_of(&path).is_some() => Some((path.clone(), String::new())),
-                Ok(_) => None,
-                Err(_) => archive::through(&path),
-            }
+        let inside = archive::split(&path).map(|(f, i)| (f.to_string(), i.to_string())).or_else(|| match paths::attributes(&path) {
+            Ok(a) if a & listing::ATTR_DIRECTORY == 0 && archive::kind_of(&path).is_some() => Some((path.clone(), String::new())),
+            Ok(_) => None,
+            Err(_) => archive::through(&path),
         });
         let entries = match inside {
             Some((file, inner)) => archive::list(&file, &inner)?,
             None => fs_list::list(&path)?,
         };
-        let mut dirs: Vec<Entry> = entries
-            .into_iter()
-            .filter(|e| e.is_dir && listing::visible(e.attrs, show_hidden, show_protected))
-            .collect();
+        let mut dirs: Vec<Entry> =
+            entries.into_iter().filter(|e| e.is_dir && listing::visible(e.attrs, show_hidden, show_protected)).collect();
         dirs.sort_by(|a, b| listing::cmp_name(&a.name, &b.name));
         Ok(dirs.into_iter().map(|e| e.name).collect())
     })
@@ -1602,7 +1633,12 @@ mod tests {
     #[test]
     fn launch_arguments() {
         assert!(parse_launch(vec![]).is_none());
-        assert!(parse_launch(vec!["--remote-debugging-port=9300".into(), "--filezy-tab=token".into(), "--filezy-snap=0,0,960,1040".into()]).is_none());
+        assert!(parse_launch(vec![
+            "--remote-debugging-port=9300".into(),
+            "--filezy-tab=token".into(),
+            "--filezy-snap=0,0,960,1040".into()
+        ])
+        .is_none());
         let t = parse_launch(vec![r"C:\My Files\Ünï".into(), "--remote-debugging-port=9300".into()]).unwrap();
         assert_eq!(t.path, r"C:\My Files\Ünï");
         assert_eq!(parse_launch(vec!["日本語のフォルダー".into()]).unwrap().path, "日本語のフォルダー");

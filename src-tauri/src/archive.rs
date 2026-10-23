@@ -163,7 +163,6 @@ impl Index {
     pub fn children(&self, dir: &str) -> impl Iterator<Item = &Item> {
         self.children.get(&dir.trim_matches('\\').to_lowercase()).into_iter().flatten().map(|&i| &self.items[i])
     }
-
 }
 
 /// An entry's stored name, split into components. Leading roots, drive
@@ -242,7 +241,15 @@ fn decode_name(raw: &[u8]) -> String {
 fn local_ms(y: u16, mo: u8, d: u8, h: u8, mi: u8, s: u8) -> u64 {
     use windows::Win32::Foundation::{FILETIME, SYSTEMTIME};
     use windows::Win32::System::Time::{SystemTimeToFileTime, TzSpecificLocalTimeToSystemTime};
-    let local = SYSTEMTIME { wYear: y, wMonth: mo as u16, wDay: d as u16, wHour: h as u16, wMinute: mi as u16, wSecond: s as u16, ..Default::default() };
+    let local = SYSTEMTIME {
+        wYear: y,
+        wMonth: mo as u16,
+        wDay: d as u16,
+        wHour: h as u16,
+        wMinute: mi as u16,
+        wSecond: s as u16,
+        ..Default::default()
+    };
     let mut utc = SYSTEMTIME::default();
     let mut ft = FILETIME::default();
     unsafe {
@@ -269,10 +276,7 @@ fn read_zip(file: &Path) -> Result<Vec<Item>, String> {
                 zip::extra_fields::ExtraField::ExtendedTimestamp(t) => t.mod_time().map(|s| s as u64 * 1000),
                 _ => None,
             })
-            .or_else(|| {
-                e.last_modified()
-                    .map(|t| local_ms(t.year(), t.month(), t.day(), t.hour(), t.minute(), t.second()))
-            })
+            .or_else(|| e.last_modified().map(|t| local_ms(t.year(), t.month(), t.day(), t.hour(), t.minute(), t.second())))
             .unwrap_or(0);
         out.push(Item { path, is_dir: e.is_dir(), size: e.size(), modified, encrypted: e.encrypted(), problem, index: Some(i) });
     }
@@ -281,7 +285,9 @@ fn read_zip(file: &Path) -> Result<Vec<Item>, String> {
 
 fn read_7z(file: &Path) -> Result<Vec<Item>, String> {
     let a = sevenz_rust2::Archive::open(file).map_err(|e| match e {
-        sevenz_rust2::Error::PasswordRequired => "This archive is protected with a password, and Filezy can't open protected 7z archives yet.".to_string(),
+        sevenz_rust2::Error::PasswordRequired => {
+            "This archive is protected with a password, and Filezy can't open protected 7z archives yet.".to_string()
+        }
         e => damaged(e),
     })?;
     Ok(a.files
@@ -660,7 +666,11 @@ pub fn size_text(b: u64) -> String {
         v /= 1024.0;
         u += 1;
     }
-    if u == 0 { format!("{b} bytes") } else { format!("{v:.1} {}", UNITS[u]) }
+    if u == 0 {
+        format!("{b} bytes")
+    } else {
+        format!("{v:.1} {}", UNITS[u])
+    }
 }
 
 /// Something an extraction or compression put on disk, for the activity list
@@ -715,7 +725,8 @@ pub fn extract_to(file: &str, base: &str, picked: &[String], dest: &str, owner: 
     out.skipped = plan.skipped.iter().map(|(name, why)| Skip { name: name.clone(), why: why.clone() }).collect();
     out.renamed = plan.renamed;
     if plan.files.is_empty() && plan.dirs.is_empty() {
-        out.error = Some(if plan.skipped.is_empty() { "There's nothing in it to extract." } else { "Nothing in it can be extracted." }.into());
+        out.error =
+            Some(if plan.skipped.is_empty() { "There's nothing in it to extract." } else { "Nothing in it can be extracted." }.into());
         return out;
     }
     let fail = |out: &mut Extracted, e: String| {
@@ -753,8 +764,7 @@ pub fn extract_to(file: &str, base: &str, picked: &[String], dest: &str, owner: 
     hide(&native_stage);
     match extract(file, &idx, &plan, &stage, progress) {
         Ok(()) => {
-            let srcs: Vec<String> =
-                plan.top.iter().map(|t| format!("{stage}\\{t}")).filter(|p| paths::attributes(p).is_ok()).collect();
+            let srcs: Vec<String> = plan.top.iter().map(|t| format!("{stage}\\{t}")).filter(|p| paths::attributes(p).is_ok()).collect();
             let r = crate::ops::run(crate::ops::Op::Place { srcs, dest: dest.to_string() }, owner);
             for it in &r.items {
                 match it.state {
@@ -788,7 +798,14 @@ pub fn browses_inside(path: &str) -> bool {
     let mut buf = [0u16; 260];
     let mut len = buf.len() as u32;
     let hr = unsafe {
-        AssocQueryStringW(ASSOCF_NOTRUNCATE, ASSOCSTR_PROGID, PCWSTR(w.as_ptr()), PCWSTR::null(), Some(windows::core::PWSTR(buf.as_mut_ptr())), &mut len)
+        AssocQueryStringW(
+            ASSOCF_NOTRUNCATE,
+            ASSOCSTR_PROGID,
+            PCWSTR(w.as_ptr()),
+            PCWSTR::null(),
+            Some(windows::core::PWSTR(buf.as_mut_ptr())),
+            &mut len,
+        )
     };
     if hr.is_err() {
         // Nothing opens it: show it as a folder.
@@ -932,9 +949,8 @@ pub fn compress(items: &[String], out: &str, progress: Progress) -> Result<(), S
         let mut buf = vec![0u8; 256 * 1024];
         for (disk, name, is_dir, size) in &todo {
             let modified = std::fs::metadata(disk).ok().and_then(|m| m.modified().ok());
-            let mut o = SimpleFileOptions::default()
-                .compression_method(zip::CompressionMethod::Deflated)
-                .large_file(*size >= u32::MAX as u64);
+            let mut o =
+                SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated).large_file(*size >= u32::MAX as u64);
             if let Some(t) = modified.and_then(dos_time) {
                 o = o.last_modified_time(t);
             }
@@ -1005,19 +1021,31 @@ fn dos_time(t: std::time::SystemTime) -> Option<zip::DateTime> {
         FileTimeToSystemTime(&ft, &mut utc).ok()?;
         SystemTimeToTzSpecificLocalTime(None, &utc, &mut local).ok()?;
     }
-    zip::DateTime::from_date_and_time(local.wYear, local.wMonth as u8, local.wDay as u8, local.wHour as u8, local.wMinute as u8, local.wSecond as u8).ok()
+    zip::DateTime::from_date_and_time(
+        local.wYear,
+        local.wMonth as u8,
+        local.wDay as u8,
+        local.wHour as u8,
+        local.wMinute as u8,
+        local.wSecond as u8,
+    )
+    .ok()
 }
 
 fn hide(native: &str) {
     use windows::Win32::Storage::FileSystem::{SetFileAttributesW, FILE_ATTRIBUTE_HIDDEN};
     let w = wide(native);
-    unsafe { let _ = SetFileAttributesW(PCWSTR(w.as_ptr()), FILE_ATTRIBUTE_HIDDEN); }
+    unsafe {
+        let _ = SetFileAttributesW(PCWSTR(w.as_ptr()), FILE_ATTRIBUTE_HIDDEN);
+    }
 }
 
 fn unhide(native: &str) {
     use windows::Win32::Storage::FileSystem::{SetFileAttributesW, FILE_ATTRIBUTE_NORMAL};
     let w = wide(native);
-    unsafe { let _ = SetFileAttributesW(PCWSTR(w.as_ptr()), FILE_ATTRIBUTE_NORMAL); }
+    unsafe {
+        let _ = SetFileAttributesW(PCWSTR(w.as_ptr()), FILE_ATTRIBUTE_NORMAL);
+    }
 }
 
 /// A name not yet used in `dir`: "name.ext", then "name (2).ext" and on.
@@ -1061,7 +1089,8 @@ mod tests {
 
     #[test]
     fn folders_only_implied_by_their_entries_appear() {
-        let item = |p: &str, d: bool| Item { path: p.into(), is_dir: d, size: 1, modified: 0, encrypted: false, problem: None, index: Some(0) };
+        let item =
+            |p: &str, d: bool| Item { path: p.into(), is_dir: d, size: 1, modified: 0, encrypted: false, problem: None, index: Some(0) };
         let idx = Index::new(Kind::Zip, vec![item("a\\b\\c.txt", false), item("a", true), item("top.txt", false)]);
         let names = |dir: &str| idx.children(dir).map(|i| i.name().to_string()).collect::<Vec<_>>();
         assert_eq!(names(""), ["a", "top.txt"]);
@@ -1074,10 +1103,23 @@ mod tests {
 
     #[test]
     fn a_plan_skips_what_must_not_be_written() {
-        let item = |p: &str, problem: Option<Problem>| Item { path: p.into(), is_dir: false, size: 5, modified: 0, encrypted: false, problem, index: Some(0) };
+        let item = |p: &str, problem: Option<Problem>| Item {
+            path: p.into(),
+            is_dir: false,
+            size: 5,
+            modified: 0,
+            encrypted: false,
+            problem,
+            index: Some(0),
+        };
         let idx = Index::new(
             Kind::Zip,
-            vec![item("docs\\a:b.txt", None), item("docs\\ok.txt", None), item("evil.txt", Some(Problem::Outside)), item("docs\\con.txt", None)],
+            vec![
+                item("docs\\a:b.txt", None),
+                item("docs\\ok.txt", None),
+                item("evil.txt", Some(Problem::Outside)),
+                item("docs\\con.txt", None),
+            ],
         );
         let p = plan(&idx, "DOCS", &["docs\\a:b.txt".into(), "docs\\ok.txt".into(), "docs\\con.txt".into()]);
         assert_eq!(p.files.iter().map(|f| f.1.as_str()).collect::<Vec<_>>(), ["a_b.txt", "ok.txt", "_con.txt"]);
@@ -1103,7 +1145,9 @@ mod tests {
         let zip_path = d.join("in.zip");
         let mut z = zip::ZipWriter::new(File::create(&zip_path).unwrap());
         let o = SimpleFileOptions::default();
-        for (name, data) in [("docs/école.txt", "e"), ("docs/sub/deep.txt", "deep"), ("top.txt", "top"), ("../evil.txt", "evil"), ("a:b.txt", "ads")] {
+        for (name, data) in
+            [("docs/école.txt", "e"), ("docs/sub/deep.txt", "deep"), ("top.txt", "top"), ("../evil.txt", "evil"), ("a:b.txt", "ads")]
+        {
             z.start_file(name, o).unwrap();
             z.write_all(data.as_bytes()).unwrap();
         }
@@ -1111,7 +1155,11 @@ mod tests {
         z.finish().unwrap();
         let file = zip_path.display().to_string();
 
-        let names = |v: Vec<Entry>| { let mut n: Vec<String> = v.into_iter().map(|e| e.name).collect(); n.sort(); n };
+        let names = |v: Vec<Entry>| {
+            let mut n: Vec<String> = v.into_iter().map(|e| e.name).collect();
+            n.sort();
+            n
+        };
         assert_eq!(names(list(&file, "").unwrap()), ["a:b.txt", "docs", "empty", "evil.txt", "top.txt"]);
         assert_eq!(names(list(&file, "DOCS").unwrap()), ["sub", "école.txt"]);
         assert!(list(&file, "top.txt").is_err());
@@ -1157,7 +1205,8 @@ mod tests {
         let out = unique(&d.display().to_string(), "Report", ".zip");
         assert!(out.ends_with("Report.zip"));
         compress(&[src.display().to_string(), d.join("loose.txt").display().to_string()], &out, &mut |_, _, _| true).unwrap();
-        let mut n: Vec<String> = index(&out).unwrap().items.iter().map(|i| format!("{}{}", i.path, if i.is_dir { "\\" } else { "" })).collect();
+        let mut n: Vec<String> =
+            index(&out).unwrap().items.iter().map(|i| format!("{}{}", i.path, if i.is_dir { "\\" } else { "" })).collect();
         n.sort();
         assert_eq!(n, ["Report\\", "Report\\empty\\", "Report\\日本\\", "Report\\日本\\a.txt", "loose.txt"]);
         assert!(unique(&d.display().to_string(), "Report", ".zip").ends_with("Report (2).zip"));

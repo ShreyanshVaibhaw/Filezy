@@ -185,8 +185,7 @@ impl Listing {
         if keys.sel.is_empty() && keys.focus.iter().all(Option::is_none) && names.is_empty() {
             return Kept { focus: vec![-1; keys.focus.len()], names: vec![-1; names.len()], ..Default::default() };
         }
-        let at: std::collections::HashMap<String, u32> =
-            self.entries.iter().enumerate().map(|(i, e)| (e.key(), i as u32)).collect();
+        let at: std::collections::HashMap<String, u32> = self.entries.iter().enumerate().map(|(i, e)| (e.key(), i as u32)).collect();
         let pos = |k: &String| at.get(k).map_or(-1, |&i| i as i64);
         Kept {
             sel: keys.sel.iter().filter_map(|k| at.get(k).copied()).collect(),
@@ -202,21 +201,16 @@ impl Listing {
         let prop = props::is_prop(sort).then_some(sort);
         // Status asks the shell about each cloud item, so it is capped too.
         if (prop.is_some() || sort == "status") && self.entries.len() > PROP_SORT_MAX {
-            return Err(format!(
-                "Too many items to sort by this property (more than {PROP_SORT_MAX}). Sorted by name instead."
-            ));
+            return Err(format!("Too many items to sort by this property (more than {PROP_SORT_MAX}). Sorted by name instead."));
         }
         let dir = self.path.clone();
         // String keys computed once per entry (a document property, the type
         // name Explorer sorts Type by, the folder, the attribute letters), so
         // grouped and ungrouped orders share one comparison.
         let pkeys: Option<Vec<Option<String>>> = match prop {
-            Some(p) => Some(
-                self.entries
-                    .iter()
-                    .map(|e| if e.is_dir { None } else { props::value(&e.path_in(&dir), e.modified, p) })
-                    .collect(),
-            ),
+            Some(p) => {
+                Some(self.entries.iter().map(|e| if e.is_dir { None } else { props::value(&e.path_in(&dir), e.modified, p) }).collect())
+            }
             None if sort == "type" => Some(self.entries.iter().map(|e| Some(type_label(e))).collect()),
             None if sort == "location" => {
                 Some(self.entries.iter().map(|e| Some(e.parent.clone().unwrap_or_else(|| dir.clone()))).collect())
@@ -242,12 +236,9 @@ impl Listing {
         // compare gives the same order for plain ASCII names and costs nothing.
         let nkeys: Option<Vec<Vec<u8>>> =
             self.entries.iter().any(|e| !e.name.is_ascii()).then(|| self.entries.iter().map(|e| sort_key(&e.name)).collect());
-        let now_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
-        let buckets: Option<Vec<(u32, String)>> = (group != "none")
-            .then(|| self.entries.iter().map(|e| group_bucket(e, group, now_ms, tz_off_ms)).collect());
+        let now_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+        let buckets: Option<Vec<(u32, String)>> =
+            (group != "none").then(|| self.entries.iter().map(|e| group_bucket(e, group, now_ms, tz_off_ms)).collect());
 
         let mut idx: Vec<usize> = (0..self.entries.len()).collect();
         idx.sort_by(|&a, &b| {
@@ -313,7 +304,11 @@ fn cmp_entries(
             Some((x, y)) => x.cmp(y),
             None => cmp_name(&a.name, &b.name),
         });
-        if asc { ord } else { ord.reverse() }
+        if asc {
+            ord
+        } else {
+            ord.reverse()
+        }
     })
 }
 
@@ -506,7 +501,10 @@ mod tests {
 
     #[test]
     fn accented_names_sort_where_windows_puts_them() {
-        let mut l = Listing { entries: ["Zebra.txt", "école.txt", "apple.txt", "File10.txt", "file2.txt"].map(|n| e(n, false, 0, 0)).to_vec(), ..Default::default() };
+        let mut l = Listing {
+            entries: ["Zebra.txt", "école.txt", "apple.txt", "File10.txt", "file2.txt"].map(|n| e(n, false, 0, 0)).to_vec(),
+            ..Default::default()
+        };
         l.arrange("name", true, "none", 0).unwrap();
         assert_eq!(names(&l), ["apple.txt", "école.txt", "file2.txt", "File10.txt", "Zebra.txt"]);
     }
@@ -552,13 +550,7 @@ mod tests {
     fn keep_follows_items_across_revisions() {
         let mut l = Listing { entries: vec![e("c", false, 1, 0), e("a", false, 3, 0), e("b", false, 2, 0)], ..Default::default() };
         l.arrange("name", true, "none", 0).unwrap(); // a b c
-        let keep = Keep {
-            rev: l.rev,
-            idx: vec![0, 2],
-            focus: vec![1, -1],
-            names: vec!["b".into(), "gone".into()],
-            ..Default::default()
-        };
+        let keep = Keep { rev: l.rev, idx: vec![0, 2], focus: vec![1, -1], names: vec!["b".into(), "gone".into()], ..Default::default() };
         let keys = l.keep_keys(&keep);
         l.arrange("size", true, "none", 0).unwrap(); // c b a
         let kept = l.find(&keys, &keep.names);

@@ -10,16 +10,15 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use windows::core::{Interface, PCWSTR};
 use windows::Win32::Foundation::PROPERTYKEY;
-use windows::Win32::System::Com::StructuredStorage::{
-    InitPropVariantFromStringAsVector, InitPropVariantFromStringVector, PropVariantChangeType, PropVariantClear,
-    PROPVARIANT, PROPVAR_CHANGE_FLAGS,
-};
 use windows::Win32::System::Com::CoTaskMemFree;
+use windows::Win32::System::Com::StructuredStorage::{
+    InitPropVariantFromStringAsVector, InitPropVariantFromStringVector, PropVariantChangeType, PropVariantClear, PROPVARIANT,
+    PROPVAR_CHANGE_FLAGS,
+};
 use windows::Win32::System::Variant::{VT_EMPTY, VT_LPWSTR, VT_UI4, VT_VECTOR};
 use windows::Win32::UI::Shell::PropertiesSystem::{
-    IPropertyDescription, IPropertyStore, IPropertyStoreCapabilities, PSCoerceToCanonicalValue,
-    PSFormatForDisplayAlloc, PSGetPropertyDescription, PSGetPropertyKeyFromName, SHGetPropertyStoreFromParsingName,
-    GPS_DEFAULT, GPS_READWRITE, PDFF_DEFAULT,
+    IPropertyDescription, IPropertyStore, IPropertyStoreCapabilities, PSCoerceToCanonicalValue, PSFormatForDisplayAlloc,
+    PSGetPropertyDescription, PSGetPropertyKeyFromName, SHGetPropertyStoreFromParsingName, GPS_DEFAULT, GPS_READWRITE, PDFF_DEFAULT,
 };
 
 /// Filezy's names for the properties it shows, and the shell's canonical names.
@@ -64,7 +63,9 @@ struct Pv(PROPVARIANT);
 
 impl Drop for Pv {
     fn drop(&mut self) {
-        unsafe { let _ = PropVariantClear(&mut self.0); }
+        unsafe {
+            let _ = PropVariantClear(&mut self.0);
+        }
     }
 }
 
@@ -116,10 +117,7 @@ pub fn values(path: &str, modified: u64, keys: &[String]) -> Vec<Option<String>>
     let known: Vec<Option<&'static str>> = keys.iter().map(|k| PROPS.iter().find(|(p, _)| p == k).map(|(p, _)| *p)).collect();
     let mut out: Vec<Option<Option<String>>> = {
         let cache = CACHE.lock().unwrap();
-        known
-            .iter()
-            .map(|k| k.and_then(|k| cache.as_ref()?.get(&(lower.clone(), modified, k)).cloned()))
-            .collect()
+        known.iter().map(|k| k.and_then(|k| cache.as_ref()?.get(&(lower.clone(), modified, k)).cloned())).collect()
     };
     if out.iter().zip(&known).any(|(v, k)| v.is_none() && k.is_some()) {
         let st = store(path, false);
@@ -159,7 +157,7 @@ pub struct CloudState {
 /// file itself is never opened or downloaded. Never cached: syncing changes
 /// the state without touching the file's time.
 pub fn cloud_states(paths: &[String]) -> Vec<Option<CloudState>> {
-    use windows::Win32::UI::Shell::{IShellFolder2, IShellItem, SHCreateItemFromParsingName, BHID_SFObject};
+    use windows::Win32::UI::Shell::{BHID_SFObject, IShellFolder2, IShellItem, SHCreateItemFromParsingName};
     static KEY: OnceLock<Option<PROPERTYKEY>> = OnceLock::new();
     crate::com::sta();
     let Some(key) = KEY
@@ -238,10 +236,7 @@ pub struct Written {
 /// Set one property on each file. Multi-valued properties (Tags, Authors,
 /// Categories) take "a; b" as separate values. Each file reports its own result.
 pub fn write(paths: &[String], key: &str, value: &str) -> Vec<Written> {
-    paths
-        .iter()
-        .map(|p| Written { path: p.clone(), error: write_one(p, key, value).err() })
-        .collect()
+    paths.iter().map(|p| Written { path: p.clone(), error: write_one(p, key, value).err() }).collect()
 }
 
 fn write_one(path: &str, key: &str, value: &str) -> Result<(), String> {

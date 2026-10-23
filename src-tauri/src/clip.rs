@@ -2,8 +2,8 @@
 use windows::core::w;
 use windows::Win32::Foundation::{GlobalFree, HANDLE, HGLOBAL};
 use windows::Win32::System::DataExchange::{
-    CloseClipboard, EmptyClipboard, GetClipboardData, GetClipboardSequenceNumber, IsClipboardFormatAvailable,
-    OpenClipboard, RegisterClipboardFormatW, SetClipboardData,
+    CloseClipboard, EmptyClipboard, GetClipboardData, GetClipboardSequenceNumber, IsClipboardFormatAvailable, OpenClipboard,
+    RegisterClipboardFormatW, SetClipboardData,
 };
 use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
 use windows::Win32::UI::Shell::{DragQueryFileW, HDROP};
@@ -25,7 +25,9 @@ fn effect_format() -> u32 {
 struct ClipGuard;
 impl Drop for ClipGuard {
     fn drop(&mut self) {
-        unsafe { let _ = CloseClipboard(); }
+        unsafe {
+            let _ = CloseClipboard();
+        }
     }
 }
 
@@ -65,21 +67,10 @@ pub fn set_files(paths: &[String], cut: bool) -> Result<(), String> {
         }
         wide.push(0);
 
-        let header = DropFiles {
-            p_files: std::mem::size_of::<DropFiles>() as u32,
-            pt: [0, 0],
-            f_nc: 0,
-            f_wide: 1,
-        };
+        let header = DropFiles { p_files: std::mem::size_of::<DropFiles>() as u32, pt: [0, 0], f_nc: 0, f_wide: 1 };
         let mut bytes = Vec::with_capacity(std::mem::size_of::<DropFiles>() + wide.len() * 2);
-        bytes.extend_from_slice(std::slice::from_raw_parts(
-            &header as *const _ as *const u8,
-            std::mem::size_of::<DropFiles>(),
-        ));
-        bytes.extend_from_slice(std::slice::from_raw_parts(
-            wide.as_ptr() as *const u8,
-            wide.len() * 2,
-        ));
+        bytes.extend_from_slice(std::slice::from_raw_parts(&header as *const _ as *const u8, std::mem::size_of::<DropFiles>()));
+        bytes.extend_from_slice(std::slice::from_raw_parts(wide.as_ptr() as *const u8, wide.len() * 2));
 
         let _guard = open()?;
         EmptyClipboard().map_err(|e| e.to_string())?;
@@ -146,8 +137,7 @@ pub fn set_text(text: &str) -> Result<(), String> {
     const CF_UNICODETEXT: u32 = 13;
     unsafe {
         let wide: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
-        let bytes =
-            std::slice::from_raw_parts(wide.as_ptr() as *const u8, wide.len() * 2).to_vec();
+        let bytes = std::slice::from_raw_parts(wide.as_ptr() as *const u8, wide.len() * 2).to_vec();
         let _guard = open()?;
         EmptyClipboard().map_err(|e| e.to_string())?;
         let h = alloc_global(&bytes)?;
@@ -176,8 +166,8 @@ pub fn watch(app: tauri::AppHandle) {
     use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
     use windows::Win32::System::DataExchange::AddClipboardFormatListener;
     use windows::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, RegisterClassW, HWND_MESSAGE, MSG,
-        WINDOW_EX_STYLE, WINDOW_STYLE, WM_CLIPBOARDUPDATE, WNDCLASSW,
+        CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, RegisterClassW, HWND_MESSAGE, MSG, WINDOW_EX_STYLE, WINDOW_STYLE,
+        WM_CLIPBOARDUPDATE, WNDCLASSW,
     };
 
     unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
@@ -198,8 +188,18 @@ pub fn watch(app: tauri::AppHandle) {
         let wc = WNDCLASSW { lpfnWndProc: Some(proc), lpszClassName: class, ..Default::default() };
         RegisterClassW(&wc);
         let Ok(hwnd) = CreateWindowExW(
-            WINDOW_EX_STYLE::default(), class, w!(""), WINDOW_STYLE::default(), 0, 0, 0, 0,
-            Some(HWND_MESSAGE), None, None, None,
+            WINDOW_EX_STYLE::default(),
+            class,
+            w!(""),
+            WINDOW_STYLE::default(),
+            0,
+            0,
+            0,
+            0,
+            Some(HWND_MESSAGE),
+            None,
+            None,
+            None,
         ) else {
             return;
         };

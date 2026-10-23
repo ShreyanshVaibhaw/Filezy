@@ -7,8 +7,8 @@
 use crate::fs_list::wide;
 use windows::core::PCWSTR;
 use windows::Win32::Storage::FileSystem::{
-    FindClose, FindFirstFileW, GetFileAttributesW, GetFullPathNameW, GetVolumeNameForVolumeMountPointW,
-    GetVolumePathNameW, FILE_ATTRIBUTE_DIRECTORY, INVALID_FILE_ATTRIBUTES, WIN32_FIND_DATAW,
+    FindClose, FindFirstFileW, GetFileAttributesW, GetFullPathNameW, GetVolumeNameForVolumeMountPointW, GetVolumePathNameW,
+    FILE_ATTRIBUTE_DIRECTORY, INVALID_FILE_ATTRIBUTES, WIN32_FIND_DATAW,
 };
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -29,7 +29,11 @@ pub fn kind(p: &str) -> Kind {
         Kind::Shell
     } else if p.starts_with(r"\\?\") {
         let d = to_display(p);
-        if d.starts_with(r"\\?\") { Kind::Other } else { kind(&d) }
+        if d.starts_with(r"\\?\") {
+            Kind::Other
+        } else {
+            kind(&d)
+        }
     } else if b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':' && (b.len() == 2 || b[2] == b'\\') {
         Kind::Drive
     } else if unc_parts(p).is_some() {
@@ -72,8 +76,12 @@ pub fn identity(path: &str) -> String {
     let path = path.trim_end_matches('\\');
     if let Some((server, distro, rest)) = unc_parts(path) {
         if server.eq_ignore_ascii_case("wsl.localhost") || server.eq_ignore_ascii_case("wsl$") {
-            return format!(r"\\{}\{}{}", server.to_lowercase(), distro.to_lowercase(),
-                if rest.is_empty() { String::new() } else { format!(r"\{rest}") });
+            return format!(
+                r"\\{}\{}{}",
+                server.to_lowercase(),
+                distro.to_lowercase(),
+                if rest.is_empty() { String::new() } else { format!(r"\{rest}") }
+            );
         }
     }
     path.to_lowercase()
@@ -231,13 +239,19 @@ fn true_case(p: &str) -> String {
         let real = unsafe { FindFirstFileW(PCWSTR(w.as_ptr()), &mut data) }
             .ok()
             .map(|h| {
-                unsafe { let _ = FindClose(h); }
+                unsafe {
+                    let _ = FindClose(h);
+                }
                 from_wide(&data.cFileName)
             })
             .filter(|n| n.eq_ignore_ascii_case(comp) || comp.contains('~'));
         out = format!("{out}\\{}", real.as_deref().unwrap_or(comp));
     }
-    if out.len() == 2 { format!("{out}\\") } else { out }
+    if out.len() == 2 {
+        format!("{out}\\")
+    } else {
+        out
+    }
 }
 
 pub fn expand_env(s: &str) -> String {
@@ -256,8 +270,8 @@ pub fn expand_env(s: &str) -> String {
 
 /// Filesystem folder behind a shell name such as "shell:Downloads", if it has one.
 fn shell_folder(s: &str) -> Option<String> {
-    use windows::Win32::UI::Shell::{SHGetNameFromIDList, SHParseDisplayName, SIGDN_FILESYSPATH};
     use windows::Win32::UI::Shell::Common::ITEMIDLIST;
+    use windows::Win32::UI::Shell::{SHGetNameFromIDList, SHParseDisplayName, SIGDN_FILESYSPATH};
     let w = wide(s);
     unsafe {
         let mut pidl: *mut ITEMIDLIST = std::ptr::null_mut();

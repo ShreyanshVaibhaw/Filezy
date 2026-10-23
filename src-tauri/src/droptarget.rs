@@ -22,20 +22,18 @@ use windows::core::{implement, w, Ref, BOOL, PCWSTR};
 use windows::Win32::Foundation::{HGLOBAL, HWND, LPARAM, POINT, POINTL};
 use windows::Win32::Graphics::Gdi::ScreenToClient;
 use windows::Win32::System::Com::{
-    CoCreateInstance, IDataObject, CLSCTX_INPROC_SERVER, DVASPECT_CONTENT, FORMATETC, STGMEDIUM, STGMEDIUM_0,
-    TYMED_HGLOBAL,
+    CoCreateInstance, IDataObject, CLSCTX_INPROC_SERVER, DVASPECT_CONTENT, FORMATETC, STGMEDIUM, STGMEDIUM_0, TYMED_HGLOBAL,
 };
 use windows::Win32::System::DataExchange::RegisterClipboardFormatW;
 use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
 use windows::Win32::System::Ole::{
-    IDropTarget, IDropTarget_Impl, RegisterDragDrop, ReleaseStgMedium, RevokeDragDrop, CF_HDROP, DROPEFFECT,
-    DROPEFFECT_COPY, DROPEFFECT_LINK, DROPEFFECT_MOVE, DROPEFFECT_NONE,
+    IDropTarget, IDropTarget_Impl, RegisterDragDrop, ReleaseStgMedium, RevokeDragDrop, CF_HDROP, DROPEFFECT, DROPEFFECT_COPY,
+    DROPEFFECT_LINK, DROPEFFECT_MOVE, DROPEFFECT_NONE,
 };
-use windows::Win32::System::SystemServices::{MODIFIERKEYS_FLAGS, MK_CONTROL, MK_RBUTTON, MK_SHIFT};
+use windows::Win32::System::SystemServices::{MK_CONTROL, MK_RBUTTON, MK_SHIFT, MODIFIERKEYS_FLAGS};
 use windows::Win32::UI::Shell::{
-    IDropTargetHelper, CFSTR_DROPDESCRIPTION, CFSTR_LOGICALPERFORMEDDROPEFFECT,
-    CFSTR_PERFORMEDDROPEFFECT, CLSID_DragDropHelper, DROPDESCRIPTION, DROPIMAGETYPE, DROPIMAGE_COPY,
-    DROPIMAGE_INVALID, DROPIMAGE_LINK, DROPIMAGE_MOVE, HDROP,
+    CLSID_DragDropHelper, IDropTargetHelper, CFSTR_DROPDESCRIPTION, CFSTR_LOGICALPERFORMEDDROPEFFECT, CFSTR_PERFORMEDDROPEFFECT,
+    DROPDESCRIPTION, DROPIMAGETYPE, DROPIMAGE_COPY, DROPIMAGE_INVALID, DROPIMAGE_LINK, DROPIMAGE_MOVE, HDROP,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, DestroyMenu, EnumChildWindows, SetMenuDefaultItem, MF_SEPARATOR, MF_STRING,
@@ -67,9 +65,16 @@ enum Event {
     /// A drag came in; nothing about the last one applies any more.
     Enter,
     /// Pointer position in physical pixels from the window's client origin.
-    Over { x: i32, y: i32 },
+    Over {
+        x: i32,
+        y: i32,
+    },
     Leave,
-    Drop { paths: Vec<String>, dest: String, op: &'static str },
+    Drop {
+        paths: Vec<String>,
+        dest: String,
+        op: &'static str,
+    },
 }
 
 /// What one drag over the window carries, from DragEnter to Drop or DragLeave.
@@ -101,11 +106,7 @@ struct Target {
 /// The right-drag menu: Copy here, Move here, Create shortcuts here and Cancel,
 /// the drop's own effect in bold, at a screen point. Runs on the UI thread.
 fn ask(top: HWND, pt: POINTL, default: DROPEFFECT, allowed: DROPEFFECT) -> DROPEFFECT {
-    let items = [
-        (DROPEFFECT_COPY, w!("&Copy here")),
-        (DROPEFFECT_MOVE, w!("&Move here")),
-        (DROPEFFECT_LINK, w!("Create &shortcuts here")),
-    ];
+    let items = [(DROPEFFECT_COPY, w!("&Copy here")), (DROPEFFECT_MOVE, w!("&Move here")), (DROPEFFECT_LINK, w!("Create &shortcuts here"))];
     unsafe {
         let Ok(menu) = CreatePopupMenu() else { return DROPEFFECT_NONE };
         for (e, text) in items {
@@ -223,7 +224,9 @@ fn has(set: DROPEFFECT, e: DROPEFFECT) -> bool {
 impl Target {
     fn client(&self, pt: &POINTL) -> (i32, i32) {
         let mut p = POINT { x: pt.x, y: pt.y };
-        unsafe { let _ = ScreenToClient(self.top, &mut p); }
+        unsafe {
+            let _ = ScreenToClient(self.top, &mut p);
+        }
         (p.x, p.y)
     }
 
@@ -263,18 +266,19 @@ impl Target {
             DROPEFFECT_MOVE
         } else {
             let vol = d.dest_volumes.entry(to.clone()).or_insert_with(|| crate::paths::volume_id(&dest.path)).clone();
-            if vol.is_some() && d.volumes.iter().all(|v| *v == vol) { DROPEFFECT_MOVE } else { DROPEFFECT_COPY }
+            if vol.is_some() && d.volumes.iter().all(|v| *v == vol) {
+                DROPEFFECT_MOVE
+            } else {
+                DROPEFFECT_COPY
+            }
         };
-        let already_there =
-            d.paths.iter().all(|p| crate::paths::parent(p).is_some_and(|parent| parent.to_lowercase() == to));
+        let already_there = d.paths.iter().all(|p| crate::paths::parent(p).is_some_and(|parent| parent.to_lowercase() == to));
         if wanted == DROPEFFECT_MOVE && already_there {
             return (DROPEFFECT_NONE, Some(dest));
         }
         // The source decides what it permits; fall back the way Explorer does.
-        let e = [wanted, DROPEFFECT_COPY, DROPEFFECT_MOVE, DROPEFFECT_LINK]
-            .into_iter()
-            .find(|e| has(d.allowed, *e))
-            .unwrap_or(DROPEFFECT_NONE);
+        let e =
+            [wanted, DROPEFFECT_COPY, DROPEFFECT_MOVE, DROPEFFECT_LINK].into_iter().find(|e| has(d.allowed, *e)).unwrap_or(DROPEFFECT_NONE);
         (e, Some(dest))
     }
 
@@ -304,9 +308,7 @@ impl Target {
             buf
         };
         let desc = DROPDESCRIPTION { r#type: ty, szMessage: text(message), szInsert: text(&insert) };
-        let bytes = unsafe {
-            std::slice::from_raw_parts(&desc as *const _ as *const u8, std::mem::size_of::<DROPDESCRIPTION>())
-        };
+        let bytes = unsafe { std::slice::from_raw_parts(&desc as *const _ as *const u8, std::mem::size_of::<DROPDESCRIPTION>()) };
         set_data(&data, CFSTR_DROPDESCRIPTION, bytes);
     }
 
@@ -318,7 +320,9 @@ impl Target {
         self.caption(e, dest.as_ref());
         unsafe { *effect = e };
         if let Some(h) = &self.helper {
-            unsafe { let _ = h.DragOver(&POINT { x: pt.x, y: pt.y }, e); }
+            unsafe {
+                let _ = h.DragOver(&POINT { x: pt.x, y: pt.y }, e);
+            }
         }
     }
 
@@ -355,7 +359,9 @@ impl IDropTarget_Impl for Target_Impl {
         set_dest(None);
         self.emit(Event::Enter);
         if let Some(h) = &self.helper {
-            unsafe { let _ = h.DragEnter(self.top, &data, &POINT { x: pt.x, y: pt.y }, DROPEFFECT_NONE); }
+            unsafe {
+                let _ = h.DragEnter(self.top, &data, &POINT { x: pt.x, y: pt.y }, DROPEFFECT_NONE);
+            }
         }
         self.over(keys, pt, effect);
         Ok(())
@@ -368,23 +374,21 @@ impl IDropTarget_Impl for Target_Impl {
 
     fn DragLeave(&self) -> windows::core::Result<()> {
         if let Some(h) = &self.helper {
-            unsafe { let _ = h.DragLeave(); }
+            unsafe {
+                let _ = h.DragLeave();
+            }
         }
         self.emit(Event::Leave);
         self.end();
         Ok(())
     }
 
-    fn Drop(
-        &self,
-        data: Ref<IDataObject>,
-        keys: MODIFIERKEYS_FLAGS,
-        pt: &POINTL,
-        effect: *mut DROPEFFECT,
-    ) -> windows::core::Result<()> {
+    fn Drop(&self, data: Ref<IDataObject>, keys: MODIFIERKEYS_FLAGS, pt: &POINTL, effect: *mut DROPEFFECT) -> windows::core::Result<()> {
         let (mut e, dest) = self.decide(keys);
         if let (Some(h), Ok(data)) = (&self.helper, data.ok()) {
-            unsafe { let _ = h.Drop(data, &POINT { x: pt.x, y: pt.y }, e); }
+            unsafe {
+                let _ = h.Drop(data, &POINT { x: pt.x, y: pt.y }, e);
+            }
         }
         let (right, allowed, paths, data) = {
             let d = self.drag.borrow();
@@ -396,7 +400,13 @@ impl IDropTarget_Impl for Target_Impl {
         let op = dest.as_ref().and_then(|d| op_of(e, d));
         // Moves happen here, so tell the source not to delete anything: an
         // optimized move reports something other than MOVE back.
-        let reported = if e == DROPEFFECT_MOVE { DROPEFFECT_NONE } else if op.is_some() { e } else { DROPEFFECT_NONE };
+        let reported = if e == DROPEFFECT_MOVE {
+            DROPEFFECT_NONE
+        } else if op.is_some() {
+            e
+        } else {
+            DROPEFFECT_NONE
+        };
         if let (Some(data), Some(_)) = (&data, op) {
             set_data(data, CFSTR_PERFORMEDDROPEFFECT, &effect_bytes(reported));
             set_data(data, CFSTR_LOGICALPERFORMEDDROPEFFECT, &effect_bytes(e));

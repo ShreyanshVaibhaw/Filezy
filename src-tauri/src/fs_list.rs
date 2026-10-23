@@ -3,8 +3,7 @@ use crate::paths;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_NO_MORE_FILES};
 use windows::Win32::Storage::FileSystem::{
-    FindClose, FindExInfoBasic, FindExSearchNameMatch, FindFirstFileExW, FindNextFileW,
-    FIND_FIRST_EX_LARGE_FETCH, WIN32_FIND_DATAW,
+    FindClose, FindExInfoBasic, FindExSearchNameMatch, FindFirstFileExW, FindNextFileW, FIND_FIRST_EX_LARGE_FETCH, WIN32_FIND_DATAW,
 };
 
 pub fn wide(s: &str) -> Vec<u16> {
@@ -30,11 +29,7 @@ pub fn entry_from(data: &WIN32_FIND_DATAW) -> Option<Entry> {
     }
     let attrs = data.dwFileAttributes;
     let is_dir = attrs & ATTR_DIRECTORY != 0;
-    let ext = if is_dir {
-        String::new()
-    } else {
-        name.rsplit_once('.').map(|(_, e)| e.to_lowercase()).unwrap_or_default()
-    };
+    let ext = if is_dir { String::new() } else { name.rsplit_once('.').map(|(_, e)| e.to_lowercase()).unwrap_or_default() };
     Some(Entry {
         size: ((data.nFileSizeHigh as u64) << 32) | data.nFileSizeLow as u64,
         modified: filetime(data.ftLastWriteTime),
@@ -78,7 +73,9 @@ pub fn list_with(dir: &str, mut keep_going: impl FnMut() -> bool) -> Result<Opti
         if let Some(e) = entry_from(&data) {
             entries.push(e);
             if entries.len() % 4096 == 0 && !keep_going() {
-                unsafe { let _ = FindClose(handle); }
+                unsafe {
+                    let _ = FindClose(handle);
+                }
                 return Ok(None);
             }
         }
@@ -89,7 +86,9 @@ pub fn list_with(dir: &str, mut keep_going: impl FnMut() -> bool) -> Result<Opti
             break;
         }
     }
-    unsafe { let _ = FindClose(handle); }
+    unsafe {
+        let _ = FindClose(handle);
+    }
     result.map(|_| Some(entries))
 }
 

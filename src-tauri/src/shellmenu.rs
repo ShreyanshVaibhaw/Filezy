@@ -14,13 +14,13 @@ use windows::core::{Interface, PCSTR, PCWSTR};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::UI::Shell::Common::ITEMIDLIST;
 use windows::Win32::UI::Shell::{
-    IContextMenu, IContextMenu2, IContextMenu3, IShellFolder, ILClone, ILFindLastID, ILFree, ILIsEqual, ILRemoveLastID,
-    SHBindToParent, SHGetDesktopFolder, SHParseDisplayName, CMF_CANRENAME, CMF_EXTENDEDVERBS, CMF_NORMAL, CMINVOKECOMMANDINFO,
+    IContextMenu, IContextMenu2, IContextMenu3, ILClone, ILFindLastID, ILFree, ILIsEqual, ILRemoveLastID, IShellFolder, SHBindToParent,
+    SHGetDesktopFolder, SHParseDisplayName, CMF_CANRENAME, CMF_EXTENDEDVERBS, CMF_NORMAL, CMINVOKECOMMANDINFO,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreatePopupMenu, DestroyMenu, DispatchMessageW, GetMenuItemCount, GetMenuItemInfoW, PeekMessageW,
-    TranslateMessage, HMENU, MENUITEMINFOW, MFS_DISABLED, MFT_SEPARATOR, MIIM_FTYPE, MIIM_ID, MIIM_STATE,
-    MIIM_STRING, MIIM_SUBMENU, MSG, PM_REMOVE, SW_SHOWNORMAL, WM_INITMENUPOPUP,
+    CreatePopupMenu, DestroyMenu, DispatchMessageW, GetMenuItemCount, GetMenuItemInfoW, PeekMessageW, TranslateMessage, HMENU,
+    MENUITEMINFOW, MFS_DISABLED, MFT_SEPARATOR, MIIM_FTYPE, MIIM_ID, MIIM_STATE, MIIM_STRING, MIIM_SUBMENU, MSG, PM_REMOVE, SW_SHOWNORMAL,
+    WM_INITMENUPOPUP,
 };
 
 const ID_FIRST: u32 = 1;
@@ -172,7 +172,9 @@ struct Current {
 
 impl Drop for Current {
     fn drop(&mut self) {
-        unsafe { let _ = DestroyMenu(self.hmenu); }
+        unsafe {
+            let _ = DestroyMenu(self.hmenu);
+        }
     }
 }
 
@@ -345,12 +347,7 @@ pub fn drag(paths: &[String], owner: isize) -> Result<(), String> {
         }
         let dobj = data_object(paths)?;
         // Cancelled and completed drags are both fine outcomes.
-        let _ = SHDoDragDrop(
-            Some(HWND(owner as *mut _)),
-            &dobj,
-            None::<&IDropSource>,
-            DROPEFFECT_COPY | DROPEFFECT_MOVE | DROPEFFECT_LINK,
-        );
+        let _ = SHDoDragDrop(Some(HWND(owner as *mut _)), &dobj, None::<&IDropSource>, DROPEFFECT_COPY | DROPEFFECT_MOVE | DROPEFFECT_LINK);
         Ok(())
     }
 }
@@ -437,21 +434,18 @@ fn read_menu(icm: &IContextMenu, hmenu: HMENU, depth: u8, init: bool) -> Vec<Ite
                     let _ = forward(icm, WM_INITMENUPOPUP, WPARAM(mii.hSubMenu.0 as usize), LPARAM(i as isize));
                 }
                 let s = read_menu(icm, mii.hSubMenu, depth + 1, init);
-                if s.is_empty() { None } else { Some(s) }
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s)
+                }
             } else {
                 None
             };
             if sep {
                 out.push(Item { id: 0, text: String::new(), verb: None, sep: true, disabled: false, sub: None });
             } else if !text.is_empty() {
-                out.push(Item {
-                    id: mii.wID,
-                    text,
-                    verb: None,
-                    sep: false,
-                    disabled: mii.fState.0 & MFS_DISABLED.0 != 0,
-                    sub,
-                });
+                out.push(Item { id: mii.wID, text, verb: None, sep: false, disabled: mii.fState.0 & MFS_DISABLED.0 != 0, sub });
             }
         }
     }
@@ -481,8 +475,7 @@ fn verb_of(icm: &IContextMenu, id: u32) -> Option<String> {
     unsafe {
         let mut buf = [0u16; 256];
         // GCS_VERBW = 4: buffer receives wide chars despite the PSTR type.
-        icm.GetCommandString((id - ID_FIRST) as usize, 4, None, windows::core::PSTR(buf.as_mut_ptr() as *mut u8), 255)
-            .ok()?;
+        icm.GetCommandString((id - ID_FIRST) as usize, 4, None, windows::core::PSTR(buf.as_mut_ptr() as *mut u8), 255).ok()?;
         let len = buf.iter().position(|&c| c == 0)?;
         if len == 0 {
             return None;

@@ -14,9 +14,8 @@ use windows::core::{Ref, HRESULT, PCWSTR};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::System::Com::{CoCreateInstance, CoTaskMemFree, CLSCTX_INPROC_SERVER};
 use windows::Win32::UI::Shell::{
-    FileOperation, IFileOperation, IFileOperationProgressSink, IFileOperationProgressSink_Impl, IShellItem,
-    SHCreateItemFromParsingName, ShellExecuteW, FILEOPERATION_FLAGS, SIGDN_DESKTOPABSOLUTEPARSING,
-    SIGDN_FILESYSPATH,
+    FileOperation, IFileOperation, IFileOperationProgressSink, IFileOperationProgressSink_Impl, IShellItem, SHCreateItemFromParsingName,
+    ShellExecuteW, FILEOPERATION_FLAGS, SIGDN_DESKTOPABSOLUTEPARSING, SIGDN_FILESYSPATH,
 };
 use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
@@ -36,18 +35,33 @@ const COPYENGINE_S_USER_IGNORED: i32 = 0x0027_0005;
 const COPYENGINE_S_PENDING: i32 = 0x0027_000B;
 
 pub enum Op {
-    Copy { srcs: Vec<String>, dest: String },
-    Move { srcs: Vec<String>, dest: String },
+    Copy {
+        srcs: Vec<String>,
+        dest: String,
+    },
+    Move {
+        srcs: Vec<String>,
+        dest: String,
+    },
     /// To the Recycle Bin (where the volume has one).
-    Recycle { paths: Vec<String> },
+    Recycle {
+        paths: Vec<String>,
+    },
     /// Permanently, after Windows' own confirmation.
-    Delete { paths: Vec<String> },
+    Delete {
+        paths: Vec<String>,
+    },
     /// Put items back at exact paths (undo of a move or rename), across volumes too.
-    MoveTo { items: Vec<(String, String)> },
+    MoveTo {
+        items: Vec<(String, String)>,
+    },
     /// Move freshly extracted items from their staging folder into place, with
     /// Windows' conflict questions but no Windows undo record: undoing the
     /// move would put them back into a folder that is about to be deleted.
-    Place { srcs: Vec<String>, dest: String },
+    Place {
+        srcs: Vec<String>,
+        dest: String,
+    },
 }
 
 impl Op {
@@ -136,10 +150,16 @@ pub fn item_path(it: &IShellItem, sigdn: windows::Win32::UI::Shell::SIGDN) -> St
 }
 
 fn ref_path(it: Ref<IShellItem>) -> String {
-    it.as_ref().map(|i| {
-        let file = item_path(i, SIGDN_FILESYSPATH);
-        if file.is_empty() { item_path(i, SIGDN_DESKTOPABSOLUTEPARSING) } else { paths::to_display(&file) }
-    }).unwrap_or_default()
+    it.as_ref()
+        .map(|i| {
+            let file = item_path(i, SIGDN_FILESYSPATH);
+            if file.is_empty() {
+                item_path(i, SIGDN_DESKTOPABSOLUTEPARSING)
+            } else {
+                paths::to_display(&file)
+            }
+        })
+        .unwrap_or_default()
 }
 
 #[derive(Default)]
@@ -184,8 +204,12 @@ impl Log {
 
     fn put(&mut self, item: Item) {
         let key = paths::identity(&item.src);
-        if let Some(&index) = self.positions.get(&key) { self.items[index] = item; }
-        else { self.positions.insert(key, self.items.len()); self.items.push(item); }
+        if let Some(&index) = self.positions.get(&key) {
+            self.items[index] = item;
+        } else {
+            self.positions.insert(key, self.items.len());
+            self.items.push(item);
+        }
     }
 }
 
@@ -323,12 +347,8 @@ fn shell_item(path: &str) -> windows::core::Result<IShellItem> {
 pub fn stamp(path: &str) -> (u64, u64) {
     std::fs::symlink_metadata(paths::to_native(path))
         .map(|m| {
-            let ms = m
-                .modified()
-                .ok()
-                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_millis() as u64)
-                .unwrap_or(0);
+            let ms =
+                m.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_millis() as u64).unwrap_or(0);
             (if m.is_dir() { 0 } else { m.len() }, ms)
         })
         .unwrap_or((0, 0))
@@ -392,20 +412,18 @@ fn queue(fo: &IFileOperation, op: &Op, log: &mut Log) -> Result<(), String> {
 
 fn perform(op: &Op, owner: isize) -> OpResult {
     let mut result = OpResult { kind: op.kind(), items: vec![], cancelled: false, error: None, clipboard: None };
-    let log = Arc::new(Mutex::new(Log {
-        top: op.sources().iter().map(|s| paths::identity(s)).collect(),
-        ..Default::default()
-    }));
+    let log = Arc::new(Mutex::new(Log { top: op.sources().iter().map(|s| paths::identity(s)).collect(), ..Default::default() }));
     let mut run = || -> Result<bool, String> {
         unsafe {
-            let fo: IFileOperation =
-                CoCreateInstance(&FileOperation, None, CLSCTX_INPROC_SERVER).map_err(|e| e.message().to_string())?;
+            let fo: IFileOperation = CoCreateInstance(&FileOperation, None, CLSCTX_INPROC_SERVER).map_err(|e| e.message().to_string())?;
             if owner != 0 {
                 let _ = fo.SetOwnerWindow(HWND(owner as *mut _));
             }
             let flags = match op {
                 // Pasting into the items' own folder copies with " - Copy" names, like Explorer.
-                Op::Copy { srcs, dest } if srcs.iter().all(|s| paths::parent(s).is_some_and(|p| paths::identity(&p) == paths::identity(dest))) => {
+                Op::Copy { srcs, dest }
+                    if srcs.iter().all(|s| paths::parent(s).is_some_and(|p| paths::identity(&p) == paths::identity(dest))) =>
+                {
                     FOF_ALLOWUNDO | FOFX_ADDUNDORECORD | FOF_RENAMEONCOLLISION
                 }
                 // Explorer doesn't ask before recycling by default; recycle even big files.
@@ -504,9 +522,7 @@ pub fn shell_open(path: &str) -> Result<(), String> {
 pub fn shell_open_verb(path: &str, verb: &str) -> Result<(), String> {
     let wpath = wide(path);
     let verb = wide(verb);
-    let h = unsafe {
-        ShellExecuteW(None, PCWSTR(verb.as_ptr()), PCWSTR(wpath.as_ptr()), PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL)
-    };
+    let h = unsafe { ShellExecuteW(None, PCWSTR(verb.as_ptr()), PCWSTR(wpath.as_ptr()), PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL) };
     // Per docs, values > 32 indicate success.
     if h.0 as usize > 32 {
         Ok(())
@@ -599,7 +615,9 @@ mod tests {
     fn wsl_case_distinct_operations_keep_both_outcomes() {
         let sources = [r"\\wsl.localhost\Ubuntu\tmp\Case.txt", r"\\wsl.localhost\Ubuntu\tmp\case.txt"];
         let mut log = Log { top: sources.iter().map(|s| paths::identity(s)).collect(), ..Default::default() };
-        for src in sources { log.post(src.into(), format!(r"{src}.copy"), HRESULT(0), None); }
+        for src in sources {
+            log.post(src.into(), format!(r"{src}.copy"), HRESULT(0), None);
+        }
         assert_eq!(log.items.len(), 2);
         log.post(sources[0].into(), String::new(), HRESULT(COPYENGINE_S_USER_IGNORED), None);
         assert_eq!(log.items.len(), 2);
@@ -624,11 +642,7 @@ mod tests {
             std::fs::write(paths::join(&d, n), n).unwrap();
         }
         let p = |n: &str| paths::join(&d, n);
-        let r = rename_many(&[
-            (p("a.txt"), "b.txt".into()),
-            (p("b.txt"), "a.txt".into()),
-            (p("keep.txt"), "a.txt".into()),
-        ]);
+        let r = rename_many(&[(p("a.txt"), "b.txt".into()), (p("b.txt"), "a.txt".into()), (p("keep.txt"), "a.txt".into())]);
         assert!(r[0].error.is_none() && r[1].error.is_none(), "{r:?}");
         assert!(r[2].error.as_deref().unwrap_or("").contains("both"), "{r:?}");
         assert_eq!(std::fs::read_to_string(p("a.txt")).unwrap(), "b.txt");
