@@ -9,7 +9,7 @@
 //! Entry names are untrusted. Listing shows them as stored; extraction writes
 //! only names that stay inside the destination, valid on Windows, and never
 //! creates links.
-use crate::fs_list::wide;
+use crate::fs_list::{filetime_ms, wide};
 use crate::listing::{Entry, ATTR_DIRECTORY};
 use crate::paths;
 use std::collections::HashMap;
@@ -251,10 +251,6 @@ fn local_ms(y: u16, mo: u8, d: u8, h: u8, mi: u8, s: u8) -> u64 {
         }
     }
     filetime_ms((ft.dwHighDateTime as u64) << 32 | ft.dwLowDateTime as u64)
-}
-
-fn filetime_ms(ft: u64) -> u64 {
-    (ft / 10_000).saturating_sub(11_644_473_600_000)
 }
 
 fn read_zip(file: &Path) -> Result<Vec<Item>, String> {

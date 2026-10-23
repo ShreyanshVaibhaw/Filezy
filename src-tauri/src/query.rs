@@ -134,24 +134,13 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
-fn civil(day: i64) -> (i64, i64, i64) {
-    let z = day + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    (yoe + era * 400 + i64::from(m <= 2), m, d)
-}
-
 /// A date value as a [from, to) range of UTC milliseconds. Relative names
 /// follow Explorer: weeks start on Monday; "this month" is the calendar month.
 /// `tz` shifts UTC to local time, in milliseconds.
 fn date_range(v: &str, now_ms: i64, tz: i64) -> Option<(u64, u64)> {
     let today = (now_ms + tz).div_euclid(DAY);
-    let (y, m, _) = civil(today);
+    let (y, m, _) = crate::listing::civil_from_days(today);
+    let m = i64::from(m);
     let weekday = (today + 3).rem_euclid(7); // 0 = Monday (1970-01-01 was a Thursday)
     let week = today - weekday;
     let days = |a: i64, b: i64| Some((((a * DAY) - tz).max(0) as u64, ((b * DAY) - tz).max(0) as u64));

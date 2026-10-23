@@ -13,8 +13,13 @@ pub fn wide(s: &str) -> Vec<u16> {
 
 const FILETIME_UNIX_EPOCH: u64 = 116_444_736_000_000_000;
 
-fn filetime_ms(hi: u32, lo: u32) -> u64 {
-    (((hi as u64) << 32) | lo as u64).saturating_sub(FILETIME_UNIX_EPOCH) / 10_000
+/// A FILETIME (100 ns ticks since 1601) as milliseconds since the Unix epoch.
+pub fn filetime_ms(ft: u64) -> u64 {
+    ft.saturating_sub(FILETIME_UNIX_EPOCH) / 10_000
+}
+
+fn filetime(ft: windows::Win32::Foundation::FILETIME) -> u64 {
+    filetime_ms((ft.dwHighDateTime as u64) << 32 | ft.dwLowDateTime as u64)
 }
 
 pub fn entry_from(data: &WIN32_FIND_DATAW) -> Option<Entry> {
@@ -32,8 +37,8 @@ pub fn entry_from(data: &WIN32_FIND_DATAW) -> Option<Entry> {
     };
     Some(Entry {
         size: ((data.nFileSizeHigh as u64) << 32) | data.nFileSizeLow as u64,
-        modified: filetime_ms(data.ftLastWriteTime.dwHighDateTime, data.ftLastWriteTime.dwLowDateTime),
-        created: filetime_ms(data.ftCreationTime.dwHighDateTime, data.ftCreationTime.dwLowDateTime),
+        modified: filetime(data.ftLastWriteTime),
+        created: filetime(data.ftCreationTime),
         name,
         is_dir,
         ext,
