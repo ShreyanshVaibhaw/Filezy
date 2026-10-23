@@ -460,8 +460,39 @@ pub fn type_label(e: &Entry) -> String {
     }
 }
 
+/// Whether `name` starts with `lower`, a lowercase prefix, ignoring case,
+/// without building a lowercase copy of the name.
+pub fn starts_with_lower(name: &str, lower: &str) -> bool {
+    let mut chars = name.chars().flat_map(char::to_lowercase);
+    lower.chars().all(|c| chars.next() == Some(c))
+}
+
+/// Whether `name` contains `lower`, a lowercase word, ignoring case. An ASCII
+/// name is compared in place; only other names are lowercased first.
+pub fn contains_lower(name: &str, lower: &str) -> bool {
+    if !name.is_ascii() {
+        return name.to_lowercase().contains(lower);
+    }
+    let (name, word) = (name.as_bytes(), lower.as_bytes());
+    word.is_empty() || name.windows(word.len()).any(|w| w.eq_ignore_ascii_case(word))
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn case_blind_matches() {
+        use super::{contains_lower, starts_with_lower};
+        assert!(starts_with_lower("Report.TXT", "rep"));
+        assert!(starts_with_lower("Ärger.txt", "är"));
+        assert!(!starts_with_lower("Re", "rep"));
+        assert!(starts_with_lower("anything", ""));
+        assert!(contains_lower("My Report.TXT", "report.t"));
+        assert!(contains_lower("ÜBER Bericht", "über"));
+        assert!(!contains_lower("Report", "über"));
+        assert!(!contains_lower("ab", "abc"));
+        assert!(contains_lower("ab", ""));
+    }
+
     use super::*;
 
     fn e(name: &str, is_dir: bool, size: u64, modified: u64) -> Entry {

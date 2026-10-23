@@ -261,8 +261,7 @@ pub fn search(app: &AppHandle, req: &SearchReq, q: &Query, note: &str) -> bool {
         return true;
     }
     for node in index.nodes.values() {
-        let name = node.name.to_lowercase();
-        if !q.words.iter().all(|w| name.contains(w.as_str())) || !listing::visible(node.attrs, req.show_hidden, req.show_protected) {
+        if !q.words.iter().all(|w| listing::contains_lower(&node.name, w)) || !listing::visible(node.attrs, req.show_hidden, req.show_protected) {
             continue;
         }
         if !index.chain_visible(node.parent, req.show_hidden, req.show_protected) {

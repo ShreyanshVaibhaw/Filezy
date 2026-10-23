@@ -30,8 +30,7 @@ impl Query {
     }
 
     pub fn matches(&self, e: &Entry) -> bool {
-        let name = e.name.to_lowercase();
-        if !self.words.iter().all(|w| name.contains(w.as_str())) {
+        if !self.words.iter().all(|w| crate::listing::contains_lower(&e.name, w)) {
             return false;
         }
         if self.folders.is_some_and(|f| f != e.is_dir) {

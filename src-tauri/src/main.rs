@@ -228,11 +228,27 @@ struct Arranged {
     notice: Option<String>,
 }
 
-/// Re-sort and regroup the current listing. Runs on a copy, so a slow property
-/// sort doesn't hold the listing lock; search results streamed in meanwhile are
-/// kept at the end.
+/// Re-sort and regroup the current listing. A property or Status sort asks the
+/// shell about every item, so it runs on a copy and doesn't hold the listing
+/// lock; search results streamed in meanwhile are kept at the end. Other keys
+/// sort in place, as copying every entry would cost more than the sort.
 #[tauri::command]
-async fn arrange(req: ArrangeReq, state: State<'_, AppState>) -> Result<Arranged, String> {
+async fn arrange(req: ArrangeReq, state: State<'_, AppState>, app: AppHandle) -> Result<Arranged, String> {
+    if !(props::is_prop(&req.arr.sort) || req.arr.sort == "status") {
+        return tauri::async_runtime::spawn_blocking(move || {
+            let state = app.state::<AppState>();
+            let mut l = state.listing.lock().unwrap();
+            if l.rev != req.rev {
+                return Err(STALE.into());
+            }
+            let keys = l.keep_keys(&req.keep);
+            let (groups, notice) = arrange_or_name(&mut l, &req.arr);
+            let kept = l.find(&keys, &req.keep.names);
+            Ok(Arranged { rev: l.rev, total: l.len(), groups, kept, notice })
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    }
     let (mut copy, keys) = {
         let l = state.listing.lock().unwrap();
         if l.rev != req.rev {
@@ -359,7 +375,7 @@ fn find_prefix(rev: u64, prefix: String, from: usize, state: State<'_, AppState>
     }
     let p = prefix.to_lowercase();
     let n = l.entries.len();
-    Ok((0..n).map(|k| (from + k) % n).find(|&i| l.entries[i].name.to_lowercase().starts_with(&p)))
+    Ok((0..n).map(|k| (from + k) % n).find(|&i| listing::starts_with_lower(&l.entries[i].name, &p)))
 }
 
 #[derive(Serialize)]
@@ -1017,9 +1033,10 @@ async fn drop_paths(paths: Vec<String>, dest: String, op: String, app: AppHandle
         _ => return Err(format!("Unknown drop operation '{op}'.")),
     };
     // Moving items onto their own folder does nothing; a copy there gets new names.
+    let home = paths::identity(&dest);
     let srcs: Vec<String> = paths
         .into_iter()
-        .filter(|p| !mv || paths::parent(p).is_none_or(|parent| !parent.eq_ignore_ascii_case(&dest)))
+        .filter(|p| !mv || paths::parent(p).is_none_or(|parent| paths::identity(&parent) != home))
         .collect();
     if srcs.is_empty() {
         return Ok(OpResult { kind: "move", items: vec![], aborted: false, cancelled: false, error: None, children: 0, clipboard: None });
