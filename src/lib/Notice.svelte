@@ -46,7 +46,7 @@
 
 {#if app.status}
   <div class="notice {tone}" role={tone === "error" ? "alert" : "status"}>
-    <span class="glyph icon">{icon}</span>
+    <span class="glyph icon" aria-hidden="true">{icon}</span>
     <span class="text" title={app.status}>{app.status}</span>
     {#if cur?.problems.length}
       <button class="act detailsbtn" onclick={() => (activity.open = !activity.open)}>{msg("Details")}</button>
@@ -55,7 +55,7 @@
       <button class="act" onclick={retry}>{msg("Retry")}</button>
     {/if}
     <button class="close" aria-label={msg("Dismiss message")} title={msg("Dismiss")} onclick={dismissNotice}>
-      <span class="glyph">&#xE8BB;</span>
+      <span class="glyph" aria-hidden="true">&#xE8BB;</span>
     </button>
   </div>
 {/if}
@@ -108,10 +108,10 @@
     flex-shrink: 0;
   }
   .error .icon {
-    color: #ff99a4;
+    color: var(--danger);
   }
   .warn .icon {
-    color: #fce100;
+    color: var(--caution);
   }
   .info .icon,
   .ok .icon {
@@ -175,7 +175,7 @@
     font-size: 13px;
   }
   .atitle.error {
-    color: #ff99a4;
+    color: var(--danger);
   }
   .aprob {
     display: flex;

@@ -23,10 +23,10 @@ export interface ShellMenu {
 
 /// Shell verbs whose entries Filezy draws itself, so the shell's copies are
 /// dropped from the extension list. Windows' own menu hands these back to the
-/// page instead of running them (OURS in shellmenu.rs).
+/// page instead of running them (the `handled` list of shellmenu.rs native()).
 export const OUR_VERBS = new Set([
   "open", "opennewwindow", "opennewtab", "opennewprocess", "cut", "copy", "paste", "delete", "rename",
-  "properties", "openas", "pintohome", "unpinfromhome", "copyaspath", "link", "windows.modernshare",
+  "properties", "openas", "pintohome", "unpinfromhome", "pintohomefile", "copyaspath", "link", "windows.modernshare",
   "makeavailableoffline", "makeavailableonline",
 ]);
 

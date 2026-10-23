@@ -112,16 +112,16 @@
 <div class="recyclepane" data-recycle data-drop={RECYCLE} data-drop-label="Recycle Bin" data-drop-quiet>
   <div class="actions">
     <button class="abtn" disabled={!selIds.size || busy} onclick={restore}>
-      <span class="glyph">&#xE777;</span> {msg("Restore selected")}
+      <span class="glyph" aria-hidden="true">&#xE777;</span>{msg("Restore selected")}
     </button>
     <button class="abtn" disabled={!recycleItems.list.length || busy} onclick={restoreAll}>
-      <span class="glyph">&#xE777;</span> {msg("Restore all items")}
+      <span class="glyph" aria-hidden="true">&#xE777;</span>{msg("Restore all items")}
     </button>
     <button class="abtn" disabled={!selIds.size || busy} onclick={deleteSel}>
-      <span class="glyph">&#xE74D;</span> {msg("Delete selected")}
+      <span class="glyph" aria-hidden="true">&#xE74D;</span>{msg("Delete selected")}
     </button>
     <button class="abtn" disabled={!recycleItems.list.length || busy} onclick={emptyBin}>
-      <span class="glyph">&#xE74D;</span> {msg("Empty Recycle Bin")}
+      <span class="glyph" aria-hidden="true">&#xE74D;</span>{msg("Empty Recycle Bin")}
     </button>
   </div>
 

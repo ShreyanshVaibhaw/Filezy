@@ -336,6 +336,10 @@ export const hooks: {
   hStep?: number;
   /** Rows to move for Page Up/Down. */
   pageSize?: number;
+  /** Visual rows a page holds, for moveVertical. */
+  pageRows?: number;
+  /** Where Up, Down or a page (`rows` visual rows, negative up) from item i lands, group-aware. */
+  moveVertical?: (i: number, rows: number) => number;
   /** Open the context menu for the focused row from the keyboard. */
   contextMenu?: () => void;
 } = {};
@@ -1561,6 +1565,15 @@ export function requestThumb(e: Entry, size: number) {
 
 export function thumbOf(e: Entry, size: number): string | null {
   return thumbs.get(thumbKey(e, size)) ?? iconOf(e);
+}
+
+/** Pictures and videos, whose thumbnails are photos rather than icons. */
+const PHOTO_EXTS = /^(jpe?g|jfif|png|gif|bmp|tiff?|webp|hei[cf]|avif|raw|cr2|nef|dng|arw|mp4|m4v|mov|mkv|avi|wmv|webm)$/;
+
+/// Whether the row shows a photo-like thumbnail, which Gallery crops to fill
+/// its square; anything else (an icon) is shown whole.
+export function isPhotoThumb(e: Entry, size: number): boolean {
+  return !e.is_dir && PHOTO_EXTS.test(e.ext) && !!thumbs.get(thumbKey(e, size));
 }
 
 export function typeOf(e: Entry): string {

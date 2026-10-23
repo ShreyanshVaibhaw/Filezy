@@ -189,7 +189,7 @@
   >
     <span
       class="glyph chevslot chev"
-      role="none"
+      aria-hidden="true"
       onmousedown={(ev) => toggle(path, ev)}
       onclick={(ev) => ev.stopPropagation()}
     >
@@ -198,7 +198,7 @@
     {#if shellIcon(path, 48)}
       <img class="navicon" src={shellIcon(path, 48)} alt="" width="16" height="16" />
     {:else}
-      <span class="glyph icon">{glyph}</span>
+      <span class="glyph icon" aria-hidden="true">{glyph}</span>
     {/if}
     <span class="label">{label}</span>
   </button>
@@ -237,17 +237,17 @@
     tabindex={tabTo(HOME)}
   >
     <span class="chevslot"></span>
-    <span class="glyph icon">&#xE80F;</span>
+    <span class="glyph icon" aria-hidden="true">&#xE80F;</span>
     <span class="label">{msg("Home")}</span>
   </button>
 
   <div class="sep"></div>
   <button class="navitem" class:active={app.path === DEVICES} onclick={() => navigate(DEVICES)} role="treeitem" data-key={DEVICES} data-level="1" aria-level={1} aria-selected={app.path === DEVICES} tabindex={tabTo(DEVICES)}>
-    <span class="chevslot"></span><span class="glyph icon">&#xE8EA;</span><span class="label">{msg("Devices")}</span>
+    <span class="chevslot"></span><span class="glyph icon" aria-hidden="true">&#xE8EA;</span><span class="label">{msg("Devices")}</span>
   </button>
   {#each wslRoots as [name, path] (path)}
     <button class="navitem" class:active={app.path === path} onclick={() => navigate(path)} role="treeitem" data-key={path} data-level="1" aria-level={1} aria-selected={app.path === path} tabindex={tabTo(path)} title={msg("Open {name} in WSL. This starts the distribution if it is stopped.", { name })}>
-      <span class="chevslot"></span><span class="glyph icon">&#xE756;</span><span class="label">{name}</span>
+      <span class="chevslot"></span><span class="glyph icon" aria-hidden="true">&#xE756;</span><span class="label">{name}</span>
     </button>
   {/each}
 
@@ -269,10 +269,10 @@
       {#if shellIcon(path, 48)}
         <img class="navicon" src={shellIcon(path, 48)} alt="" width="16" height="16" />
       {:else}
-        <span class="glyph icon">{specialGlyphs[name] ?? ""}</span>
+        <span class="glyph icon" aria-hidden="true">{specialGlyphs[name] ?? ""}</span>
       {/if}
       <span class="label">{name}</span>
-      <span class="glyph pin">&#xE840;</span>
+      <span class="glyph pin" aria-hidden="true">&#xE840;</span>
     </button>
   {/each}
 
@@ -299,10 +299,10 @@
       {#if shellIcon(p, 48)}
         <img class="navicon" src={shellIcon(p, 48)} alt="" width="16" height="16" />
       {:else}
-        <span class="glyph icon">&#xE8B7;</span>
+        <span class="glyph icon" aria-hidden="true">&#xE8B7;</span>
       {/if}
       <span class="label">{folderName(p)}</span>
-      <span class="glyph pin">&#xE840;</span>
+      <span class="glyph pin" aria-hidden="true">&#xE840;</span>
     </button>
   {/each}
 
@@ -330,13 +330,13 @@
   >
     <span
       class="glyph chevslot chev"
-      role="none"
+      aria-hidden="true"
       onmousedown={(ev) => { ev.stopPropagation(); pcOpen = !pcOpen; }}
       onclick={(ev) => ev.stopPropagation()}
     >
       {pcOpen ? "" : ""}
     </span>
-    <span class="glyph icon">&#xE977;</span>
+    <span class="glyph icon" aria-hidden="true">&#xE977;</span>
     <span class="label">{msg("This PC")}</span>
   </button>
   {#if pcOpen}
@@ -356,8 +356,8 @@
     aria-selected={app.path === NETWORK}
     tabindex={tabTo(NETWORK)}
   >
-    <span class="glyph chevslot"></span>
-    <span class="glyph icon">&#xE968;</span>
+    <span class="glyph chevslot" aria-hidden="true"></span>
+    <span class="glyph icon" aria-hidden="true">&#xE968;</span>
     <span class="label">{msg("Network")}</span>
   </button>
 
@@ -380,7 +380,7 @@
     {#if shellIcon(RECYCLE_GUID, 48)}
       <img class="navicon" src={shellIcon(RECYCLE_GUID, 48)} alt="" width="16" height="16" />
     {:else}
-      <span class="glyph icon">&#xE74D;</span>
+      <span class="glyph icon" aria-hidden="true">&#xE74D;</span>
     {/if}
     <span class="label">{msg("Recycle Bin")}</span>
   </button>
@@ -392,7 +392,7 @@
       class="menu-item"
       onclick={() => { pinRemove(pinCtx!.path); pinCtx = null; }}
     >
-      <span class="glyph">&#xE77A;</span> {msg("Unpin from Quick access")}
+      <span class="glyph" aria-hidden="true">&#xE77A;</span>{msg("Unpin from Quick access")}
     </button>
   </div>
 {/if}

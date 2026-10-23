@@ -117,7 +117,7 @@
   <div class="rail">
     {#each CATEGORIES as c (c.id)}
       <button class="railitem" class:active={cat === c.id} onclick={() => (cat = c.id)} aria-label={msg(c.label)} title={msg(c.label)}>
-        <span class="glyph">{c.glyph}</span>
+        <span class="glyph" aria-hidden="true">{c.glyph}</span>
         <span class="raillabel">{msg(c.label)}</span>
       </button>
     {/each}
@@ -149,7 +149,7 @@
               </div>
               <span class="themename">
                 {label}
-                {#if settings.theme === id}<span class="glyph tick">&#xE73E;</span>{/if}
+                {#if settings.theme === id}<span class="glyph tick" aria-hidden="true">&#xE73E;</span>{/if}
               </span>
             </button>
           {/each}
@@ -157,7 +157,7 @@
 
         <h2 class="section">{msg("Layout")}</h2>
         <div class="row">
-          <span class="glyph rowicon">&#xE8A9;</span>
+          <span class="glyph rowicon" aria-hidden="true">&#xE8A9;</span>
           <div class="rowlabel">
             <div class="rowname">{msg("Compact view")}</div>
             <div class="rowdesc">{msg("Tighter row spacing in Details and List views")}</div>
@@ -165,7 +165,7 @@
           <Toggle label={msg("Compact view")} checked={settings.compact} onchange={(v) => setSetting("compact", v)} />
         </div>
         <div class="row">
-          <span class="glyph rowicon">&#xE890;</span>
+          <span class="glyph rowicon" aria-hidden="true">&#xE890;</span>
           <div class="rowlabel">
             <div class="rowname">{msg("Side pane")}</div>
             <div class="rowdesc">{msg("A preview of the selected file (Alt+P) or its details (Alt+Shift+P)")}</div>
@@ -179,7 +179,7 @@
       {:else if cat === "files"}
         <h2 class="section">{msg("Display")}</h2>
         <div class="row">
-          <span class="glyph rowicon">&#xE7B3;</span>
+          <span class="glyph rowicon" aria-hidden="true">&#xE7B3;</span>
           <div class="rowlabel">
             <div class="rowname">{msg("Show hidden items")}</div>
             <div class="rowdesc">{msg("Include files and folders marked hidden by Windows")}</div>
@@ -187,7 +187,7 @@
           <Toggle label={msg("Show hidden items")} checked={settings.showHidden} onchange={toggleHidden} />
         </div>
         <div class="row">
-          <span class="glyph rowicon">&#xE7C3;</span>
+          <span class="glyph rowicon" aria-hidden="true">&#xE7C3;</span>
           <div class="rowlabel">
             <div class="rowname">{msg("File name extensions")}</div>
             <div class="rowdesc">{msg("Show the extension after each file name")}</div>
@@ -195,7 +195,7 @@
           <Toggle label={msg("File name extensions")} checked={settings.showExt} onchange={(v) => setSetting("showExt", v)} />
         </div>
         <div class="row">
-          <span class="glyph rowicon">&#xE73A;</span>
+          <span class="glyph rowicon" aria-hidden="true">&#xE73A;</span>
           <div class="rowlabel">
             <div class="rowname">{msg("Item check boxes")}</div>
             <div class="rowdesc">{msg("Select items with check boxes as well as clicks")}</div>
@@ -203,7 +203,7 @@
           <Toggle label={msg("Item check boxes")} checked={settings.checkboxes} onchange={(v) => setSetting("checkboxes", v)} />
         </div>
         <div class="row">
-          <span class="glyph rowicon">&#xE72E;</span>
+          <span class="glyph rowicon" aria-hidden="true">&#xE72E;</span>
           <div class="rowlabel">
             <div class="rowname">{msg("Show protected operating system files")}</div>
             <div class="rowdesc">{msg("Files Windows marks as both hidden and system, such as desktop.ini. Needs hidden items on.")}</div>
@@ -216,7 +216,7 @@
         </div>
 
         <div class="row">
-          <span class="glyph rowicon">&#xE8B0;</span>
+          <span class="glyph rowicon" aria-hidden="true">&#xE8B0;</span>
           <div class="rowlabel">
             <div class="rowname">{msg("Single-click to open items")}</div>
             <div class="rowdesc">{msg("Ctrl+click selects without opening. Off by default.")}</div>
@@ -225,33 +225,33 @@
         </div>
         <h2 class="section">{msg("Default folder view")}</h2>
         <div class="row">
-          <span class="glyph rowicon">&#xE890;</span>
+          <span class="glyph rowicon" aria-hidden="true">&#xE890;</span>
           <div class="rowlabel">
             <div class="rowname">{msg("Layout")}</div>
             <div class="rowdesc">{msg("Used by folders you have not customized")}</div>
           </div>
-          <select class="combo" value={settings.defaultView} onchange={(e) => setSetting("defaultView", e.currentTarget.value)}>
+          <select class="combo" aria-label={msg("Default layout")} value={settings.defaultView} onchange={(e) => setSetting("defaultView", e.currentTarget.value)}>
             {#each VIEWS as [v, l] (v)}<option value={v}>{msg(l)}</option>{/each}
           </select>
         </div>
         <div class="row">
-          <span class="glyph rowicon">&#xE8CB;</span>
+          <span class="glyph rowicon" aria-hidden="true">&#xE8CB;</span>
           <div class="rowlabel">
             <div class="rowname">{msg("Sort by")}</div>
           </div>
-          <select class="combo" value={settings.defaultSort} onchange={(e) => setSetting("defaultSort", e.currentTarget.value)}>
+          <select class="combo" aria-label={msg("Default sort")} value={settings.defaultSort} onchange={(e) => setSetting("defaultSort", e.currentTarget.value)}>
             {#each SORTS as [v, l] (v)}<option value={v}>{msg(l)}</option>{/each}
           </select>
         </div>
         <div class="row">
-          <span class="glyph rowicon">&#xE74A;</span>
+          <span class="glyph rowicon" aria-hidden="true">&#xE74A;</span>
           <div class="rowlabel">
             <div class="rowname">{msg("Ascending order")}</div>
           </div>
           <Toggle label={msg("Ascending order")} checked={settings.defaultAsc} onchange={(v) => setSetting("defaultAsc", v)} />
         </div>
         <div class="row">
-          <span class="glyph rowicon">&#xE72C;</span>
+          <span class="glyph rowicon" aria-hidden="true">&#xE72C;</span>
           <div class="rowlabel">
             <div class="rowname">{msg("Reset folder views")}</div>
             <div class="rowdesc">
@@ -270,7 +270,7 @@
         <h2 class="section">{msg("Saved searches and workspaces")}</h2>
         {#each saved.searches as s, i (s.name)}
           <div class="row">
-            <span class="glyph rowicon">&#xE721;</span>
+            <span class="glyph rowicon" aria-hidden="true">&#xE721;</span>
             <div class="rowlabel">
               <div class="rowname">{s.name}</div>
               <div class="rowdesc" title={s.root}>"{s.query}" in {s.root}</div>
@@ -284,7 +284,7 @@
         {/each}
         {#each saved.workspaces as w, i (w.name)}
           <div class="row">
-            <span class="glyph rowicon">&#xE737;</span>
+            <span class="glyph rowicon" aria-hidden="true">&#xE737;</span>
             <div class="rowlabel">
               <div class="rowname">{w.name}</div>
               <div class="rowdesc" title={w.tabs.join("\n")}>{w.tabs.length} {w.tabs.length === 1 ? msg("tab") : msg("tabs")}: {w.tabs.join(", ")}</div>
@@ -298,7 +298,7 @@
         {/each}
         {#if !saved.searches.length && !saved.workspaces.length}
           <div class="row">
-            <span class="glyph rowicon">&#xE734;</span>
+            <span class="glyph rowicon" aria-hidden="true">&#xE734;</span>
             <div class="rowlabel">
               <div class="rowname">{msg("Nothing saved yet")}</div>
               <div class="rowdesc">{msg("Save a search from Search options, or this window's tabs from See more > Save tabs as workspace.")}</div>
@@ -308,7 +308,7 @@
 
         <h2 class="section">{msg("Privacy")}</h2>
         <div class="row">
-          <span class="glyph rowicon">&#xE81C;</span>
+          <span class="glyph rowicon" aria-hidden="true">&#xE81C;</span>
           <div class="rowlabel">
             <div class="rowname">{msg("Clear recent files")}</div>
             <div class="rowdesc">
@@ -324,7 +324,7 @@
 
         <h2 class="section">{msg("Windows integration")}</h2>
         <div class="row">
-          <span class="glyph rowicon">&#xE8DA;</span>
+          <span class="glyph rowicon" aria-hidden="true">&#xE8DA;</span>
           <div class="rowlabel">
             <div class="rowname">{msg("Open in Filezy from File Explorer")}</div>
             <div class="rowdesc">{msg("Adds \"Open in Filezy\" to Explorer's right-click menu for folders and drives. Explorer stays your file manager; turning this off, or uninstalling Filezy, takes the entry out.")}</div>
@@ -334,7 +334,7 @@
 
         <h2 class="section">{msg("Startup")}</h2>
         <div class="row">
-          <span class="glyph rowicon">&#xE7C4;</span>
+          <span class="glyph rowicon" aria-hidden="true">&#xE7C4;</span>
           <div class="rowlabel">
             <div class="rowname">{msg("Reopen tabs from last time")}</div>
             <div class="rowdesc">{msg("When Filezy starts without a folder to open, it brings back the tabs of the window you used last")}</div>
@@ -342,11 +342,11 @@
           <Toggle label={msg("Reopen tabs from last time")} checked={settings.restoreTabs} onchange={(v) => setSetting("restoreTabs", v)} />
         </div>
         <div class="row">
-          <span class="glyph rowicon">&#xE80F;</span>
+          <span class="glyph rowicon" aria-hidden="true">&#xE80F;</span>
           <div class="rowlabel">
             <div class="rowname">{msg("Open new tabs and windows on")}</div>
           </div>
-          <select class="combo" value={startKind} onchange={(e) => setStartKind(e.currentTarget.value)}>
+          <select class="combo" aria-label={msg("Open new tabs and windows on")} value={startKind} onchange={(e) => setStartKind(e.currentTarget.value)}>
             <option value={HOME}>{msg("Home")}</option>
             <option value={THIS_PC}>{msg("This PC")}</option>
             <option value="custom">{msg("A folder")}</option>
@@ -354,13 +354,14 @@
         </div>
         {#if startKind === "custom"}
           <div class="row">
-            <span class="glyph rowicon">&#xE8B7;</span>
+            <span class="glyph rowicon" aria-hidden="true">&#xE8B7;</span>
             <div class="rowlabel">
               <div class="rowname">{msg("Start folder")}</div>
               <div class="rowdesc">{msg("Falls back to Home if the folder is not available")}</div>
             </div>
             <input
               class="pathinput"
+              aria-label={msg("Start folder")}
               placeholder={msg("D:\\Projects")}
               value={customStart}
               onchange={(e) => { customStart = e.currentTarget.value.trim(); setSetting("startPage", customStart); }}
@@ -376,7 +377,7 @@
           <div class="rowdesc groupdesc">{g.desc}</div>
           {#each g.items as it (it.id)}
             <div class="row compactrow">
-              <span class="glyph rowicon">{it.glyph}</span>
+              <span class="glyph rowicon" aria-hidden="true">{it.glyph}</span>
               <div class="rowlabel"><div class="rowname">{msg(it.label)}</div></div>
               <Toggle label={msg(it.label)} checked={menuOn(it.id)} onchange={(v) => setMenuOn(it.id, v)} />
             </div>
@@ -396,7 +397,7 @@
           {msg("Added by installed software through the Windows shell, like archivers and editors")}
         </div>
         <div class="row">
-          <span class="glyph rowicon">&#xE71D;</span>
+          <span class="glyph rowicon" aria-hidden="true">&#xE71D;</span>
           <div class="rowlabel">
             <div class="rowname">{msg("Show entries from other apps")}</div>
             <div class="rowdesc">{msg("Turning this off also skips loading their handlers, so menus open faster")}</div>
@@ -407,7 +408,7 @@
           {#if seenSorted.length}
             {#each seenSorted as name (name)}
               <div class="row compactrow">
-                <span class="glyph rowicon">&#xE7B8;</span>
+                <span class="glyph rowicon" aria-hidden="true">&#xE7B8;</span>
                 <div class="rowlabel"><div class="rowname">{name}</div></div>
                 <Toggle
                   label={name}
@@ -437,7 +438,7 @@
         </div>
 
         <div class="row">
-          <span class="glyph rowicon">&#xE896;</span>
+          <span class="glyph rowicon" aria-hidden="true">&#xE896;</span>
           <div class="rowlabel">
             <div class="rowname">{msg("Updates")}</div>
             <div class="rowdesc">
@@ -481,7 +482,7 @@
           <div class="rowdesc notes">{updater.notes}</div>
         {/if}
         <div class="row">
-          <span class="glyph rowicon">&#xE777;</span>
+          <span class="glyph rowicon" aria-hidden="true">&#xE777;</span>
           <div class="rowlabel">
             <div class="rowname">{msg("Reset all settings")}</div>
             <div class="rowdesc">
@@ -768,8 +769,8 @@
     background: var(--surface-hover);
   }
   .btn.danger {
-    border-color: var(--close-hover);
-    color: var(--close-hover);
+    border-color: var(--danger);
+    color: var(--danger);
   }
   .btn.accentbtn {
     background: var(--accent);

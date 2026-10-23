@@ -39,7 +39,7 @@
   <div class="section">
     {msg("Computers")}{network.loading ? "" : ` (${network.places.length})`}
     <button class="refresh" title={msg("Look again")} aria-label={msg("Look again")} disabled={network.loading} onclick={loadNetwork}>
-      <span class="glyph">&#xE72C;</span>
+      <span class="glyph" aria-hidden="true">&#xE72C;</span>
     </button>
   </div>
   {#if network.loading}
@@ -54,7 +54,7 @@
   <div class="tiles">
     {#each network.places as p (p.path)}
       <button class="nettile" {...opener(() => navigate(p.path))} title={p.path}>
-        <span class="glyph icon">&#xE7F8;</span>
+        <span class="glyph icon" aria-hidden="true">&#xE7F8;</span>
         <span class="name">{p.name}</span>
       </button>
     {/each}

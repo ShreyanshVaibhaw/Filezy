@@ -113,12 +113,12 @@
   <div class="menu" style="left:{tabCtx.x}px; top:{tabCtx.y}px" use:fitMenu use:menuKeys={() => (tabCtx = null)}>
     {#if menuOn("tab.duplicate")}
       <button class="menu-item" onclick={() => { duplicateTab(tabCtx!.id); tabCtx = null; }}>
-        <span class="glyph">&#xE8C8;</span> {msg("Duplicate tab")}
+        <span class="glyph" aria-hidden="true">&#xE8C8;</span>{msg("Duplicate tab")}
       </button>
     {/if}
     {#if menuOn("tab.movewindow")}
       <button class="menu-item" onclick={() => { moveTabToWindow(tabCtx!.id); tabCtx = null; }}>
-        <span class="glyph">&#xE737;</span> {msg("Move to new window")}
+        <span class="glyph" aria-hidden="true">&#xE737;</span>{msg("Move to new window")}
       </button>
       {#each targets as target (target.id)}
         <button class="menu-item targetwindow" title={target.name} onclick={() => { const id = tabCtx!.id; tabCtx = null; transferTab(id, target.id); }}>
@@ -131,7 +131,7 @@
     {/if}
     {#if menuOn("tab.close")}
       <button class="menu-item" onclick={() => { closeTab(tabCtx!.id); tabCtx = null; }}>
-        <span class="glyph">&#xE8BB;</span> {msg("Close tab")}
+        <span class="glyph" aria-hidden="true">&#xE8BB;</span>{msg("Close tab")}
       </button>
     {/if}
     {#if menuOn("tab.closeothers")}
@@ -175,35 +175,35 @@
       {#if t.path === RECYCLE && shellIcon(RECYCLE_GUID, 48)}
         <img src={shellIcon(RECYCLE_GUID, 48)} alt="" width="16" height="16" />
       {:else if VIRTUAL_GLYPHS[t.path] || t.path === RECYCLE}
-        <span class="glyph tabglyph">{VIRTUAL_GLYPHS[t.path] ?? "\uE74D"}</span>
+        <span class="glyph tabglyph" aria-hidden="true">{VIRTUAL_GLYPHS[t.path] ?? "\uE74D"}</span>
       {:else if folderIcon}
         <img src={folderIcon} alt="" width="16" height="16" />
       {:else}
-        <span class="glyph tabglyph">&#xE8B7;</span>
+        <span class="glyph tabglyph" aria-hidden="true">&#xE8B7;</span>
       {/if}
       <span class="tabname">{t.path ? folderName(t.path) : "Home"}</span>
       <button class="tabclose" tabindex="-1" onclick={(e) => { e.stopPropagation(); closeTab(t.id); }} title={msg("Close tab (Ctrl+W)")} aria-label={msg("Close tab (Ctrl+W)")}>
-        <span class="glyph">&#xE8BB;</span>
+        <span class="glyph" aria-hidden="true">&#xE8BB;</span>
       </button>
     </div>
   {/each}
   </div>
   <button class="newtab tabpicker" title={msg("All tabs")} aria-label={msg("All tabs")} aria-expanded={tabOverflow} onclick={() => tabOverflow = !tabOverflow}>
-    <span class="glyph">&#xE70D;</span>
+    <span class="glyph" aria-hidden="true">&#xE70D;</span>
   </button>
   <button class="newtab" title={msg("New tab (Ctrl+T)")} aria-label={msg("New tab (Ctrl+T)")} onclick={() => newTab()}>
-    <span class="glyph">&#xE710;</span>
+    <span class="glyph" aria-hidden="true">&#xE710;</span>
   </button>
   <div class="spacer" data-tauri-drag-region></div>
   <div class="caption">
     <button class="cap" tabindex="-1" onclick={() => win.minimize()} title={msg("Minimize")} aria-label={msg("Minimize")}>
-      <span class="glyph">&#xE921;</span>
+      <span class="glyph" aria-hidden="true">&#xE921;</span>
     </button>
     <button class="cap" use:nativeCaption={maximized} tabindex="-1" onclick={() => win.toggleMaximize()} title={maximized ? msg("Restore") : msg("Maximize")} aria-label={maximized ? msg("Restore") : msg("Maximize")}>
-      <span class="glyph">{maximized ? "" : ""}</span>
+      <span class="glyph" aria-hidden="true">{maximized ? "" : ""}</span>
     </button>
     <button class="cap close" tabindex="-1" onclick={() => win.close()} title={msg("Close")} aria-label={msg("Close")}>
-      <span class="glyph">&#xE8BB;</span>
+      <span class="glyph" aria-hidden="true">&#xE8BB;</span>
     </button>
   </div>
 </div>

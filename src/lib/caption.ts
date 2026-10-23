@@ -16,7 +16,7 @@ export function nativeCaption(node: HTMLElement, _maximized: boolean) {
       scale: devicePixelRatio,
       background: color(getComputedStyle(root).backgroundColor, 0x202020),
       foreground: color(getComputedStyle(node).color, 0xffffff),
-      visible: !document.querySelector(".menu, [role='dialog']"),
+      visible: !document.querySelector(".menu, dialog[open]"),
     };
     const key = JSON.stringify([place, _maximized, devicePixelRatio]);
     if (previous === key) return;

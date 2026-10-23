@@ -59,10 +59,10 @@
   {/if}
   <div class="fill"></div>
   <button class="viewtoggle" class:active={app.view === "details"} title={msg("Details view")} aria-label={msg("Details view")} onclick={() => setView("details")}>
-    <span class="glyph">&#xE9D5;</span>
+    <span class="glyph" aria-hidden="true">&#xE9D5;</span>
   </button>
   <button class="viewtoggle" class:active={app.view === "icons_l"} title={msg("Large icons view")} aria-label={msg("Large icons view")} onclick={() => setView("icons_l")}>
-    <span class="glyph">&#xE8A9;</span>
+    <span class="glyph" aria-hidden="true">&#xE8A9;</span>
   </button>
 </div>
 

@@ -44,9 +44,9 @@
         role={it.checked === undefined ? undefined : "menuitemradio"}
         aria-checked={it.checked}
       >
-        {#if checks}<span class="glyph tick">{it.checked ? "\uE73E" : ""}</span>{/if}
+        {#if checks}<span class="glyph tick" aria-hidden="true">{it.checked ? "\uE73E" : ""}</span>{/if}
         <span class="mtext">{it.text}</span>
-        {#if it.sub}<span class="glyph subchev">&#xE76C;</span>{/if}
+        {#if it.sub}<span class="glyph subchev" aria-hidden="true">&#xE76C;</span>{/if}
       </button>
       {#if it.sub && open === idx}
         <div class="menu submenu" use:place use:menuKeys={() => (open = -1)}>
@@ -58,28 +58,12 @@
 {/each}
 
 <style>
-  .menu-item.wide {
-    justify-content: space-between;
-    gap: 8px;
-  }
-  .mtext {
-    flex: 1;
-    text-align: left;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
   .tick {
     width: 16px;
     flex-shrink: 0;
   }
-  .subchev {
-    font-size: 10px;
-    color: var(--text-3);
-  }
-  .submenu {
+  /* Fixed, placed by place(), so the parent menu's scrolling can't clip it. */
+  .menu.submenu {
     position: fixed;
-    max-height: 60vh;
-    overflow-y: auto;
   }
 </style>

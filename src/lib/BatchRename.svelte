@@ -4,6 +4,7 @@
   import { batch, commitBatch } from "./ops.svelte";
   import { baseName, joinPath, parentPath } from "./paths";
   import { ruleNames, type RenameMode, type RenameRule } from "./renamerules";
+  import Modal from "./Modal.svelte";
 
   const MODES: [RenameMode, string][] = [
     ["number", "Numbered"],
@@ -62,18 +63,6 @@
     if (!invalid && changed) commitBatch(names);
   }
 
-  function onKeydown(ev: KeyboardEvent) {
-    if (!batch.open) return;
-    // The dialog owns the keyboard while open.
-    ev.stopPropagation();
-    if (ev.key === "Escape") {
-      ev.preventDefault();
-      batch.open = false;
-    } else if (ev.key === "Enter" && ev.target instanceof HTMLInputElement && ev.target.type === "text") {
-      ev.preventDefault();
-      go();
-    }
-  }
 
   const HINTS: Record<RenameMode, string> = {
     number: "Each item gets this name and a number, in list order, and keeps its own extension.",
@@ -82,101 +71,82 @@
   };
 </script>
 
-<svelte:window onkeydowncapture={onKeydown} />
-
 {#if batch.open}
-  <div class="scrim" role="presentation">
-    <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="br-title">
-      <h2 id="br-title">{msg("Rename")} {batch.items.length} {msg("items")}</h2>
-      <div class="modes" role="radiogroup" aria-label={msg("Rename by")}>
-        {#each MODES as [m, label] (m)}
-          <button class="mode" role="radio" aria-checked={rule.mode === m} class:on={rule.mode === m} onclick={() => setMode(m)}>{msg(label)}</button>
-        {/each}
-      </div>
-      {#if rule.mode === "number"}
-        <label class="field">
-          <span>{msg("New name")}</span>
-          <input type="text" bind:this={input} bind:value={rule.base} spellcheck="false" aria-describedby="br-hint" />
-        </label>
-      {:else if rule.mode === "replace"}
-        <div class="pair">
-          <label class="field">
-            <span>{msg("Find")}</span>
-            <input type="text" bind:this={input} bind:value={rule.find} spellcheck="false" aria-describedby="br-hint" />
-          </label>
-          <label class="field">
-            <span>{msg("Replace with")}</span>
-            <input type="text" bind:value={rule.replace} spellcheck="false" />
-          </label>
-        </div>
-        <div class="opts">
-          <label><input type="checkbox" bind:checked={rule.matchCase} /> {msg("Match case")}</label>
-          <label><input type="checkbox" bind:checked={rule.regex} /> {msg("Regular expression")}</label>
-        </div>
-      {:else}
-        <div class="pair">
-          <label class="field grow">
-            <span>{msg("Template")}</span>
-            <input type="text" bind:this={input} bind:value={rule.template} spellcheck="false" aria-describedby="br-hint" />
-          </label>
-          <label class="field num">
-            <span>{msg("Start at")}</span>
-            <input type="number" bind:value={rule.start} min="0" />
-          </label>
-        </div>
-      {/if}
-      <p id="br-hint" class="hint" class:err={!!invalid}>{invalid || msg(HINTS[rule.mode])}</p>
-      <div class="preview" role="list" aria-label={msg("Preview")}>
-        {#each batch.items as it, i (it.path)}
-          {@const bad = taken.has(targets[i].toLowerCase())}
-          <div class="prow" class:bad role="listitem">
-            <span class="old" title={baseName(it.path)}>{baseName(it.path)}</span>
-            <span class="glyph arrow" aria-hidden="true">&#xE72A;</span>
-            <span class="new" title={names[i]}>{names[i]}</span>
-            {#if bad}<span class="why">{msg("name taken")}</span>{/if}
-          </div>
-        {/each}
-      </div>
-      {#if clashes}
-        <p class="hint err">
-          {clashes === 1 ? "1 new name is" : `${clashes} new names are`} {msg("already used in that folder; those items keep their names.")}
-        </p>
-      {/if}
-      <div class="btns">
-        <span class="count">{changed} of {batch.items.length} {msg("names change")}</span>
-        <button class="btn primary" disabled={!!invalid || !changed} onclick={go}>{msg("Rename")}</button>
-        <button class="btn" onclick={() => (batch.open = false)}>{msg("Cancel")}</button>
-      </div>
+  <Modal
+    width={600}
+    labelledby="br-title"
+    onclose={() => (batch.open = false)}
+    onkeydown={(ev) => {
+      if (ev.key === "Enter" && ev.target instanceof HTMLInputElement && ev.target.type === "text") {
+        ev.preventDefault();
+        go();
+      }
+    }}
+  >
+    <h2 id="br-title">{msg("Rename")} {batch.items.length} {msg("items")}</h2>
+    <div class="modes" role="radiogroup" aria-label={msg("Rename by")}>
+      {#each MODES as [m, label] (m)}
+        <button class="mode" role="radio" aria-checked={rule.mode === m} class:on={rule.mode === m} onclick={() => setMode(m)}>{msg(label)}</button>
+      {/each}
     </div>
-  </div>
+    {#if rule.mode === "number"}
+      <label class="field">
+        <span>{msg("New name")}</span>
+        <input type="text" bind:this={input} bind:value={rule.base} spellcheck="false" aria-describedby="br-hint" />
+      </label>
+    {:else if rule.mode === "replace"}
+      <div class="pair">
+        <label class="field">
+          <span>{msg("Find")}</span>
+          <input type="text" bind:this={input} bind:value={rule.find} spellcheck="false" aria-describedby="br-hint" />
+        </label>
+        <label class="field">
+          <span>{msg("Replace with")}</span>
+          <input type="text" bind:value={rule.replace} spellcheck="false" />
+        </label>
+      </div>
+      <div class="opts">
+        <label><input type="checkbox" bind:checked={rule.matchCase} /> {msg("Match case")}</label>
+        <label><input type="checkbox" bind:checked={rule.regex} /> {msg("Regular expression")}</label>
+      </div>
+    {:else}
+      <div class="pair">
+        <label class="field">
+          <span>{msg("Template")}</span>
+          <input type="text" bind:this={input} bind:value={rule.template} spellcheck="false" aria-describedby="br-hint" />
+        </label>
+        <label class="field num">
+          <span>{msg("Start at")}</span>
+          <input type="number" bind:value={rule.start} min="0" />
+        </label>
+      </div>
+    {/if}
+    <p id="br-hint" class="hint" class:err={!!invalid}>{invalid || msg(HINTS[rule.mode])}</p>
+    <div class="preview" role="list" aria-label={msg("Preview")}>
+      {#each batch.items as it, i (it.path)}
+        {@const bad = taken.has(targets[i].toLowerCase())}
+        <div class="prow" class:bad role="listitem">
+          <span class="old" title={baseName(it.path)}>{baseName(it.path)}</span>
+          <span class="glyph arrow" aria-hidden="true">&#xE72A;</span>
+          <span class="new" title={names[i]}>{names[i]}</span>
+          {#if bad}<span class="why">{msg("name taken")}</span>{/if}
+        </div>
+      {/each}
+    </div>
+    {#if clashes}
+      <p class="hint err">
+        {clashes === 1 ? "1 new name is" : `${clashes} new names are`} {msg("already used in that folder; those items keep their names.")}
+      </p>
+    {/if}
+    <div class="btns">
+      <span class="count">{changed} of {batch.items.length} {msg("names change")}</span>
+      <button class="btn primary" disabled={!!invalid || !changed} onclick={go}>{msg("Rename")}</button>
+      <button class="btn" onclick={() => (batch.open = false)}>{msg("Cancel")}</button>
+    </div>
+  </Modal>
 {/if}
 
 <style>
-  .scrim {
-    position: fixed;
-    inset: 0;
-    z-index: 2000;
-    display: grid;
-    place-items: center;
-    background: rgba(0, 0, 0, 0.3);
-  }
-  .dlg {
-    width: min(600px, calc(100vw - 32px));
-    max-height: calc(100vh - 64px);
-    display: flex;
-    flex-direction: column;
-    background: var(--menu-bg);
-    border: 1px solid var(--stroke-strong);
-    border-radius: 8px;
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
-    padding: 20px 24px 0;
-    overflow: hidden;
-  }
-  h2 {
-    font-size: 18px;
-    font-weight: 600;
-    margin-bottom: 12px;
-  }
   .modes {
     display: flex;
     gap: 4px;
@@ -248,7 +218,7 @@
     margin: 8px 0 10px;
   }
   .hint.err {
-    color: #ff99a4;
+    color: var(--danger);
   }
   .preview {
     flex: 1;
@@ -269,7 +239,7 @@
     font-size: 13px;
   }
   .prow.bad .new {
-    color: #ff99a4;
+    color: var(--danger);
     text-decoration: line-through;
   }
   .old {
@@ -287,40 +257,11 @@
   }
   .why {
     font-size: 11px;
-    color: #ff99a4;
-  }
-  .btns {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    justify-content: flex-end;
-    margin: 16px -24px 0;
-    padding: 16px 24px;
-    background: var(--surface);
-    border-top: 1px solid var(--stroke);
+    color: var(--danger);
   }
   .count {
     margin-right: auto;
     font-size: 12px;
     color: var(--text-3);
-  }
-  .btn {
-    min-width: 96px;
-    height: 32px;
-    padding: 0 12px;
-    border: 1px solid var(--stroke-strong);
-    border-radius: 4px;
-    background: var(--input-bg);
-  }
-  .btn:hover:not(:disabled) {
-    background: var(--surface-hover);
-  }
-  .btn.primary {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--menu-bg);
-  }
-  .btn.primary:disabled {
-    opacity: 0.5;
   }
 </style>

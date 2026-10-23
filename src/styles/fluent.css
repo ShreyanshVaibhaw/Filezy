@@ -27,6 +27,11 @@
   --input-bg: rgba(255, 255, 255, 0.06);
   --close-hover: #c42b1c;
   --scrollbar: rgba(255, 255, 255, 0.35);
+  /* Status colors for text and icons, readable on every theme's dark or light
+     surfaces (each theme sets color-scheme). */
+  --danger: light-dark(#c42b1c, #ff99a4);
+  --caution: light-dark(#9d5d00, #fce100);
+  --success: light-dark(#0b6e0b, #6ccb5f);
 }
 
 @media (prefers-color-scheme: light) {
@@ -192,16 +197,64 @@ input:focus-visible {
 .menu-item:hover:not(:disabled) {
   background: var(--hover);
 }
+/* Icons and check marks share one 16px slot, so every label starts at the same x. */
+.menu-item .glyph,
+.menu-item .check {
+  width: 16px;
+  flex-shrink: 0;
+  text-align: center;
+}
 .menu-item .glyph {
   font-size: 16px;
-  width: 16px;
   color: var(--text-2);
 }
 .menu-item .check {
-  width: 14px;
   font-size: 8px;
-  text-align: center;
   color: var(--text);
+}
+/* An entry that opens a submenu: its label, then a chevron at the right edge;
+   the submenu flies out beside it. */
+.subwrap {
+  position: relative;
+}
+.menu-item.wide {
+  justify-content: space-between;
+}
+.menu-item .mtext {
+  flex: 1;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.menu-item .subchev {
+  font-size: 10px;
+  color: var(--text-3);
+}
+.menu.submenu {
+  position: absolute;
+  left: calc(100% - 4px);
+  top: -4px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+/* Plain outlined buttons on pages and empty states. */
+.sbtns {
+  display: flex;
+  gap: 8px;
+}
+.sbtn {
+  height: 30px;
+  padding: 0 14px;
+  font-size: 13px;
+  border: 1px solid var(--stroke-strong);
+  border-radius: 4px;
+}
+.sbtn:hover:not(:disabled) {
+  background: var(--hover);
+}
+.sbtn:disabled {
+  color: var(--text-disabled);
 }
 .menu-sep {
   height: 1px;
@@ -215,4 +268,68 @@ input:focus-visible {
 .menu-sep:last-child,
 .menu-sep + .menu-sep {
   display: none;
+}
+
+/* Modal dialogs (Modal.svelte): the frame, title and button row they share. */
+dialog.dlg {
+  margin: auto;
+  max-width: none;
+  max-height: calc(100vh - 64px);
+  padding: 20px 24px 0;
+  color: var(--text);
+  background: var(--menu-bg);
+  border: 1px solid var(--stroke-strong);
+  border-radius: 8px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+dialog.dlg[open] {
+  display: flex;
+  flex-direction: column;
+}
+dialog.dlg::backdrop {
+  background: rgba(0, 0, 0, 0.3);
+}
+.dlg h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.dlg .btns {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  margin: 16px -24px 0;
+  padding: 16px 24px;
+  background: var(--surface);
+  border-top: 1px solid var(--stroke);
+}
+.dlg .btn {
+  min-width: 96px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--stroke-strong);
+  border-radius: 4px;
+  background: var(--input-bg);
+}
+.dlg .btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+.dlg .btn:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
+}
+.dlg .btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--menu-bg);
+}
+.dlg .btn.primary.danger {
+  background: var(--close-hover);
+  border-color: var(--close-hover);
+  color: #fff;
+}
+.dlg .btn.primary:disabled {
+  opacity: 0.5;
 }

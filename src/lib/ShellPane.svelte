@@ -48,7 +48,7 @@
       {#each visible as item, offset (item.path)}
         <div class="item" role="listitem" aria-setsize={shellFolder.items.length} aria-posinset={start + offset + 1}>
           <input type="checkbox" aria-label={msg("Select {name}", { name: item.name })} value={item.path} bind:group={shellSelection.paths} disabled={!item.copy || busy} title={!item.copy ? msg("The device does not support copying this item.") : undefined} />
-          <button class="entry" onclick={() => open(item)} title={item.name}><span class="glyph">{item.folder ? "\uE8B7" : "\uE7C3"}</span><span>{item.name}</span></button>
+          <button class="entry" onclick={() => open(item)} title={item.name}><span class="glyph" aria-hidden="true">{item.folder ? "\uE8B7" : "\uE7C3"}</span><span>{item.name}</span></button>
         </div>
       {:else}<p>{msg("No items. Check that your device is connected, unlocked and permits file transfer.")}</p>{/each}
       <div style={`height:${(shellFolder.items.length - end) * 42}px`} aria-hidden="true"></div>

@@ -127,6 +127,8 @@
   }
 
   function onKeydown(ev: KeyboardEvent) {
+    // A modal dialog owns the keyboard, even when focus slipped to the page body.
+    if (document.querySelector("dialog[open]")) return;
     const k = ev.key.length === 1 ? ev.key.toLowerCase() : ev.key;
     const ctrl = ev.ctrlKey && !ev.altKey;
     const typing = isTextField(ev.target);
@@ -207,17 +209,20 @@
       handled();
       // The first arrow press puts the keyboard on the first item.
       if (cur < 0) return moveFocus(0, mods);
+      const earlier = k === "ArrowUp" || k === "ArrowLeft";
+      if (vertical && hooks.moveVertical) return moveFocus(hooks.moveVertical(cur, earlier ? -1 : 1), mods);
       const step = vertical ? (hooks.gridCols ?? 1) : (hooks.hStep ?? 0);
       if (!step) return;
-      const earlier = k === "ArrowUp" || k === "ArrowLeft";
       return moveFocus(cur + (earlier ? -step : step), mods);
     }
     if (k === "Home") return handled(), moveFocus(0, mods);
     if (k === "End") return handled(), moveFocus(app.total - 1, mods);
     if (k === "PageDown" || k === "PageUp") {
       handled();
+      const up = k === "PageUp";
+      if (hooks.moveVertical && hooks.pageRows) return moveFocus(hooks.moveVertical(Math.max(cur, 0), up ? -hooks.pageRows : hooks.pageRows), mods);
       const page = hooks.pageSize ?? 10;
-      return moveFocus(Math.max(cur, 0) + (k === "PageUp" ? -page : page), mods);
+      return moveFocus(Math.max(cur, 0) + (up ? -page : page), mods);
     }
     if (k === " " && !ev.shiftKey && cur >= 0) return handled(), moveFocus(cur);
     // Typing a name jumps to it.

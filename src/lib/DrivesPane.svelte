@@ -169,7 +169,7 @@
         {#if shellIcon(d.path, 48)}
           <img class="dimg" src={shellIcon(d.path, 48)} alt="" width="48" height="48" />
         {:else}
-          <span class="glyph icon">&#xEDA2;</span>
+          <span class="glyph icon" aria-hidden="true">&#xEDA2;</span>
         {/if}
         <span class="info">
           <span class="name">{d.name}</span>
@@ -191,27 +191,27 @@
   <div class="menu drivemenu" style="left:{ctx.x}px; top:{ctx.y}px" use:menuKeys={() => (ctx = null)} use:fitMenu={ctx}>
     {#if menuOn("drive.open")}
       <button class="menu-item" onclick={() => { const p = ctx!.path; ctx = null; navigate(p); }}>
-        <span class="glyph">&#xE8E5;</span> {msg("Open")}
+        <span class="glyph" aria-hidden="true">&#xE8E5;</span>{msg("Open")}
       </button>
     {/if}
     {#if menuOn("drive.pin")}
       <button class="menu-item" onclick={() => { const p = ctx!.path; ctx = null; pinAdd(p); }}>
-        <span class="glyph">&#xE840;</span> {msg("Pin to Quick access")}
+        <span class="glyph" aria-hidden="true">&#xE840;</span>{msg("Pin to Quick access")}
       </button>
     {/if}
     {#if ctxDrive?.ejectable && menuOn("drive.eject")}
       <button class="menu-item" onclick={() => { const p = ctx!.path; ctx = null; eject(p); }}>
-        <span class="glyph">&#xF847;</span> {msg("Eject")}
+        <span class="glyph" aria-hidden="true">&#xF847;</span>{msg("Eject")}
       </button>
     {/if}
     {#if ctxDrive?.kind === "network" && menuOn("drive.disconnect")}
       <button class="menu-item" onclick={() => { const p = ctx!.path; ctx = null; disconnect(p); }}>
-        <span class="glyph">&#xE8CD;</span> {msg("Disconnect")}
+        <span class="glyph" aria-hidden="true">&#xE8CD;</span>{msg("Disconnect")}
       </button>
     {/if}
     {#if menuOn("drive.properties")}
       <button class="menu-item" onclick={() => { const p = ctx!.path; ctx = null; invoke("show_properties", { path: p }).catch((e) => (app.status = String(e))); }}>
-        <span class="glyph">&#xE90F;</span> {msg("Properties")}
+        <span class="glyph" aria-hidden="true">&#xE90F;</span>{msg("Properties")}
       </button>
     {/if}
     {#if ctxItems === null}
@@ -229,7 +229,7 @@
     {#if menuOn("drive.moreoptions")}
       <div class="menu-sep"></div>
       <button class="menu-item" onclick={() => ctx && moreOptions(ctx.path, ctx.at)}>
-        <span class="glyph">&#xE712;</span> {msg("Show more options")}
+        <span class="glyph" aria-hidden="true">&#xE712;</span>{msg("Show more options")}
       </button>
     {/if}
   </div>

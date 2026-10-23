@@ -160,24 +160,24 @@
 
 <div class="commandbar">
   <button class="cbtn labeled" disabled={!can("new")} onclick={(e) => toggle("new", e)}>
-    <span class="glyph accent">&#xE710;</span>
+    <span class="glyph accent" aria-hidden="true">&#xE710;</span>
     <span>{msg("New")}</span>
-    <span class="glyph chev">&#xE70D;</span>
+    <span class="glyph chev" aria-hidden="true">&#xE70D;</span>
   </button>
 
   <div class="divider"></div>
 
   <button class="cbtn" disabled={!hasSel || !can("change")} onclick={() => copySel(true)} title={msg("Cut (Ctrl+X)")} aria-label={msg("Cut (Ctrl+X)")}>
-    <span class="glyph">&#xE8C6;</span>
+    <span class="glyph" aria-hidden="true">&#xE8C6;</span>
   </button>
   <button class="cbtn" disabled={!hasSel || inArchive} onclick={() => copySel(false)} title={msg("Copy (Ctrl+C)")} aria-label={msg("Copy (Ctrl+C)")}>
-    <span class="glyph">&#xE8C8;</span>
+    <span class="glyph" aria-hidden="true">&#xE8C8;</span>
   </button>
   <button class="cbtn" disabled={!app.canPaste || !can("paste")} onclick={paste} title={msg("Paste (Ctrl+V)")} aria-label={msg("Paste (Ctrl+V)")}>
-    <span class="glyph">&#xE77F;</span>
+    <span class="glyph" aria-hidden="true">&#xE77F;</span>
   </button>
   <button class="cbtn" disabled={!hasSel || !can("change")} onclick={startRename} title={msg("Rename (F2)")} aria-label={msg("Rename (F2)")}>
-    <span class="glyph">&#xE8AC;</span>
+    <span class="glyph" aria-hidden="true">&#xE8AC;</span>
   </button>
   <button
     class="cbtn"
@@ -186,46 +186,46 @@
     title={hasSel && !filesOnly ? "Share works for files, not folders" : "Share"}
     aria-label={msg("Share")}
   >
-    <span class="glyph">&#xE72D;</span>
+    <span class="glyph" aria-hidden="true">&#xE72D;</span>
   </button>
   <button class="cbtn" disabled={!hasSel || !can("change")} onclick={() => del()} title={msg("Delete (Del)")} aria-label={msg("Delete (Del)")}>
-    <span class="glyph">&#xE74D;</span>
+    <span class="glyph" aria-hidden="true">&#xE74D;</span>
   </button>
 
   <div class="divider"></div>
 
   <button class="cbtn labeled" disabled={isShellLocation(app.path)} onclick={(e) => toggle("sort", e)}>
-    <span class="glyph">&#xE8CB;</span>
+    <span class="glyph" aria-hidden="true">&#xE8CB;</span>
     <span>{msg("Sort")}</span>
-    <span class="glyph chev">&#xE70D;</span>
+    <span class="glyph chev" aria-hidden="true">&#xE70D;</span>
   </button>
   <button class="cbtn labeled" disabled={isShellLocation(app.path)} onclick={(e) => toggle("view", e)}>
-    <span class="glyph">&#xE890;</span>
+    <span class="glyph" aria-hidden="true">&#xE890;</span>
     <span>{msg("View")}</span>
-    <span class="glyph chev">&#xE70D;</span>
+    <span class="glyph chev" aria-hidden="true">&#xE70D;</span>
   </button>
   {#if extractFrom}
     <button class="cbtn labeled" onclick={() => extractAll(extractFrom)} title="Extract all files from {baseName(extractFrom)}">
-      <span class="glyph">&#xE8B7;</span>
+      <span class="glyph" aria-hidden="true">&#xE8B7;</span>
       <span>{msg("Extract all")}</span>
     </button>
   {/if}
   {#if searching}
     <button class="cbtn labeled" onclick={(e) => toggle("search", e)}>
-      <span class="glyph">&#xE71C;</span>
+      <span class="glyph" aria-hidden="true">&#xE71C;</span>
       <span>{msg("Search options")}</span>
-      <span class="glyph chev">&#xE70D;</span>
+      <span class="glyph chev" aria-hidden="true">&#xE70D;</span>
     </button>
   {/if}
 
   <div class="divider"></div>
 
   <button class="cbtn" onclick={(e) => toggle("more", e)} title={msg("See more")} aria-label={msg("See more")}>
-    <span class="glyph">&#xE712;</span>
+    <span class="glyph" aria-hidden="true">&#xE712;</span>
   </button>
 
   <button class="cbtn gear" class:active={app.path === SETTINGS} onclick={() => navigate(SETTINGS)} title={msg("Settings")} aria-label={msg("Settings")}>
-    <span class="glyph">&#xE713;</span>
+    <span class="glyph" aria-hidden="true">&#xE713;</span>
   </button>
 </div>
 
@@ -236,7 +236,7 @@
         {#if extMeta.get("//dir")?.icon}
           <img class="micon" src={extMeta.get("//dir")?.icon} alt="" width="16" height="16" />
         {:else}
-          <span class="glyph">&#xE8B7;</span>
+          <span class="glyph" aria-hidden="true">&#xE8B7;</span>
         {/if}
         {msg("Folder")}
       </button>
@@ -248,7 +248,7 @@
               {#if extMeta.get(it.ext)?.icon}
                 <img class="micon" src={extMeta.get(it.ext)?.icon} alt="" width="16" height="16" />
               {:else}
-                <span class="glyph">&#xE7C3;</span>
+                <span class="glyph" aria-hidden="true">&#xE7C3;</span>
               {/if}
               {it.name}
             </button>
@@ -259,64 +259,64 @@
       <ShellItems items={searchMenu()} run={runSearchItem} />
     {:else if openMenu === "sort"}
       {#each sortItems as [key, label] (key)}
-        <button class="menu-item" onclick={() => { openMenu = ""; sortBy(key, app.sortKey === key ? app.asc : true); }}>
-          <span class="check">{app.sortKey === key ? "●" : ""}</span> {msg(label)}
+        <button class="menu-item" role="menuitemradio" aria-checked={app.sortKey === key} onclick={() => { openMenu = ""; sortBy(key, app.sortKey === key ? app.asc : true); }}>
+          <span class="check" aria-hidden="true">{app.sortKey === key ? "●" : ""}</span>{msg(label)}
         </button>
       {/each}
       <div class="menu-sep"></div>
-      <button class="menu-item" onclick={() => { openMenu = ""; sortBy(app.sortKey, true); }}>
-        <span class="check">{app.asc ? "●" : ""}</span> {msg("Ascending")}
+      <button class="menu-item" role="menuitemradio" aria-checked={app.asc} onclick={() => { openMenu = ""; sortBy(app.sortKey, true); }}>
+        <span class="check" aria-hidden="true">{app.asc ? "●" : ""}</span>{msg("Ascending")}
       </button>
-      <button class="menu-item" onclick={() => { openMenu = ""; sortBy(app.sortKey, false); }}>
-        <span class="check">{!app.asc ? "●" : ""}</span> {msg("Descending")}
+      <button class="menu-item" role="menuitemradio" aria-checked={!app.asc} onclick={() => { openMenu = ""; sortBy(app.sortKey, false); }}>
+        <span class="check" aria-hidden="true">{!app.asc ? "●" : ""}</span>{msg("Descending")}
       </button>
       <div class="menu-sep"></div>
       {#each [["none", "Group: None"], ["name", "Group by Name"], ["modified", "Group by Date"], ["type", "Group by Type"], ["size", "Group by Size"], ["month", "Group by Month"]] as [gkey, glabel] (gkey)}
-        <button class="menu-item" onclick={() => { openMenu = ""; setGroup(gkey); }}>
-          <span class="check">{app.groupKey === gkey ? "●" : ""}</span> {msg(glabel)}
+        <button class="menu-item" role="menuitemradio" aria-checked={app.groupKey === gkey} onclick={() => { openMenu = ""; setGroup(gkey); }}>
+          <span class="check" aria-hidden="true">{app.groupKey === gkey ? "●" : ""}</span>{msg(glabel)}
         </button>
       {/each}
     {:else if openMenu === "view"}
       {#each [["icons_xl", "Extra large icons"], ["icons_l", "Large icons"], ["icons_m", "Medium icons"], ["icons_s", "Small icons"], ["list", "List"], ["details", "Details"], ["content", "Content"], ["tiles", "Tiles"], ["gallery", "Gallery"]] as [vkey, vlabel] (vkey)}
-        <button class="menu-item" onclick={() => { openMenu = ""; setView(vkey); }}>
-          <span class="check">{app.view === vkey ? "●" : ""}</span> {msg(vlabel)}
+        <button class="menu-item" role="menuitemradio" aria-checked={app.view === vkey} onclick={() => { openMenu = ""; setView(vkey); }}>
+          <span class="check" aria-hidden="true">{app.view === vkey ? "●" : ""}</span>{msg(vlabel)}
         </button>
       {/each}
-      <button class="menu-item" onclick={() => { openMenu = ""; toggleCompact(); }}>
-        <span class="check">{settings.compact ? "●" : ""}</span> {msg("Compact view")}
+      <button class="menu-item" role="menuitemcheckbox" aria-checked={settings.compact} onclick={() => { openMenu = ""; toggleCompact(); }}>
+        <span class="glyph" aria-hidden="true">{settings.compact ? "" : ""}</span>{msg("Compact view")}
       </button>
       <div class="menu-sep"></div>
       <button class="menu-item" onclick={() => { openMenu = ""; dualPane(); }}>
-        <span class="glyph">&#xE8A9;</span> {msg("Dual pane (side-by-side windows)")}
+        <span class="glyph" aria-hidden="true">&#xE8A9;</span>{msg("Dual pane (side-by-side windows)")}
       </button>
-      <button class="menu-item" onclick={() => { openMenu = ""; showPane(settings.previewPane ? null : "preview"); }}>
-        <span class="check">{settings.previewPane ? "●" : ""}</span> {msg("Preview pane")}
+      <button class="menu-item" role="menuitemcheckbox" aria-checked={settings.previewPane} onclick={() => { openMenu = ""; showPane(settings.previewPane ? null : "preview"); }}>
+        <span class="glyph" aria-hidden="true">{settings.previewPane ? "" : ""}</span>{msg("Preview pane")}
       </button>
-      <button class="menu-item" onclick={() => { openMenu = ""; showPane(settings.detailsPane ? null : "details"); }}>
-        <span class="check">{settings.detailsPane ? "●" : ""}</span> {msg("Details pane")}
+      <button class="menu-item" role="menuitemcheckbox" aria-checked={settings.detailsPane} onclick={() => { openMenu = ""; showPane(settings.detailsPane ? null : "details"); }}>
+        <span class="glyph" aria-hidden="true">{settings.detailsPane ? "" : ""}</span>{msg("Details pane")}
       </button>
       <div class="menu-sep"></div>
-      <button class="menu-item" onclick={() => { openMenu = ""; toggleHidden(); }}>
-        <span class="check">{settings.showHidden ? "●" : ""}</span> {msg("Hidden items")}
+      <button class="menu-item" role="menuitemcheckbox" aria-checked={settings.showHidden} onclick={() => { openMenu = ""; toggleHidden(); }}>
+        <span class="glyph" aria-hidden="true">{settings.showHidden ? "" : ""}</span>{msg("Hidden items")}
       </button>
-      <button class="menu-item" onclick={() => { openMenu = ""; setSetting("showExt", !settings.showExt); }}>
-        <span class="check">{settings.showExt ? "●" : ""}</span> {msg("File name extensions")}
+      <button class="menu-item" role="menuitemcheckbox" aria-checked={settings.showExt} onclick={() => { openMenu = ""; setSetting("showExt", !settings.showExt); }}>
+        <span class="glyph" aria-hidden="true">{settings.showExt ? "" : ""}</span>{msg("File name extensions")}
       </button>
-      <button class="menu-item" onclick={() => { openMenu = ""; setSetting("checkboxes", !settings.checkboxes); }}>
-        <span class="check">{settings.checkboxes ? "●" : ""}</span> {msg("Item check boxes")}
+      <button class="menu-item" role="menuitemcheckbox" aria-checked={settings.checkboxes} onclick={() => { openMenu = ""; setSetting("checkboxes", !settings.checkboxes); }}>
+        <span class="glyph" aria-hidden="true">{settings.checkboxes ? "" : ""}</span>{msg("Item check boxes")}
       </button>
       <div class="menu-sep"></div>
       <div class="subwrap" role="none" onmouseenter={() => (themeSubOpen = true)} onmouseleave={() => (themeSubOpen = false)}>
         <button class="menu-item wide">
-          <span class="glyph">&#xE790;</span>
+          <span class="glyph" aria-hidden="true">&#xE790;</span>
           <span class="mtext">{msg("Theme")}</span>
-          <span class="glyph subchev">&#xE76C;</span>
+          <span class="glyph subchev" aria-hidden="true">&#xE76C;</span>
         </button>
         {#if themeSubOpen}
           <div class="menu submenu" use:menuKeys={() => (themeSubOpen = false)}>
             {#each THEMES as [tid, tlabel] (tid)}
-              <button class="menu-item" onclick={() => { openMenu = ""; setTheme(tid); }}>
-                <span class="check">{settings.theme === tid ? "●" : ""}</span> {tlabel}
+              <button class="menu-item" role="menuitemradio" aria-checked={settings.theme === tid} onclick={() => { openMenu = ""; setTheme(tid); }}>
+                <span class="check" aria-hidden="true">{settings.theme === tid ? "●" : ""}</span>{tlabel}
               </button>
             {/each}
           </div>
@@ -324,35 +324,35 @@
       </div>
     {:else if openMenu === "more"}
       <button class="menu-item" disabled={!can("select")} onclick={() => { openMenu = ""; selectAll(); }}>
-        <span class="glyph">&#xE8B3;</span> {msg("Select all")}
+        <span class="glyph" aria-hidden="true">&#xE8B3;</span>{msg("Select all")}
       </button>
       <button class="menu-item" disabled={!can("select")} onclick={() => { openMenu = ""; selectNone(); }}>
-        <span class="glyph">&#xE8E6;</span> {msg("Select none")}
+        <span class="glyph" aria-hidden="true">&#xE8E6;</span>{msg("Select none")}
       </button>
       <button class="menu-item" disabled={!can("select")} onclick={() => { openMenu = ""; invertSelection(); }}>
-        <span class="glyph">&#xE8B6;</span> {msg("Invert selection")}
+        <span class="glyph" aria-hidden="true">&#xE8B6;</span>{msg("Invert selection")}
       </button>
       <button class="menu-item" onclick={() => { openMenu = ""; refresh(); }}>
-        <span class="glyph">&#xE72C;</span> {msg("Refresh")}
+        <span class="glyph" aria-hidden="true">&#xE72C;</span>{msg("Refresh")}
       </button>
       <button class="menu-item" disabled={!can("new") || inArchive || !!app.search} onclick={() => { openMenu = ""; analyzeFolder(); }}>
-        <span class="glyph">&#xEDA2;</span> {msg("Folder sizes")}
+        <span class="glyph" aria-hidden="true">&#xEDA2;</span>{msg("Folder sizes")}
       </button>
       <div class="menu-sep"></div>
       <button class="menu-item" onclick={() => { openMenu = ""; saveWorkspace(); }}>
-        <span class="glyph">&#xE74E;</span> {msg("Save tabs as workspace...")}
+        <span class="glyph" aria-hidden="true">&#xE74E;</span>{msg("Save tabs as workspace...")}
       </button>
       <div class="subwrap" role="none" onmouseenter={() => (workSubOpen = true)} onmouseleave={() => (workSubOpen = false)}>
         <button class="menu-item wide" aria-haspopup="menu" aria-expanded={workSubOpen}>
-          <span class="glyph">&#xE737;</span>
+          <span class="glyph" aria-hidden="true">&#xE737;</span>
           <span class="mtext">{msg("Workspaces")}</span>
-          <span class="glyph subchev">&#xE76C;</span>
+          <span class="glyph subchev" aria-hidden="true">&#xE76C;</span>
         </button>
         {#if workSubOpen}
           <div class="menu submenu" use:menuKeys={() => (workSubOpen = false)}>
             {#each saved.workspaces as w (w.name)}
               <button class="menu-item" onclick={() => { openMenu = ""; openWorkspace(w); }} title={w.tabs.join(", ")}>
-                <span class="glyph">&#xE737;</span> {w.name}
+                <span class="glyph" aria-hidden="true">&#xE737;</span>{w.name}
               </button>
             {:else}
               <button class="menu-item" disabled>{msg("No saved workspaces")}</button>
@@ -363,15 +363,15 @@
       {#if app.path === THIS_PC || app.path === NETWORK}
         <div class="menu-sep"></div>
         <button class="menu-item" onclick={() => { openMenu = ""; mapDrive(); }}>
-          <span class="glyph">&#xE8CE;</span> {msg("Map network drive...")}
+          <span class="glyph" aria-hidden="true">&#xE8CE;</span>{msg("Map network drive...")}
         </button>
         <button class="menu-item" onclick={() => { openMenu = ""; invoke("disconnect_drive", { path: null }).then(loadDrives).catch((e) => (app.status = String(e))); }}>
-          <span class="glyph">&#xE8CD;</span> {msg("Disconnect network drive...")}
+          <span class="glyph" aria-hidden="true">&#xE8CD;</span>{msg("Disconnect network drive...")}
         </button>
       {/if}
       <div class="menu-sep"></div>
       <button class="menu-item" onclick={() => { openMenu = ""; navigate(SETTINGS); }}>
-        <span class="glyph">&#xE713;</span> {msg("Settings")}
+        <span class="glyph" aria-hidden="true">&#xE713;</span>{msg("Settings")}
       </button>
     {/if}
   </div>
@@ -439,28 +439,5 @@
   }
   .micon {
     flex-shrink: 0;
-  }
-  .subwrap {
-    position: relative;
-  }
-  .menu-item.wide {
-    justify-content: space-between;
-    gap: 8px;
-  }
-  .mtext {
-    flex: 1;
-    text-align: left;
-    white-space: nowrap;
-  }
-  .subchev {
-    font-size: 10px;
-    color: var(--text-3);
-  }
-  .submenu {
-    position: absolute;
-    left: calc(100% - 4px);
-    top: -4px;
-    max-height: 60vh;
-    overflow-y: auto;
   }
 </style>

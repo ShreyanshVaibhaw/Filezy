@@ -94,44 +94,44 @@
   <div class="menu" style="left:{m.x}px; top:{m.y}px" use:menuKeys={() => (menu = null)} use:fitMenu={m}>
     {#if menuOn("home.open")}
       <button class="menu-item" onclick={() => run((x) => (x.folder ? navigate(x.path) : openPath(x.path)))}>
-        <span class="glyph">&#xE8E5;</span> {msg("Open")}
+        <span class="glyph" aria-hidden="true">&#xE8E5;</span>{msg("Open")}
       </button>
     {/if}
     {#if m.folder && menuOn("home.newtab")}
       <button class="menu-item" onclick={() => run((x) => newTab(x.path))}>
-        <span class="glyph">&#xE8A7;</span> {msg("Open in new tab")}
+        <span class="glyph" aria-hidden="true">&#xE8A7;</span>{msg("Open in new tab")}
       </button>
     {/if}
     {#if m.folder && menuOn("home.newwindow")}
       <button class="menu-item" onclick={() => run((x) => invoke("new_window", { path: x.path }))}>
-        <span class="glyph">&#xE737;</span> {msg("Open in new window")}
+        <span class="glyph" aria-hidden="true">&#xE737;</span>{msg("Open in new window")}
       </button>
     {/if}
     {#if !m.folder && menuOn("home.openlocation")}
       <button class="menu-item" onclick={() => run((x) => openFileLocation(x.path))}>
-        <span class="glyph">&#xE838;</span> {msg("Open file location")}
+        <span class="glyph" aria-hidden="true">&#xE838;</span>{msg("Open file location")}
       </button>
     {/if}
     {#if m.pin && menuOn("home.pin")}
       <button class="menu-item" onclick={() => run((x) => pinRemove(x.path))}>
-        <span class="glyph">&#xE77A;</span> {msg("Unpin from Quick access")}
+        <span class="glyph" aria-hidden="true">&#xE77A;</span>{msg("Unpin from Quick access")}
       </button>
     {/if}
     {#if !m.folder && menuOn("home.favorite")}
       {@const fav = isFavorite(m.path)}
       <button class="menu-item" onclick={() => run((x) => setFavorite([x.path], !isFavorite(x.path)))}>
-        <span class="glyph">{fav ? "" : ""}</span> {fav ? "Remove from Favorites" : "Add to Favorites"}
+        <span class="glyph" aria-hidden="true">{fav ? "" : ""}</span>{fav ? "Remove from Favorites" : "Add to Favorites"}
       </button>
     {/if}
     {#if m.recent && menuOn("home.removerecent")}
       <button class="menu-item" onclick={() => run((x) => removeRecent([x.path]))}>
-        <span class="glyph">&#xE711;</span> {msg("Remove from Recent")}
+        <span class="glyph" aria-hidden="true">&#xE711;</span>{msg("Remove from Recent")}
       </button>
     {/if}
     {#if menuOn("home.properties")}
       <div class="menu-sep"></div>
       <button class="menu-item" onclick={() => run((x) => invoke("show_properties", { path: x.path }))}>
-        <span class="glyph">&#xE90F;</span> {msg("Properties")}
+        <span class="glyph" aria-hidden="true">&#xE90F;</span>{msg("Properties")}
       </button>
     {/if}
   </div>
@@ -153,13 +153,13 @@
         {#if shellIcon(path, 48)}
           <img class="qimg" src={shellIcon(path, 48)} alt="" width="40" height="40" />
         {:else}
-          <span class="glyph qicon">{glyphs[name] ?? c(0xe8b7)}</span>
+          <span class="glyph qicon" aria-hidden="true">{glyphs[name] ?? c(0xe8b7)}</span>
         {/if}
         <span class="qinfo">
           <span class="qname">{name}</span>
           <span class="qsub">{where(path, true)}</span>
         </span>
-        <span class="glyph pin">&#xE840;</span>
+        <span class="glyph pin" aria-hidden="true">&#xE840;</span>
       </button>
     {/each}
     {#each app.pins as p, i (p)}
@@ -178,13 +178,13 @@
         {#if shellIcon(p, 48)}
           <img class="qimg" src={shellIcon(p, 48)} alt="" width="40" height="40" />
         {:else}
-          <span class="glyph qicon">{c(0xe8b7)}</span>
+          <span class="glyph qicon" aria-hidden="true">{c(0xe8b7)}</span>
         {/if}
         <span class="qinfo">
           <span class="qname">{folderName(p)}</span>
           <span class="qsub">{where(p)}</span>
         </span>
-        <span class="glyph pin">&#xE840;</span>
+        <span class="glyph pin" aria-hidden="true">&#xE840;</span>
       </button>
     {/each}
   </div>
@@ -199,7 +199,7 @@
           {#if iconFor(f.ext)}
             <img class="ricon" src={iconFor(f.ext)} alt="" width="16" height="16" />
           {:else}
-            <span class="glyph ricon">&#xE7C3;</span>
+            <span class="glyph ricon" aria-hidden="true">&#xE7C3;</span>
           {/if}
           <span class="rname">{f.name}</span>
           <span class="rpath">{where(f.path)}</span>
@@ -218,7 +218,7 @@
           {#if iconFor(f.ext)}
             <img class="ricon" src={iconFor(f.ext)} alt="" width="16" height="16" />
           {:else}
-            <span class="glyph ricon">&#xE7C3;</span>
+            <span class="glyph ricon" aria-hidden="true">&#xE7C3;</span>
           {/if}
           <span class="rname">{f.name}</span>
           <span class="rpath">{where(f.path)}</span>

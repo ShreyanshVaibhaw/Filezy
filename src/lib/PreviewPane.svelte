@@ -134,7 +134,9 @@
   /// menu or dialog lies over it (the handler's window would hide it).
   function placeOf(box: HTMLElement) {
     const r = box.getBoundingClientRect();
-    const covered = [...document.querySelectorAll<HTMLElement>(".menu, .scrim")].some((m) => {
+    // A modal dialog's backdrop covers the whole page.
+    if (document.querySelector("dialog[open]")) return null;
+    const covered = [...document.querySelectorAll<HTMLElement>(".menu")].some((m) => {
       const o = m.getBoundingClientRect();
       return o.right > r.left && o.left < r.right && o.bottom > r.top && o.top < r.bottom;
     });

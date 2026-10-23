@@ -181,16 +181,16 @@
 
 <div class="addressrow">
   <button class="navbtn" onclick={back} disabled={app.histIdx <= 0} title={msg("Back (Alt + Left)")} aria-label={msg("Back (Alt + Left)")}>
-    <span class="glyph">&#xE72B;</span>
+    <span class="glyph" aria-hidden="true">&#xE72B;</span>
   </button>
   <button class="navbtn" onclick={forward} disabled={app.histIdx >= app.histLen - 1} title={msg("Forward (Alt + Right)")} aria-label={msg("Forward (Alt + Right)")}>
-    <span class="glyph">&#xE72A;</span>
+    <span class="glyph" aria-hidden="true">&#xE72A;</span>
   </button>
   <button class="navbtn" onclick={up} title={msg("Up (Alt + Up)")} aria-label={msg("Up (Alt + Up)")}>
-    <span class="glyph">&#xE74A;</span>
+    <span class="glyph" aria-hidden="true">&#xE74A;</span>
   </button>
   <button class="navbtn" onclick={() => refresh()} title={msg("Refresh (F5)")} aria-label={msg("Refresh (F5)")}>
-    <span class="glyph">&#xE72C;</span>
+    <span class="glyph" aria-hidden="true">&#xE72C;</span>
   </button>
 
   <div
@@ -219,20 +219,20 @@
               class:sugactive={i === sugSel}
               onmousedown={(e) => { e.preventDefault(); commitEdit(sug); }}
             >
-              <span class="glyph">&#xE8B7;</span> {sug}
+              <span class="glyph" aria-hidden="true">&#xE8B7;</span>{sug}
             </button>
           {/each}
         </div>
       {/if}
     {:else}
-      <span class="glyph pcicon">&#xE977;</span>
+      <span class="glyph pcicon" aria-hidden="true">&#xE977;</span>
       {#if hiddenSegs.length}
         <button class="crumb chevbtn" onclick={toggleOverflow} title={msg("Previous locations")} aria-label={msg("Previous locations")}>
-          <span class="glyph">&#xE712;</span>
+          <span class="glyph" aria-hidden="true">&#xE712;</span>
         </button>
       {/if}
       <button class="crumbchevbtn" onclick={(e) => openCrumbMenu(THIS_PC, e)} title={msg("This PC")} aria-label={msg("This PC")}>
-        <span class="glyph crumbchev">&#xE76C;</span>
+        <span class="glyph crumbchev" aria-hidden="true">&#xE76C;</span>
       </button>
       {#each shownSegs as seg (seg.path)}
         <button
@@ -246,7 +246,7 @@
         <!-- Home, Settings and the like have no folders to list. -->
         {#if !isVirtual(seg.path) || seg.path === THIS_PC || isShellLocation(seg.path)}
           <button class="crumbchevbtn" disabled={isShellLocation(seg.path)} aria-label={msg("Folders in {name}", { name: seg.name })} title={isShellLocation(seg.path) ? msg("Open device folders from the list.") : msg("Folders in {name}", { name: seg.name })} onclick={(e) => openCrumbMenu(seg.path, e)}>
-            <span class="glyph crumbchev">&#xE76C;</span>
+            <span class="glyph crumbchev" aria-hidden="true">&#xE76C;</span>
           </button>
         {/if}
       {/each}
@@ -255,7 +255,7 @@
   </div>
 
   <div class="searchbox">
-    <span class="glyph searchicon">&#xE721;</span>
+    <span class="glyph searchicon" aria-hidden="true">&#xE721;</span>
     <input
       bind:this={searchInput}
       placeholder={"Search " + (app.path ? folderName(app.search?.root ?? app.path) : "")}
@@ -297,7 +297,7 @@
           <button class="menu-item" role="option" aria-selected="false" onclick={() => pickRecent(r)} onblur={() => setTimeout(() => {
             if (!recentList?.contains(document.activeElement) && document.activeElement !== searchInput) recentOpen = false;
           }, 0)}>
-            <span class="glyph">&#xE81C;</span> {r}
+            <span class="glyph" aria-hidden="true">&#xE81C;</span>{r}
           </button>
         {/each}
       </div>
@@ -309,7 +309,7 @@
   <div class="menu crumbdrop" style="left:{crumbMenu.x}px; top:{crumbMenu.y}px" use:menuKeys={() => (crumbMenu = null)}>
     {#each crumbMenu.items as it (it.path)}
       <button class="menu-item" onclick={() => { crumbMenu = null; navigate(it.path); }}>
-        <span class="glyph">&#xE8B7;</span> {it.name}
+        <span class="glyph" aria-hidden="true">&#xE8B7;</span>{it.name}
       </button>
     {/each}
   </div>
@@ -319,7 +319,7 @@
   <div class="menu" style="left:{overflowX}px; top:{overflowY}px" use:menuKeys={() => (overflowOpen = false)}>
     {#each [...hiddenSegs].reverse() as seg (seg.path)}
       <button class="menu-item" onclick={() => { overflowOpen = false; navigate(seg.path); }}>
-        <span class="glyph">&#xE8B7;</span> {seg.name}
+        <span class="glyph" aria-hidden="true">&#xE8B7;</span>{seg.name}
       </button>
     {/each}
   </div>

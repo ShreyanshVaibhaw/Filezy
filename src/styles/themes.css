@@ -76,7 +76,7 @@
   --bg: #eff1f5;
   --text: #4c4f69;
   --text-2: #5c5f77;
-  --text-3: #6c6f85;
+  --text-3: #5c5f77;
   --text-disabled: #9ca0b0;
   --mica-fallback: #eff1f5;
   --card: #e6e9ef;
@@ -87,7 +87,7 @@
   --hover: rgba(76, 79, 105, 0.06);
   --sel: rgba(30, 102, 245, 0.14);
   --sel-hover: rgba(30, 102, 245, 0.2);
-  --accent: #1e66f5;
+  --accent: #1a5bd6;
   --menu-bg: #e6e9ef;
   --input-bg: #ffffff;
   --close-hover: #d20f39;
@@ -145,7 +145,7 @@
   --bg: #1a1b26;
   --text: #c0caf5;
   --text-2: #a9b1d6;
-  --text-3: #787c99;
+  --text-3: #8c91b3;
   --text-disabled: #565f89;
   --mica-fallback: #1a1b26;
   --card: #16161e;
