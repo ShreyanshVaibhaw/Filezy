@@ -7,6 +7,7 @@ mod cloud;
 mod com;
 mod drives;
 mod droptarget;
+#[cfg(feature = "e2e")]
 mod e2edrag;
 mod fs_list;
 mod icons;
@@ -472,12 +473,19 @@ async fn shell_menu_native(
 
 /// Run `f` on the UI thread and wait for its result without holding an async worker.
 async fn on_main<T: Send + 'static>(app: &AppHandle, f: impl FnOnce() -> T + Send + 'static) -> Result<T, String> {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || on_main_wait(&app, f)).await.map_err(|e| e.to_string())?
+}
+
+/// Run `f` on the UI thread and block this one until it has run. Never call it
+/// on the UI thread itself.
+pub fn on_main_wait<T: Send + 'static>(app: &AppHandle, f: impl FnOnce() -> T + Send + 'static) -> Result<T, String> {
     let (tx, rx) = std::sync::mpsc::channel();
     app.run_on_main_thread(move || {
         let _ = tx.send(f());
     })
     .map_err(|e| e.to_string())?;
-    tauri::async_runtime::spawn_blocking(move || rx.recv().map_err(|e| e.to_string())).await.map_err(|e| e.to_string())?
+    rx.recv().map_err(|_| "The window closed before the step ran.".to_string())
 }
 
 #[tauri::command]
@@ -597,6 +605,7 @@ async fn start_drag(sel: Keep, state: State<'_, AppState>, app: AppHandle) -> Re
     if paths.is_empty() {
         return Ok(());
     }
+    #[cfg(feature = "e2e")]
     if let Some((script, done)) = e2edrag::take_armed() {
         tauri::async_runtime::spawn_blocking(move || {
             let _ = done.send(e2edrag::run(&app, paths, script));
@@ -1177,6 +1186,7 @@ async fn caption_place(place: caption::Place, app: AppHandle) -> Result<(), Stri
 }
 
 /// Renderer scaling tests never change the user's Windows display settings.
+#[cfg(feature = "e2e")]
 #[tauri::command]
 fn e2e_zoom(scale: f64, app: AppHandle) -> Result<(), String> {
     if !e2e() { return Err("not a test session".into()); }
@@ -1187,6 +1197,7 @@ fn e2e_zoom(scale: f64, app: AppHandle) -> Result<(), String> {
 /// Move only this disposable test window; never alter monitor settings or the
 /// user's other windows. Returning native monitor DPI makes the test evidence
 /// distinguish renderer zoom from an actual monitor transition.
+#[cfg(feature = "e2e")]
 #[tauri::command]
 fn e2e_displays(index: Option<usize>, app: AppHandle) -> Result<serde_json::Value, String> {
     if !e2e() { return Err("not a test session".into()); }
@@ -1311,6 +1322,7 @@ fn e2e_enabled() -> bool {
 }
 
 /// A drag in from another app, without the real mouse (see e2edrag).
+#[cfg(feature = "e2e")]
 #[tauri::command]
 async fn e2e_drag(paths: Vec<String>, script: e2edrag::Script, app: AppHandle) -> Result<e2edrag::Outcome, String> {
     if !e2e() {
@@ -1320,6 +1332,7 @@ async fn e2e_drag(paths: Vec<String>, script: e2edrag::Script, app: AppHandle) -
 }
 
 /// Script the next drag the page starts, then wait for it to end (see e2edrag).
+#[cfg(feature = "e2e")]
 #[tauri::command]
 fn e2e_arm_drag(script: e2edrag::Script) -> Result<(), String> {
     if !e2e() {
@@ -1329,8 +1342,12 @@ fn e2e_arm_drag(script: e2edrag::Script) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(feature = "e2e")]
 #[tauri::command]
 async fn e2e_drag_outcome() -> Result<e2edrag::Outcome, String> {
+    if !e2e() {
+        return Err("not a test session".into());
+    }
     tauri::async_runtime::spawn_blocking(e2edrag::outcome).await.map_err(|e| e.to_string())?
 }
 
@@ -1392,6 +1409,19 @@ fn main() {
             drives::watch(app.handle().clone());
             // Copies of files opened from archives in earlier sessions.
             std::thread::spawn(archive::clean_staged);
+            // The runner sizes, centres and maximizes the window through
+            // __e2e.win; the app itself only toggles maximize.
+            #[cfg(feature = "e2e")]
+            if e2e() {
+                app.add_capability(
+                    tauri::ipc::CapabilityBuilder::new("e2e")
+                        .window("main")
+                        .permission("core:window:allow-maximize")
+                        .permission("core:window:allow-unmaximize")
+                        .permission("core:window:allow-set-size")
+                        .permission("core:window:allow-center"),
+                )?;
+            }
             if let Some(w) = app.get_webview_window("main") {
                 // The window starts hidden (tauri.conf.json) and shows where it
                 // was last closed, so it never jumps there after appearing.
@@ -1493,10 +1523,15 @@ fn main() {
             wsl_roots,
             is_installed,
             e2e_enabled,
+            #[cfg(feature = "e2e")]
             e2e_zoom,
+            #[cfg(feature = "e2e")]
             e2e_displays,
+            #[cfg(feature = "e2e")]
             e2e_drag,
+            #[cfg(feature = "e2e")]
             e2e_arm_drag,
+            #[cfg(feature = "e2e")]
             e2e_drag_outcome,
             recycle_paths,
             move_back,

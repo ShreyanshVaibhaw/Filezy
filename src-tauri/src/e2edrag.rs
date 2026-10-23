@@ -12,6 +12,7 @@ use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
+use crate::on_main_wait as on_main;
 use tauri::{AppHandle, Manager};
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{DRAGDROP_S_CANCEL, DRAGDROP_S_DROP, HWND, POINT, POINTL};
@@ -100,16 +101,6 @@ pub fn outcome() -> Result<Outcome, String> {
     let out = rx.recv_timeout(Duration::from_secs(20));
     ARMED.lock().unwrap().take();
     out.map_err(|_| "the page never started the armed drag".to_string())?
-}
-
-/// Run `f` on the UI thread and wait for its result.
-fn on_main<T: Send + 'static>(app: &AppHandle, f: impl FnOnce() -> T + Send + 'static) -> Result<T, String> {
-    let (tx, rx) = mpsc::channel();
-    app.run_on_main_thread(move || {
-        let _ = tx.send(f());
-    })
-    .map_err(|e| e.to_string())?;
-    rx.recv().map_err(|_| "a drag step never ran".to_string())
 }
 
 fn target() -> Result<IDropTarget, String> {

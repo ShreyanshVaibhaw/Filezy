@@ -147,6 +147,7 @@ pub fn install(app: &AppHandle, top: isize) {
     let top = HWND(top as *mut _);
     let helper = unsafe { CoCreateInstance(&CLSID_DragDropHelper, None, CLSCTX_INPROC_SERVER) }.ok();
     let target: IDropTarget = Target { top, app: app.clone(), helper, drag: RefCell::default() }.into();
+    #[cfg(feature = "e2e")]
     if crate::e2e() {
         crate::e2edrag::set_target(&target);
     }
