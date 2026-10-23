@@ -46,10 +46,10 @@ export default [
       await t.ev(`(() => {
         localStorage.setItem("settings", "{not json");
         localStorage.setItem("folderPrefs", JSON.stringify({ "c:\\\\x": { s: 5, v: "nope" }, "c:\\\\ok": { s: "size", a: false, v: "list", g: "none" } }));
+        globalThis.__beforeReload = true;
         location.reload();
       })()`).catch(() => {});
-      await t.sleep(500);
-      await t.waitFor("!!globalThis.__e2e && __e2e.app.path !== ''", 30000, "app came back after reload");
+      await t.waitFor("!globalThis.__beforeReload && !!globalThis.__e2e && __e2e.app.path !== ''", 30000, "app came back after reload");
       t.eq(await t.ev("__e2e.settings.theme"), "system", "settings fell back to defaults");
       await t.nav(d);
       t.eq(await t.names(), ["a.txt"], "folders still open");
@@ -121,13 +121,7 @@ export default [
       await t.call("del");
       await t.until(() => !t.exists(f), 5000, "recycled");
       await t.nav("::RecycleBin");
-      await t.waitFor(`[...document.querySelectorAll(".rrow")].some((r) => r.textContent.includes(${JSON.stringify(name)}))`, 10000, "listed");
-      const row = await t.ev(`(() => {
-        const r = [...document.querySelectorAll(".rrow")].find((r) => r.textContent.includes(${JSON.stringify(name)}));
-        const b = r.getBoundingClientRect();
-        return { x: b.left + 40, y: b.top + b.height / 2 };
-      })()`);
-      await t.click(row);
+      await t.click(await t.binRow({ has: name }));
       // Someone else restores it before we do.
       await t.ps("recycle-restore.ps1", "-Match", t.token);
       await t.until(() => t.exists(f), 10000, "restored elsewhere");

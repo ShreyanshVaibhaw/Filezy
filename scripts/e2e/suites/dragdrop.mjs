@@ -9,14 +9,6 @@ const MOVE = 2;
 const LINK = 4;
 const DROPPED = 0x40100;
 
-/** "C:\x" -> "\\localhost\C$\x": the same file through the loopback share, a different volume. */
-const unc = (p) => `\\\\localhost\\${p[0].toUpperCase()}$${p.slice(2)}`;
-
-const settleOp = async (t) => {
-  await t.sleep(400);
-  await t.settle();
-};
-
 const rect = (t, sel) =>
   t.ev(`(() => {
     const r = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect();
@@ -43,18 +35,6 @@ const drop = async (t, files, at, opts = {}) => {
   return t.drag(files, [{ x: s.x, y: s.y }, { ...at, ms: opts.ms ?? 300 }], opts);
 };
 
-/** Set the clipboard from another process until it sticks (another program here writes it too). */
-async function clipboard(t, args, cond) {
-  for (let i = 0; ; i++) {
-    await t.ps("clip.ps1", ...args);
-    try {
-      return await t.waitFor(cond, 3000, `clipboard ${args.join(" ")}`);
-    } catch (e) {
-      if (i >= 3) throw e;
-    }
-  }
-}
-
 export default [
   {
     name: "a file dragged in from another app moves on the same volume; the cursor says Move and undo puts it back",
@@ -67,11 +47,11 @@ export default [
       t.eq(r.hr, DROPPED, "dropped");
       t.eq(r.feedback.at(-1), MOVE, "the cursor showed Move");
       t.eq([r.effect, r.performed, r.logical], [NONE, NONE, MOVE], "an optimized move: the source deletes nothing itself");
-      await settleOp(t);
+      await t.settle();
       t.eq([fs.readdirSync(src), fs.readdirSync(dest)], [[], ["moved.txt"]], "moved");
       t.eq(await t.selectedNames(), ["moved.txt"], "the dropped item is selected");
       await t.key("z", { ctrl: true });
-      await settleOp(t);
+      await t.settle();
       t.eq(fs.readdirSync(src), ["moved.txt"], "undo moved it back");
     },
   },
@@ -84,21 +64,21 @@ export default [
       await t.nav(dest);
       let r = await drop(t, [f], await blank(t), { keys: "ctrl" });
       t.eq([r.feedback.at(-1), r.effect], [COPY, COPY], "Ctrl shows and does Copy");
-      await settleOp(t);
+      await t.settle();
       t.ok(t.exists(f) && t.exists(path.join(dest, "doc.txt")), "copied");
       r = await drop(t, [f], await blank(t), { keys: "alt" });
       t.eq(r.feedback.at(-1), LINK, "Alt shows Link");
-      await settleOp(t);
+      await t.settle();
       t.ok(t.exists(path.join(dest, "doc.txt - Shortcut.lnk")), "a shortcut");
-      const far = unc(t.mk(path.join(src, "far.txt"), "f"));
+      const far = t.unc(t.mk(path.join(src, "far.txt"), "f"));
       r = await drop(t, [far], await blank(t));
       t.eq(r.feedback.at(-1), COPY, "another volume copies");
-      await settleOp(t);
+      await t.settle();
       t.ok(t.exists(path.join(src, "far.txt")) && t.exists(path.join(dest, "far.txt")), "copied across");
-      const far2 = unc(t.mk(path.join(src, "far2.txt"), "g"));
+      const far2 = t.unc(t.mk(path.join(src, "far2.txt"), "g"));
       r = await drop(t, [far2], await blank(t), { keys: "shift" });
       t.eq(r.feedback.at(-1), MOVE, "Shift moves across volumes");
-      await settleOp(t);
+      await t.settle();
       t.ok(!t.exists(path.join(src, "far2.txt")) && t.exists(path.join(dest, "far2.txt")), "moved across");
     },
   },
@@ -114,14 +94,14 @@ export default [
       const r = await t.drag([f], [{ x: s.x, y: s.y }, { ...at, ms: 300 }, { ...at, ms: 300, keys: "ctrl" }]);
       t.eq(r.feedback, [NONE, MOVE, COPY], "Move, then Copy once Ctrl went down");
       t.eq(r.effect, COPY, "dropped as a copy");
-      await settleOp(t);
+      await t.settle();
       t.ok(t.exists(f) && t.exists(path.join(dest, "mid.txt")), "copied");
       const share = t.dir("dd-mid/share");
-      await t.nav(unc(share));
+      await t.nav(t.unc(share));
       const g = t.mk(path.join(src, "net.txt"), "n");
       const r2 = await drop(t, [g], await blank(t));
       t.eq(r2.feedback.at(-1), COPY, "a share is another volume, so Copy");
-      await settleOp(t);
+      await t.settle();
       t.ok(t.exists(g) && t.exists(path.join(share, "net.txt")), "copied onto the share");
     },
   },
@@ -149,7 +129,7 @@ export default [
       t.eq(r.feedback, [NONE], "nothing to do");
       r = await drop(t, [f], await blank(t), { keys: "ctrl" });
       t.eq(r.feedback.at(-1), COPY, "Ctrl shows Copy");
-      await settleOp(t);
+      await t.settle();
       t.eq(fs.readdirSync(d).sort(), ["a - Copy.txt", "a.txt"], "Explorer's copy name");
     },
   },
@@ -164,20 +144,20 @@ export default [
       const mk = (n) => t.mk(path.join(src, n), n);
       await t.nav(dest);
       await drop(t, [mk("row.txt")], await rowAt(t, "inner"));
-      await settleOp(t);
+      await t.settle();
       t.ok(t.exists(path.join(inner, "row.txt")), "folder row");
       await t.nav(inner);
       await drop(t, [mk("crumb.txt")], await t.center(".crumb", { text: "dest" }));
-      await settleOp(t);
+      await t.settle();
       t.ok(t.exists(path.join(dest, "crumb.txt")), "breadcrumb");
       await t.call("pinAdd", pinned);
       try {
         await drop(t, [mk("pin.txt")], await t.center(".navitem", { title: pinned }));
-        await settleOp(t);
+        await t.settle();
         t.ok(t.exists(path.join(pinned, "pin.txt")), "navigation pane");
         await t.nav("::Home");
         await drop(t, [mk("home.txt")], await t.center(".qtile", { title: pinned }));
-        await settleOp(t);
+        await t.settle();
         t.ok(t.exists(path.join(pinned, "home.txt")), "Home tile");
       } finally {
         await t.call("pinRemove", pinned);
@@ -189,7 +169,7 @@ export default [
       await t.call("switchTab", first);
       await t.settle();
       await drop(t, [mk("tab.txt")], await t.center(`.tab[data-tab="${second}"]`), { ms: 1500 });
-      await settleOp(t);
+      await t.settle();
       t.eq(await t.ev("__e2e.app.activeTab"), second, "the tab switched while the drag rested on it");
       t.ok(t.exists(path.join(other, "tab.txt")), "tab");
     },
@@ -202,7 +182,7 @@ export default [
       await t.nav(d);
       const r = await drop(t, [f], await t.center(".navitem", { has: "Recycle Bin" }));
       t.eq(r.feedback.at(-1), MOVE, "Move to Recycle Bin");
-      await settleOp(t);
+      await t.settle();
       t.ok(!t.exists(f), "gone from the folder");
       await t.ps("recycle-restore.ps1", "-Match", t.token);
       t.ok(t.exists(f), "and back from the Recycle Bin");
@@ -246,18 +226,18 @@ export default [
       await t.uia("-Menu", "-Key", String(0x43));
       let r = await dragging;
       t.eq(r.effect, COPY, "the menu's choice");
-      await settleOp(t);
+      await t.settle();
       t.ok(t.exists(f) && t.exists(path.join(dest, "r.txt")), "copied");
       const g = t.mk(path.join(src, "s.txt"), "s");
       dragging = drop(t, [g], await blank(t), { right: true });
       await t.uia("-Menu", "-Choose", "Cancel");
       r = await dragging;
       t.eq(r.effect, NONE, "cancelled");
-      await settleOp(t);
+      await t.settle();
       t.ok(t.exists(g) && !t.exists(path.join(dest, "s.txt")), "Cancel left it alone");
       // The keyboard is back in the list: B selects by name.
       t.mk(path.join(dest, "banana.txt"), "b");
-      await settleOp(t);
+      await t.until(async () => (await t.names()).includes("banana.txt"), 5000, "the watcher listed banana.txt");
       await t.ev("document.querySelector('.scroller').focus()");
       await t.key("b");
       await t.waitFor(`__e2e.selectedNames().then((n) => n.join() === "banana.txt")`, 3000, "type-to-select after the menu");
@@ -288,10 +268,10 @@ export default [
       await t.select(["a.txt", "b.txt"]);
       const from = await rowAt(t, "a.txt");
       await t.mouseDrag([from, { x: from.x + 30, y: from.y + 10, ms: 300 }, { ...(await rowAt(t, "sub")), ms: 500 }]);
-      await settleOp(t);
+      await t.settle();
       t.eq([fs.readdirSync(d).sort(), fs.readdirSync(sub).sort()], [["c.txt", "sub"], ["a.txt", "b.txt"]], "both selected items moved");
       await t.key("z", { ctrl: true });
-      await settleOp(t);
+      await t.settle();
       t.eq(fs.readdirSync(d).sort(), ["a.txt", "b.txt", "c.txt", "sub"], "undo moved them back");
     },
   },
@@ -306,13 +286,13 @@ export default [
       // Ctrl+press on a selected item keeps the selection for the drag.
       let from = await rowAt(t, "b.txt");
       await t.mouseDrag([from, { x: from.x + 30, y: from.y + 10, ms: 300 }, { ...(await rowAt(t, "sub")), ms: 500 }], { ctrl: true });
-      await settleOp(t);
+      await t.settle();
       t.eq(fs.readdirSync(sub).sort(), ["a.txt", "b.txt"], "both copied into the folder");
       t.ok(t.exists(path.join(d, "a.txt")) && t.exists(path.join(d, "b.txt")), "and still here");
       await t.select(["a.txt"]);
       from = await rowAt(t, "a.txt");
       await t.mouseDrag([from, { x: from.x + 30, y: from.y + 10, ms: 300 }, { ...(await blank(t)), ms: 500 }], { ctrl: true });
-      await settleOp(t);
+      await t.settle();
       t.ok(t.exists(path.join(d, "a - Copy.txt")), "a copy in the same folder");
     },
   },
@@ -328,7 +308,7 @@ export default [
       const dragging = t.mouseDrag([from, { x: from.x + 30, y: from.y + 10, ms: 300 }, { ...(await rowAt(t, "sub")), ms: 500 }], { right: true });
       await t.uia("-Menu", "-Key", String(0x43));
       await dragging;
-      await settleOp(t);
+      await t.settle();
       t.ok(t.exists(path.join(d, "r.txt")) && t.exists(path.join(sub, "r.txt")), "Copy here copied");
       t.eq(await t.ev("!!document.querySelector('.ctxmenu')"), false, "the item menu didn't open as well");
     },
@@ -340,10 +320,10 @@ export default [
       const f = t.mk(path.join(d, "cutme.txt"), "c");
       t.mk(path.join(d, "other.txt"), "o");
       await t.nav(d);
-      await clipboard(t, ["-Text", "no files here"], "!__e2e.app.canPaste");
-      await clipboard(t, ["-Set", f, "-Cut"], "__e2e.app.canPaste && __e2e.app.cut.size === 1");
+      await t.setClipboard(["-Text", "no files here"], "!__e2e.app.canPaste");
+      await t.setClipboard(["-Set", f, "-Cut"], "__e2e.app.canPaste && __e2e.app.cut.size === 1");
       t.eq(await t.ev(`[...document.querySelectorAll(".vrow.cut .fname")].map((e) => e.textContent)`), ["cutme.txt"], "only the cut item is ghosted");
-      await clipboard(t, ["-Text", "something else"], "__e2e.app.cut.size === 0 && !document.querySelector('.vrow.cut')");
+      await t.setClipboard(["-Text", "something else"], "__e2e.app.cut.size === 0 && !document.querySelector('.vrow.cut')");
     },
   },
   {
@@ -374,7 +354,7 @@ export default [
         );
         await t.waitFor("__e2e.app.canPaste", 5000, "the copy reached Filezy").catch(() => {});
         await t.call("paste");
-        await settleOp(t);
+        await t.settle();
         await copying;
       }
       t.ok(t.exists(into(c)), "Filezy pasted Explorer's copy");

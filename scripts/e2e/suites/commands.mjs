@@ -1,11 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const settleOp = async (t) => {
-  await t.sleep(300);
-  await t.settle();
-};
-
 export default [
   {
     name: "batch rename numbers items, keeps extensions, skips taken names, and undoes in one step",
@@ -24,13 +19,13 @@ export default [
       await t.waitFor(`[...document.querySelectorAll(".prow")].map((r) => r.querySelector(".new").textContent).join("|") === "Report (1)|Report (2).txt|Report (3).md"`, 3000, "preview names");
       await t.waitFor(`document.querySelectorAll(".prow.bad").length === 1`, 3000, "the taken name is flagged");
       await t.key("Enter");
-      await settleOp(t);
+      await t.settle();
       const files = fs.readdirSync(d).sort();
       t.eq(files, ["Report (1)", "Report (2).txt", "Report (3).md", "b.md"], "renamed on disk; the clash kept its name");
       t.eq(t.read(path.join(d, "Report (3).md")), "already here", "the existing file is untouched");
       t.ok((await t.ev("__e2e.app.status")).includes("Renamed 2 of 3"), await t.ev("__e2e.app.status"));
       await t.key("z", { ctrl: true });
-      await settleOp(t);
+      await t.settle();
       t.eq(fs.readdirSync(d).sort(), ["Report (3).md", "a.txt", "b.md", "sub"], "one undo restores both");
     },
   },
@@ -47,12 +42,12 @@ export default [
       const no = rename("report.md");
       t.ok((await t.answer(false)).includes("might become unusable"), "Explorer's warning");
       await no;
-      await settleOp(t);
+      await t.settle();
       t.eq(fs.readdirSync(d), ["report.txt"], "No keeps the old name");
       const yes = rename("report.md");
       await t.answer(true);
       await yes;
-      await settleOp(t);
+      await t.settle();
       t.eq(fs.readdirSync(d), ["report.md"], "Yes renames");
     },
   },
@@ -84,17 +79,14 @@ export default [
       await t.nav(d);
       await t.select(["doc.txt"]);
       await t.call("createShortcuts");
-      await settleOp(t);
+      await t.settle();
       t.ok(t.exists(path.join(d, "doc.txt - Shortcut.lnk")), "shortcut next to the item");
       t.eq(await t.selectedNames(), ["doc.txt - Shortcut.lnk"], "the new shortcut is selected");
       await t.select(["doc.txt"]);
-      for (let i = 0; i < 4; i++) {
-        await t.call("copySel", false);
-        if ((await t.clipboard()).files.length === 1) break;
-      }
+      await t.copyToClipboard();
       await t.nav(other);
       await t.call("pasteShortcuts");
-      await settleOp(t);
+      await t.settle();
       t.ok(t.exists(path.join(other, "doc.txt - Shortcut.lnk")), "pasted shortcut");
     },
   },
@@ -197,7 +189,6 @@ export default [
       await t.call("openInNewWindow");
       const w = await t.otherWindow();
       try {
-        for (let i = 0; i < 200 && !(await w.ev("!!globalThis.__e2e && __e2e.app.path !== ''").catch(() => false)); i++) await t.sleep(100);
         t.eq(await w.ev("__e2e.app.path"), path.join(d, "inner"), "second window's folder");
         await w.ev("void __e2e.closeTab(__e2e.app.activeTab)").catch(() => {}); // closes that window
       } finally {

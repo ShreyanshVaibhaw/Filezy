@@ -7,8 +7,9 @@ import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
+import { E2E_TARGET } from "../../build-e2e.mjs";
 
-const PROVIDER = path.resolve("src-tauri/target/debug/examples/testcloud.exe");
+const PROVIDER = path.join(E2E_TARGET, "debug", "examples", "testcloud.exe");
 /** Every test sync root's id starts with this, so a crashed run's can be found. */
 const PREFIX = "FilezyE2E!";
 
@@ -96,7 +97,9 @@ async function menuPick(t, name, label) {
   await t.select([name]);
   await t.ev(`__e2e.app.focus = ${(await t.names()).indexOf(name)}`);
   await t.ev("__e2e.hooks.contextMenu()");
-  await t.waitFor(`!!document.querySelector(".ctxmenu")`, 3000, "the item menu opened");
+  // The shell's entries arrive after the menu opens and push Filezy's own
+  // down: click only once they are in, or the click lands on another entry.
+  await t.waitFor(`!!document.querySelector(".ctxmenu") && !document.querySelector(".ctxmenu .menuload")`, 60000, "the item menu with the shell's entries");
   const checked = await t.ev(
     `[...document.querySelectorAll(".ctxmenu .menu-item")].find((b) => b.textContent.includes(${JSON.stringify(label)}))?.getAttribute("aria-checked")`,
   );

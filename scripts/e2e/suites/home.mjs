@@ -26,15 +26,6 @@ async function pick(t, selector, label) {
   await t.click(".menu .menu-item", { where: { has: label } });
 }
 
-/** A left-button drag from one point to another, in DevTools mouse events. */
-async function drag(t, from, to) {
-  const m = (type, p, extra) => t.send("Input.dispatchMouseEvent", { type, x: p.x, y: p.y, ...extra });
-  await m("mouseMoved", from, { button: "none" });
-  await m("mousePressed", from, { button: "left", buttons: 1, clickCount: 1 });
-  for (let i = 1; i <= 10; i++) await m("mouseMoved", { x: from.x + ((to.x - from.x) * i) / 10, y: from.y + ((to.y - from.y) * i) / 10 }, { button: "left", buttons: 1 });
-  await m("mouseReleased", to, { button: "left", buttons: 0, clickCount: 1 });
-}
-
 export default [
   {
     name: "Remove from Recent takes off only that file, and Clear recent files removes every entry and nothing else",
@@ -90,13 +81,13 @@ export default [
         for (const p of pins) await t.call("pinAdd", p);
         await t.nav("::Home");
         const tile = (i) => t.center(`.homepane [data-pin="${before.length + i}"]`);
-        await drag(t, await tile(0), await tile(2));
+        await t.pageDrag(await tile(0), await tile(2));
         t.eq((await t.ev("__e2e.app.pins.slice()")).slice(before.length), [pins[1], pins[2], pins[0]], "one went last on Home");
         const saved = JSON.parse(fs.readFileSync(path.join(t.root, "appdata", "Filezy", "pins.json"), "utf8"));
         t.eq(saved.slice(before.length), [pins[1], pins[2], pins[0]], "and that's the order saved");
         // In the navigation pane, dragging doesn't open the pin it started on.
         const nav = (i) => t.center(`.navpane [data-pin="${before.length + i}"]`);
-        await drag(t, await nav(2), await nav(0));
+        await t.pageDrag(await nav(2), await nav(0));
         t.eq((await t.ev("__e2e.app.pins.slice()")).slice(before.length), [pins[0], pins[1], pins[2]], "back to the first order in the pane");
         t.eq(await t.ev("__e2e.app.path"), "::Home", "the drag opened nothing");
       } finally {
@@ -110,7 +101,8 @@ export default [
       const cloud = t.dir("home-where/Cloudy");
       const inside = t.dir("home-where/Cloudy/Work");
       const outside = t.dir("home-where/Plain");
-      const roots = await t.ev("__e2e.app.cloudRoots.slice()");
+      // Plain copies: DevTools serializes the store's proxies as empty objects.
+      const roots = await t.ev("__e2e.app.cloudRoots.map((r) => ({ path: r.path, name: r.name }))");
       try {
         await t.ev(`__e2e.app.cloudRoots = [...__e2e.app.cloudRoots, { path: ${JSON.stringify(cloud)}, name: "Test Cloud" }]`);
         await t.call("pinAdd", inside);

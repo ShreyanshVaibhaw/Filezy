@@ -4,9 +4,6 @@ import path from "node:path";
 
 const attrib = (p, ...flags) => execFileSync("attrib.exe", [...flags, p], { windowsHide: true });
 
-/** "C:\x" -> "\\localhost\C$\x": the same folder through the loopback admin share. */
-const unc = (p) => `\\\\localhost\\${p[0].toUpperCase()}$${p.slice(2)}`;
-
 export default [
   {
     name: "folders past 260 characters list, rename and copy their paths",
@@ -99,7 +96,8 @@ export default [
       const r = (input) => t.ev(`__e2e.invoke("resolve_path", { input: ${JSON.stringify(input)} })`);
       t.eq(await r(`"${d}\\subfolder"`), { kind: "dir", path: path.join(d, "SubFolder") }, "quoted, wrong case");
       t.eq(await r(`${d}\\SubFolder\\..\\subfolder\\file.txt`), { kind: "file", path: path.join(d, "SubFolder", "File.TXT") }, "dotdot and file");
-      const viaVar = d.replace(process.env.TEMP ?? "", "%TEMP%");
+      // Not %TEMP%: the runner gives the app a %TEMP% of its own.
+      const viaVar = d.replace(process.env.USERPROFILE ?? "", "%USERPROFILE%");
       if (viaVar !== d) t.eq(await r(viaVar), { kind: "dir", path: d }, "environment variable");
       const missing = await t.ev(`__e2e.invoke("resolve_path", { input: "C:\\\\no\\\\such\\\\folder" }).then(() => "", (e) => String(e))`);
       t.ok(missing.startsWith("Windows can't find"), missing);
@@ -142,7 +140,7 @@ export default [
       const d = t.dir("unc-root");
       t.dir(path.join("unc-root", "child"));
       t.mk(path.join(d, "child", "u.txt"));
-      const u = unc(path.join(d, "child"));
+      const u = t.unc(path.join(d, "child"));
       await t.nav(u);
       t.eq((await t.ev("__e2e.app.path")).toLowerCase(), u.toLowerCase(), "address stays UNC");
       t.eq(await t.names(), ["u.txt"], "listing");
@@ -150,7 +148,7 @@ export default [
       t.eq((await t.copyAsPath()).toLowerCase(), `"${u}\\u.txt"`.toLowerCase(), "copy as path");
       await t.call("up");
       await t.settle();
-      t.eq((await t.ev("__e2e.app.path")).toLowerCase(), unc(d).toLowerCase(), "up stays on the share");
+      t.eq((await t.ev("__e2e.app.path")).toLowerCase(), t.unc(d).toLowerCase(), "up stays on the share");
       t.eq(await t.selectedNames(), ["child"], "came-from folder selected");
     },
   },

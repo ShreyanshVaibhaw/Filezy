@@ -37,17 +37,6 @@ async function headerMenu(t, label, entry) {
   await t.sleep(100);
 }
 
-/** Press, move and release the mouse inside the page (no OS drag involved). */
-async function mouseDrag(t, from, to) {
-  await t.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: from.x, y: from.y });
-  await t.send("Input.dispatchMouseEvent", { type: "mousePressed", x: from.x, y: from.y, button: "left", clickCount: 1 });
-  for (let i = 1; i <= 6; i++) {
-    const x = from.x + ((to.x - from.x) * i) / 6;
-    await t.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y: to.y, button: "left", buttons: 1 });
-  }
-  await t.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: to.x, y: to.y, button: "left", clickCount: 1 });
-}
-
 const photo = (t, file, tags, title) => t.ps("photo.ps1", "-Path", file, "-Tags", tags, ...(title ? ["-Title", title] : []));
 const tagsOf = (t, file) => t.ps("photo.ps1", "-Path", file, "-Read");
 
@@ -63,12 +52,12 @@ export default [
       await headerMenu(t, "Type", "Date created");
       t.eq(await headers(t), ["Name", "Date modified", "Type", "Size", "Date created"], "added at the end");
       const grip = await t.ev(`(() => { const r = ${headerOf("Type")}.querySelector(".hresize").getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
-      await mouseDrag(t, grip, { x: grip.x + 60, y: grip.y });
+      await t.pageDrag(grip, { x: grip.x + 60, y: grip.y }, 6);
       await t.until(async () => Math.abs((await colWidth(t, "Type")) - 210) <= 3, 3000, "Type widened by the drag");
       const typeW = await colWidth(t, "Type");
       const from = await t.center(".header .hcell", { has: "Date created" });
       const to = await t.ev(`(() => { const r = ${headerOf("Date modified")}.getBoundingClientRect(); return { x: r.left + 10, y: r.top + r.height / 2 }; })()`);
-      await mouseDrag(t, from, to);
+      await t.pageDrag(from, to, 6);
       t.eq(await headers(t), ["Name", "Date created", "Date modified", "Type", "Size"], "moved before Date modified");
       await t.restart();
       await t.nav(a);
@@ -88,13 +77,13 @@ export default [
       // Type names arrive a moment after the rows; fit what the column will show.
       await t.waitFor(`!!__e2e.extMeta.get("txt")?.type_name && !!__e2e.extMeta.get("//dir")?.type_name`, 5000, "the type names");
       const grip = await t.ev(`(() => { const r = ${headerOf("Type")}.querySelector(".hresize").getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
-      await mouseDrag(t, grip, { x: grip.x - 100, y: grip.y });
+      await t.pageDrag(grip, { x: grip.x - 100, y: grip.y }, 6);
       // The page applies the drag's moves over the next frames: wait for where it ends.
       await t.until(async () => (await colWidth(t, "Type")) === 50, 3000, "Type narrowed to its minimum");
       t.ok(await clipped(t, "Type"), "the type names don't fit");
       await headerMenu(t, "Type", "Size column to fit");
       await t.until(async () => !(await clipped(t, "Type")), 3000, "Type fits its text again");
-      await mouseDrag(t, grip, { x: grip.x - 100, y: grip.y });
+      await t.pageDrag(grip, { x: grip.x - 100, y: grip.y }, 6);
       await t.until(async () => (await colWidth(t, "Type")) === 50, 3000, "Type narrowed again");
       await headerMenu(t, "Size", "Size all columns to fit");
       for (const label of ["Date modified", "Type", "Size"]) await t.until(async () => !(await clipped(t, label)), 3000, `${label} fits`);

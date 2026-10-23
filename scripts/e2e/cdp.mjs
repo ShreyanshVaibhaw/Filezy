@@ -1,6 +1,37 @@
 // Minimal Chrome DevTools Protocol client over Node's built-in WebSocket.
 // WebView2 exposes the protocol when the process starts with
 // WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<port>.
+import fs from "node:fs";
+import net from "node:net";
+import path from "node:path";
+
+/** A TCP port nothing is listening on right now. */
+export function freePort() {
+  return new Promise((resolve) => {
+    const s = net.createServer().listen(0, "127.0.0.1", () => {
+      const { port } = s.address();
+      s.close(() => resolve(port));
+    });
+  });
+}
+
+/**
+ * Environment for a Filezy launched against a throwaway profile in `root`:
+ * DevTools on `port`, and WebView2 storage, %APPDATA% and %TEMP% all under
+ * `root`, so nothing touches the user's own Filezy data.
+ */
+export function profileEnv(root, port) {
+  const temp = path.join(root, "temp");
+  fs.mkdirSync(temp, { recursive: true });
+  return {
+    ...process.env,
+    WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
+    WEBVIEW2_USER_DATA_FOLDER: path.join(root, "webview"),
+    APPDATA: path.join(root, "appdata"),
+    TEMP: temp,
+    TMP: temp,
+  };
+}
 
 /** Connect to a page; `pick` chooses among the pages (default: the first). */
 export async function connect(port, timeoutMs = 30000, pick = (pages) => pages[0]) {

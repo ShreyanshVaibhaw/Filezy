@@ -51,19 +51,6 @@ function idOf(items, names) {
   return it.id;
 }
 
-/** Entries in a zip file, once Windows has finished writing it. */
-async function zipEntries(t, file) {
-  for (let i = 0; i < 60; i++) {
-    const n = await t
-      .psCmd(`Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [IO.Compression.ZipFile]::OpenRead('${file}'); $z.Entries.Count; $z.Dispose()`)
-      .then(Number)
-      .catch(() => -1);
-    if (n >= 0) return n;
-    await t.sleep(500);
-  }
-  return -1;
-}
-
 const zipIn = (dir) => fs.readdirSync(dir).filter((n) => n.endsWith(".zip"));
 
 export default [
@@ -77,7 +64,7 @@ export default [
       await itemMenu(t);
       await pick(t, ["Send to", "Compressed (zipped) folder"]);
       await t.until(() => zipIn(d).length === 1, 30000, "a zip appears");
-      t.eq(await zipEntries(t, path.join(d, zipIn(d)[0])), 150, "all 150 items are in it");
+      t.eq((await t.zipEntries(path.join(d, zipIn(d)[0]))).length, 150, "all 150 items are in it");
     },
   },
   {
@@ -129,7 +116,7 @@ export default [
       await pick(t, ["Send to", "Compressed (zipped) folder"]);
       const zips = () => [...zipIn(path.join(root, "a")).map((n) => path.join(root, "a", n)), ...zipIn(path.join(root, "b")).map((n) => path.join(root, "b", n))];
       await t.until(() => zips().length === 1, 30000, "a zip appears");
-      t.eq(await zipEntries(t, zips()[0]), 2, "both results are in it");
+      t.eq((await t.zipEntries(zips()[0])).length, 2, "both results are in it");
     },
   },
   {

@@ -4,7 +4,7 @@ import path from "node:path";
 // Opt-in (npm run test:e2e -- --perf): numbers for the record, not pass/fail
 // gates. The listing is warm in the OS cache; a cold listing needs a reboot or
 // an admin cache flush and is not measured. The 100,000-file folder stays in
-// %TEMP%ilezy-perf-100k between runs; delete it to reclaim the space.
+// %TEMP%\filezy-perf-100k between runs; delete it to reclaim the space.
 
 const N = 100_000;
 

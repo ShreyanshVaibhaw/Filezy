@@ -11,11 +11,17 @@ const low = (p) => p.toLowerCase();
 const bounds = (w) =>
   w.ev("Promise.all([__e2e.win.outerPosition(), __e2e.win.outerSize(), __e2e.win.isMaximized()]).then(([p, s, m]) => ({ x: p.x, y: p.y, w: s.width, h: s.height, max: m }))");
 
-/** A second window of this run, once its page is ready. */
-async function ready(t) {
-  const w = await t.otherWindow();
-  for (let i = 0; i < 200 && !(await w.ev("!!globalThis.__e2e && __e2e.app.path !== ''").catch(() => false)); i++) await t.sleep(100);
-  return w;
+/** Wait until the window is (or isn't) maximized and has stopped moving; returns its bounds. */
+async function settledBounds(t, max) {
+  await t.waitFor(`__e2e.win.isMaximized().then((m) => m === ${max})`, 5000, max ? "maximized" : "restored");
+  let last = await bounds(t);
+  for (let i = 0; i < 50; i++) {
+    await t.sleep(50);
+    const now = await bounds(t);
+    if (JSON.stringify(now) === JSON.stringify(last)) return now;
+    last = now;
+  }
+  throw new Error(`the window kept moving: ${JSON.stringify(last)}`);
 }
 
 export default [
@@ -99,14 +105,13 @@ export default [
         await t.ev("__e2e.win.unmaximize()");
         await t.ev("__e2e.win.setSize(new __e2e.LogicalSize(900, 640))");
         await t.ev("__e2e.win.center()");
-        await t.sleep(300);
-        const before = await bounds(t);
+        const before = await settledBounds(t, false);
         await t.restart();
         const after = await bounds(t);
         t.eq([after.x, after.y, after.w, after.h, after.max], [before.x, before.y, before.w, before.h, false], "same place and size");
         // A second window doesn't cover the first exactly.
         await t.ev(`__e2e.invoke("new_window", { path: __e2e.app.path })`);
-        const w = await ready(t);
+        const w = await t.otherWindow();
         try {
           const second = await bounds(w);
           t.ok(second.x > after.x && second.y > after.y && second.w === after.w, `cascaded: ${JSON.stringify([after, second])}`);
@@ -115,12 +120,11 @@ export default [
           w.close();
         }
         await t.ev("__e2e.win.maximize()");
-        await t.sleep(300);
+        await settledBounds(t, true);
         await t.restart();
         t.ok((await bounds(t)).max, "maximized again");
         await t.ev("__e2e.win.unmaximize()");
-        await t.sleep(300);
-        const normal = await bounds(t);
+        const normal = await settledBounds(t, false);
         t.eq([normal.w, normal.h], [after.w, after.h], "and its normal size is the one it had");
       } finally {
         // Leave the default size for the suites that follow.
@@ -139,8 +143,8 @@ export default [
       await t.call("newTab", b);
       await t.settle();
       const moved = (await tabIds(t))[1];
-      await t.call("moveTabToWindow", moved);
-      const w = await ready(t);
+      await t.call("transferTab", moved);
+      const w = await t.otherWindow();
       try {
         t.eq(low(await w.ev("__e2e.app.path")), low(b), "the other window shows the tab's folder");
         t.eq(await tabPaths(t), [low(a)], "and the tab is gone from here");

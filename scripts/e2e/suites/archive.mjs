@@ -19,14 +19,6 @@ const sorted = async (t) => (await t.names()).sort();
 /** A file's text, without the BOM PowerShell wrote into the fixtures. */
 const text = (t, p) => t.read(p).replace(/^﻿/, "").trim();
 
-/** Names inside a ZIP, as .NET reads them. */
-const zipNames = async (t, zip) =>
-  JSON.parse(
-    await t.psCmd(
-      `Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [IO.Compression.ZipFile]::OpenRead('${zip}'); ConvertTo-Json -Compress @($z.Entries | ForEach-Object FullName); $z.Dispose()`,
-    ),
-  ).sort();
-
 /** Open Extract all for `zip`, set where it goes, and press Extract. */
 async function extractAll(t, zip, dest, show = false) {
   await t.call("extractAll", zip);
@@ -241,7 +233,7 @@ export default [
       await t.waitFor("__e2e.app.renaming >= 0", 5000, "the new zip is ready to rename");
       t.eq(await t.ev("__e2e.listing().then((r) => r[__e2e.app.renaming]?.name)"), `notes-${t.token}.zip`, "renaming the zip");
       await t.key("Escape");
-      t.eq(await zipNames(t, zip), ["loose.txt", `notes-${t.token}/`, `notes-${t.token}/inside.txt`], "its contents");
+      t.eq(await t.zipEntries(zip), ["loose.txt", `notes-${t.token}/`, `notes-${t.token}/inside.txt`], "its contents");
       t.eq(fs.readdirSync(d).filter((n) => n.includes("filezy-part")), [], "no part file left");
       await t.call("undo");
       await t.until(() => !fs.existsSync(zip), 10000, "undo recycled the zip");

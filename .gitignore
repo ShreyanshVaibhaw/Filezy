@@ -1,13 +1,19 @@
 /node_modules
 /dist
 /src-tauri/target
+# E2E builds (npm run build:e2e) go here, so target/release stays a real release build.
+/src-tauri/target-e2e
+# tauri-build rewrites these on every build.
+/src-tauri/gen/schemas/
 *.log
 # Built per release and attached to the GitHub release, never committed.
 /latest.json
 # Update signing keys live in %USERPROFILE%\.tauri and must never be committed.
 *.key
-# Planning notes stay local and are never pushed (see AGENTS.md).
+# Planning notes and audits stay local and are never pushed (see AGENTS.md).
 /blueprint.md
 /plan*.md
+/remaining-from-plans.md
+/*audit*.md
 /docs/
 /scratchpad/

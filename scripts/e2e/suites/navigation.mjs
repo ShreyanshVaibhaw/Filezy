@@ -13,7 +13,6 @@ export default [
       // Start navigating to Y, then refresh while that navigation is in flight:
       // what a watcher event for X does when it fires during the navigation.
       await t.ev(`(() => { __e2e.navigate(${JSON.stringify(y)}); __e2e.refresh(); })()`);
-      await t.sleep(400);
       await t.settle();
       t.eq(await t.ev("__e2e.app.path"), y, "address");
       t.eq(await t.names(), ["y1.txt", "y2.txt"], "listing");
@@ -35,7 +34,8 @@ export default [
       const second = await t.ev("__e2e.app.activeTab");
       // Navigate tab 2 to A and switch back to tab 1 before it can finish.
       await t.ev(`(() => { __e2e.navigate(${JSON.stringify(a)}); __e2e.switchTab(${first}); })()`);
-      await t.sleep(500);
+      // The idle check only covers the shown tab; wait for tab 2's navigation too.
+      await t.waitFor(`!__e2e.tabs.find((x) => x.id === ${second}).pending`, 10000, "tab 2's navigation never finished");
       await t.settle();
       t.eq(await t.ev("__e2e.app.activeTab"), first, "active tab");
       t.eq(await t.ev("__e2e.app.path"), b, "tab 1 address");
@@ -68,7 +68,7 @@ export default [
       // A file that sorts before b.txt shifts b's row index.
       t.mk(path.join(d, "a0.txt"));
       await t.waitFor("__e2e.app.total === 4", 5000, "watcher refresh");
-      await t.sleep(300);
+      await t.settle();
       t.eq(await t.selectedNames(), ["b.txt"], "selection");
       t.ok(await t.ev("__e2e.rows[__e2e.app.renaming]?.name === 'b.txt'"), "rename still on b.txt");
       t.eq(await t.ev("document.querySelector('input.rename')?.value"), "b-renamed", "typed text");

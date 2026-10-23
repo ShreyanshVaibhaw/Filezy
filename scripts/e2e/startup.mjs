@@ -9,10 +9,9 @@
 // start needs a reboot or an elevated standby-list flush and isn't measured.
 import { spawn, execFile } from "node:child_process";
 import fs from "node:fs";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { connect } from "./cdp.mjs";
+import { connect, freePort, profileEnv } from "./cdp.mjs";
 
 const arg = (k, d) => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3) ?? d;
 const exe = path.resolve(arg("exe", "src-tauri/target/release/filezy.exe"));
@@ -22,26 +21,10 @@ const dir = path.join(root, "folder");
 fs.mkdirSync(dir);
 for (let i = 0; i < 1000; i++) fs.writeFileSync(path.join(dir, `file-${String(i).padStart(4, "0")}.txt`), "");
 
-const freePort = () =>
-  new Promise((resolve) => {
-    const s = net.createServer().listen(0, "127.0.0.1", () => {
-      const { port } = s.address();
-      s.close(() => resolve(port));
-    });
-  });
-
 async function once() {
   const port = await freePort();
   const t0 = Date.now();
-  const proc = spawn(exe, [dir], {
-    env: {
-      ...process.env,
-      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
-      WEBVIEW2_USER_DATA_FOLDER: path.join(root, "webview"),
-      APPDATA: path.join(root, "appdata"),
-    },
-    stdio: "ignore",
-  });
+  const proc = spawn(exe, [dir], { env: profileEnv(root, port), stdio: "ignore" });
   try {
     const cdp = await connect(port);
     // Both times come from the page's clock, so DevTools' own start-up delay doesn't count.

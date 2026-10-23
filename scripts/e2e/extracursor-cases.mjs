@@ -28,27 +28,8 @@ export function cases(root) {
   ];
 }
 
-export function performanceCase(root) {
-  return { name: "warm 100,000-file listing, search and scrolling", js: `(async()=>{
-    const e=__e2e;const folder=${JSON.stringify(root)};
-    const median=values=>[...values].sort((a,b)=>a-b)[Math.floor(values.length/2)];
-    const listings=[];const search=[];e.setView('details');e.setSetting('previewPane',false);e.setSetting('detailsPane',false);
-    for(let i=0;i<5;i++){await e.navigate(e.HOME);const start=performance.now();await e.navigate(folder);await new Promise(requestAnimationFrame);listings.push(performance.now()-start)}
-    if(e.app.total!==100000)throw new Error('Expected the 100,000-file fixture');
-    const frames=[];const scroller=document.querySelector('.scroller');let previous=performance.now();const deadline=previous+4500;
-    while(frames.length<120&&performance.now()<deadline){await Promise.race([new Promise(requestAnimationFrame),new Promise(r=>setTimeout(r,150))]);const now=performance.now();frames.push(now-previous);previous=now;scroller.scrollTop+=scroller.clientHeight}
-    scroller.scrollTop=0;
-    for(let i=0;i<3;i++){const start=performance.now();await e.startSearch('item-099999',true);while(e.app.searching&&performance.now()-start<5000)await new Promise(r=>setTimeout(r,20));search.push(performance.now()-start);await e.clearSearch()}
-    const sorted=[...frames].sort((a,b)=>a-b);
-    return globalThis.__filezyPerf={build:'debug, e2e feature',cache:'warm OS cache; files just created; other applications running',files:100000,
-      listingMs:listings,listingMedianMs:median(listings),searchMs:search,searchMedianMs:median(search),
-      frameCount:frames.length,frameMedianMs:median(frames),frameP95Ms:sorted[Math.floor(sorted.length*.95)],
-      over34ms:frames.filter(ms=>ms>34).length,viewport:{width:innerWidth,height:innerHeight,dpr:devicePixelRatio},
-      rendererTiming:performance.getEntriesByType('navigation')[0]?.toJSON()};
-  })()` };
-}
-
 // This uses the production UI, without enabling test hooks in a release build.
+// Its fixture comes from --prepare-perf.
 export function productionPerformanceCase(root) {
   return { name: "production UI warm 100,000-file performance", js: `(async()=>{
     const folder=${JSON.stringify(root)};const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -78,17 +59,41 @@ export function wslCaseRegression(root) {
   })()` };
 }
 
+// Fixtures live in scratchpad/extracursor-*, which --clean removes.
+//   --prepare                    3,000 files plus a child folder, for cases()
+//   --prepare-perf               exactly 100,000 empty files, item-000000.txt to item-099999.txt
+//   --json <fixture> [--ui-perf | --wsl]
+//   --clean [fixture]            remove one fixture, or every one in scratchpad
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
-  if (process.argv[2] === "--prepare") {
-    fs.mkdirSync("scratchpad", { recursive: true });
-    const root = fs.mkdtempSync(path.resolve("scratchpad", "extracursor-"));
+  const [cmd, arg] = process.argv.slice(2);
+  const scratch = path.resolve("scratchpad");
+  const fixture = (kind) => {
+    fs.mkdirSync(scratch, { recursive: true });
+    return fs.mkdtempSync(path.join(scratch, `extracursor-${kind}`));
+  };
+  if (cmd === "--prepare") {
+    const root = fixture("");
     fs.mkdirSync(path.join(root, "child"));
     fs.writeFileSync(path.join(root, "example.txt"), "Filezy native test fixture.\n");
     fs.writeFileSync(path.join(root, "child", "日本語.txt"), "Unicode fixture.\n");
     for (let i = 0; i < 3000; i++) fs.writeFileSync(path.join(root, `item-${String(i).padStart(5, "0")}.txt`), "");
     console.log(root);
-  } else if (process.argv[2] === "--json" && process.argv[3]) {
-    const root=path.resolve(process.argv[3]);
-    console.log(JSON.stringify(process.argv.includes('--wsl') ? [wslCaseRegression(process.argv[3])] : process.argv.includes('--ui-perf') ? [productionPerformanceCase(root)] : process.argv.includes('--perf') ? [performanceCase(root)] : cases(root)));
+  } else if (cmd === "--prepare-perf") {
+    const root = fixture("perf-");
+    for (let i = 0; i < 100_000; i++) fs.writeFileSync(path.join(root, `item-${String(i).padStart(6, "0")}.txt`), "");
+    console.log(root);
+  } else if (cmd === "--json" && arg) {
+    const root = path.resolve(arg);
+    console.log(JSON.stringify(process.argv.includes("--wsl") ? [wslCaseRegression(arg)] : process.argv.includes("--ui-perf") ? [productionPerformanceCase(root)] : cases(root)));
+  } else if (cmd === "--clean") {
+    const targets = arg ? [path.resolve(arg)] : fs.existsSync(scratch) ? fs.readdirSync(scratch).filter((n) => n.startsWith("extracursor-")).map((n) => path.join(scratch, n)) : [];
+    for (const p of targets) {
+      if (path.dirname(p) !== scratch || !path.basename(p).startsWith("extracursor-")) throw new Error(`not an ExtraCursor fixture: ${p}`);
+      fs.rmSync(p, { recursive: true, force: true });
+      console.log(`removed ${p}`);
+    }
+  } else {
+    console.error("usage: extracursor-cases.mjs --prepare | --prepare-perf | --json <fixture> [--ui-perf | --wsl] | --clean [fixture]");
+    process.exitCode = 2;
   }
 }

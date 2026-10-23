@@ -1,7 +1,7 @@
 # Prints the clipboard's file list and Preferred DropEffect as JSON, read the way
 # Explorer reads them: {"files":[...],"effect":2} where 2 = cut (move), 5 = copy.
 #
-#   clip.ps1 -Set "C:.txt|C:.txt" [-Cut]   put files there instead, as another app's copy or cut would
+#   clip.ps1 -Set "C:\a.txt|C:\b.txt" [-Cut]   put files there instead, as another app's copy or cut would
 #   clip.ps1 -Text "hello"                       put plain text there
 param([string]$Set, [switch]$Cut, [string]$Text)
 Add-Type -AssemblyName System.Windows.Forms

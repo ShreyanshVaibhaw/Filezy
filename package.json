@@ -3,16 +3,18 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "check:menuids": "node scripts/check-menuids.mjs",
     "test": "node --test \"src/**/*.test.ts\" \"scripts/*.test.mjs\"",
     "test:rust": "cargo test --locked --manifest-path src-tauri/Cargo.toml",
     "test:e2e": "node scripts/e2e/run.mjs",
-    "build:e2e": "tauri build --no-bundle --features e2e && cargo build --example testcloud --manifest-path src-tauri/Cargo.toml",
+    "build:e2e": "node scripts/build-e2e.mjs",
     "verify": "npm run check:menuids && npm run check && npm test && npm run build && npm run test:rust",
     "release:manifest": "node scripts/make-latest-json.mjs",
     "tauri": "tauri"

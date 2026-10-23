@@ -28,8 +28,7 @@ export default [
 
       await t.nav("::RecycleBin");
       t.eq(await binCount(t, name), 2, "both in the bin");
-      await t.waitFor(`document.querySelectorAll(".rrow").length > 0`, 10000, "bin page never listed");
-      await t.click(".rrow", { where: { title: path.dirname(a) } });
+      await t.click(await t.binRow({ title: path.dirname(a) }));
       await t.click(".abtn", { where: { has: "Restore selected" } });
       await t.until(() => t.exists(a), 10000, "the selected item was not restored");
       t.eq(t.read(a), "from A", "restored content");
@@ -65,13 +64,7 @@ export default [
       await recycle(t, t.mk(path.join(d, keep), "k"));
       await recycle(t, t.mk(path.join(d, drop), "d"));
       await t.nav("::RecycleBin");
-      await t.waitFor(`[...document.querySelectorAll(".rrow")].some((r) => r.textContent.includes(${JSON.stringify(drop)}))`, 10000, "listed");
-      const row = await t.ev(`(() => {
-        const r = [...document.querySelectorAll(".rrow")].find((r) => r.textContent.includes(${JSON.stringify(drop)}));
-        const b = r.getBoundingClientRect();
-        return { x: b.left + 40, y: b.top + b.height / 2 };
-      })()`);
-      await t.click(row);
+      await t.click(await t.binRow({ has: drop }));
       await t.ev(`void [...document.querySelectorAll(".abtn")].find((b) => b.textContent.includes("Delete selected")).click()`);
       await t.uia("-Window", "*Delete*", "-Command", "6"); // Yes
       await t.until(async () => (await binCount(t, drop)) === 0, 10000, "the selected item should be gone from the bin");
