@@ -2,10 +2,9 @@
   import { msg } from "./i18n.svelte";
   import { menuKeys } from "./menukeys";
   import { invoke } from "@tauri-apps/api/core";
-  import { joinPath } from "./paths";
-  import { app, navigate, openPath, back, forward, up, refresh, setFilter, clearSearch, startSearch, rememberSearch, folderName, can, THIS_PC, HOME, RECYCLE, SETTINGS, NETWORK } from "./store.svelte";
+  import { app, navigate, openPath, back, forward, up, refresh, setFilter, clearSearch, startSearch, rememberSearch, folderName, can, THIS_PC, NETWORK } from "./store.svelte";
   import { settings } from "./settings.svelte";
-  import { crumbs, displayPath, isArchive, isUnc, isVirtual, isWsl } from "./paths";
+  import { crumbs, displayPath, isArchive, isUnc, isVirtual, isWsl, joinPath } from "./paths";
   import { isShellLocation } from "./shellplaces";
 
   let editing = $state(false);
@@ -44,12 +43,8 @@
 
   const segments = $derived.by(() => {
     if (!app.path) return [] as { name: string; path: string }[];
-    if (isShellLocation(app.path)) return [{ name: folderName(app.path), path: app.path }];
-    if (app.path === THIS_PC) return [{ name: "This PC", path: THIS_PC }];
-    if (app.path === HOME) return [{ name: "Home", path: HOME }];
-    if (app.path === RECYCLE) return [{ name: "Recycle Bin", path: RECYCLE }];
-    if (app.path === SETTINGS) return [{ name: "Settings", path: SETTINGS }];
-    if (app.path === NETWORK) return [{ name: "Network", path: NETWORK }];
+    // A page that isn't a folder (This PC, Home, a device folder) is one crumb.
+    if (isVirtual(app.path)) return [{ name: folderName(app.path), path: app.path }];
     const segs = crumbs(app.path).map((c) => ({ ...c, name: c.name.endsWith(":") ? diskName(c.name) : c.name }));
     // A computer and its shares sit under Network, as in Explorer.
     return isUnc(app.path) && !isWsl(app.path) ? [{ name: "Network", path: NETWORK }, ...segs] : segs;

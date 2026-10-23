@@ -7,6 +7,7 @@
     menuOn, setMenuOn, resetMenu, setExtraOn, forgetExtras, resetAll,
   } from "./settings.svelte";
   import { MENU_GROUPS } from "./menuitems";
+  import { VIEWS, DEFAULT_SORTS } from "./views";
   import { updater, checkForUpdates, downloadAndInstall, restartApp } from "./updater.svelte";
   import { toggleHidden, clearFolderPrefs, folderPrefsCount, refresh, clearRecent, app, HOME, THIS_PC } from "./store.svelte";
   import { invoke } from "@tauri-apps/api/core";
@@ -40,25 +41,6 @@
     .catch(() => {});
 
   const title = $derived(CATEGORIES.find((c) => c.id === cat)?.label ?? "");
-
-  const VIEWS = [
-    ["details", "Details"],
-    ["content", "Content"],
-    ["list", "List"],
-    ["tiles", "Tiles"],
-    ["icons_s", "Small icons"],
-    ["icons_m", "Medium icons"],
-    ["icons_l", "Large icons"],
-    ["icons_xl", "Extra large icons"],
-    ["gallery", "Gallery"],
-  ];
-  const SORTS = [
-    ["name", "Name"],
-    ["modified", "Date modified"],
-    ["type", "Type"],
-    ["size", "Size"],
-    ["created", "Date created"],
-  ];
 
   // Start page: the two virtual pages, or any folder the user types.
   const startKind = $derived(settings.startPage.startsWith("::") ? settings.startPage : "custom");
@@ -240,7 +222,7 @@
             <div class="rowname">{msg("Sort by")}</div>
           </div>
           <select class="combo" aria-label={msg("Default sort")} value={settings.defaultSort} onchange={(e) => setSetting("defaultSort", e.currentTarget.value)}>
-            {#each SORTS as [v, l] (v)}<option value={v}>{msg(l)}</option>{/each}
+            {#each DEFAULT_SORTS as [v, l] (v)}<option value={v}>{msg(l)}</option>{/each}
           </select>
         </div>
         <div class="row">

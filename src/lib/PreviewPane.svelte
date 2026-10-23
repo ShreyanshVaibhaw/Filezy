@@ -4,7 +4,7 @@
   // files go to Windows' own preview handler (Word, Excel, fonts...), whose
   // window the backend keeps over this pane (src-tauri/src/preview.rs).
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-  import { app, sel, rowAt, entryPath, openPath } from "./store.svelte";
+  import { app, sel, rowAt, entryPath, openPath, devicePx } from "./store.svelte";
   import { isArchive } from "./paths";
 
   type Kind = "text" | "image" | "thumb" | "audio" | "video" | "pdf" | "native" | "none";
@@ -84,11 +84,11 @@
       case "image":
       case "video":
       case "pdf":
-        view = { s: info.kind, src: convertFileSrc(p) };
+        view = { s: info.kind, src: convertFileSrc(p, "preview") };
         return;
       case "audio": {
-        view = { s: "audio", src: convertFileSrc(p), art: null };
-        const art = await invoke<string | null>("thumb", { path: p, size: 256 }).catch(() => null);
+        view = { s: "audio", src: convertFileSrc(p, "preview"), art: null };
+        const art = await invoke<string | null>("thumb", { path: p, px: devicePx(256) }).catch(() => null);
         if (!stale() && view.s === "audio") view = { ...view, art };
         return;
       }
@@ -104,8 +104,7 @@
 
   /// Windows' thumbnail at the pane's size: images and videos the page can't decode.
   async function showThumb(p: string, my: number) {
-    const size = Math.min(1024, Math.round((pane?.clientWidth ?? 320) * (window.devicePixelRatio || 1)));
-    const src = await invoke<string | null>("thumb", { path: p, size }).catch(() => null);
+    const src = await invoke<string | null>("thumb", { path: p, px: devicePx(pane?.clientWidth ?? 320) }).catch(() => null);
     if (my === seq) view = src ? { s: "thumb", src } : { s: "none" };
   }
 

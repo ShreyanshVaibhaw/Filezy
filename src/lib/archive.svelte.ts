@@ -102,6 +102,7 @@ export async function runExtract() {
     error: s.why,
     replaced: false,
     bin_id: null,
+    hr: 0,
     size: 0,
     modified: 0,
   }));

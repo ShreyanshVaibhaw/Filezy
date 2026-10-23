@@ -14,6 +14,7 @@
   import { isShellLocation } from "./shellplaces";
   import { copySel, paste, del, newFolder, newFile, startRename, shareSel } from "./ops.svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { VIEWS, SORTS } from "./views";
   import { selectNone, invertSelection } from "./selection.svelte";
   import { THEMES, setTheme, toggleCompact, settings, setSetting, showPane } from "./settings.svelte";
   import { saved, saveSearch, runSearch, saveWorkspace, openWorkspace } from "./saved.svelte";
@@ -130,17 +131,6 @@
     actions[it.id]?.();
   }
 
-  const sortItems = [
-    ["name", "Name"],
-    ["modified", "Date modified"],
-    ["type", "Type"],
-    ["size", "Size"],
-    ["created", "Date created"],
-    ["author", "Authors"],
-    ["category", "Categories"],
-    ["tags", "Tags"],
-    ["title", "Title"],
-  ] as const;
 </script>
 
 <svelte:window onmousedown={(e) => { if (!(e.target as HTMLElement).closest(".menu, .cbtn")) openMenu = ""; }} />
@@ -245,7 +235,7 @@
     {:else if openMenu === "search"}
       <ShellItems items={searchMenu()} run={runSearchItem} />
     {:else if openMenu === "sort"}
-      {#each sortItems as [key, label] (key)}
+      {#each SORTS as [key, label] (key)}
         <button class="menu-item" role="menuitemradio" aria-checked={app.sortKey === key} onclick={() => { openMenu = ""; sortBy(key, app.sortKey === key ? app.asc : true); }}>
           <span class="check" aria-hidden="true">{app.sortKey === key ? "●" : ""}</span>{msg(label)}
         </button>
@@ -264,7 +254,7 @@
         </button>
       {/each}
     {:else if openMenu === "view"}
-      {#each [["icons_xl", "Extra large icons"], ["icons_l", "Large icons"], ["icons_m", "Medium icons"], ["icons_s", "Small icons"], ["list", "List"], ["details", "Details"], ["content", "Content"], ["tiles", "Tiles"], ["gallery", "Gallery"]] as [vkey, vlabel] (vkey)}
+      {#each VIEWS as [vkey, vlabel] (vkey)}
         <button class="menu-item" role="menuitemradio" aria-checked={app.view === vkey} onclick={() => { openMenu = ""; setView(vkey); }}>
           <span class="check" aria-hidden="true">{app.view === vkey ? "●" : ""}</span>{msg(vlabel)}
         </button>

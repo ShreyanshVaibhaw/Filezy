@@ -19,14 +19,14 @@ export interface OpItem {
   bin_id: string | null;
   size: number;
   modified: number;
+  /** The shell's HRESULT for the item; negative for a failure. */
+  hr: number;
 }
 export interface OpResult {
   kind: "copy" | "move" | "recycle" | "delete";
   items: OpItem[];
-  aborted: boolean;
   cancelled: boolean;
   error: string | null;
-  children: number;
   /** Cut-paste only: "cleared", "rewritten", or "changed elsewhere". */
   clipboard: string | null;
 }
@@ -94,18 +94,22 @@ function report(r: OpResult, retry?: (items: OpItem[]) => Promise<void>) {
   const s = summarize(r);
   const problems = r.items.filter((i) => i.state !== "done");
   const again = problems.filter((i) => i.state === "failed" || i.state === "unattempted");
-  const a: Activity = {
+  pushActivity({
     id: ++activitySeq,
     title: s.title,
     tone: s.tone,
     problems,
     retry: retry && again.length ? () => retry(again) : undefined,
     result: r,
-  };
+  });
+}
+
+/// Keep the last 30 outcomes; anything but a plain success shows in the message bar.
+function pushActivity(a: Activity) {
   activity.list.unshift(a);
   if (activity.list.length > 30) activity.list.pop();
-  if (s.tone !== "ok") {
-    app.status = s.title;
+  if (a.tone !== "ok") {
+    app.status = a.title;
     activity.current = a;
   }
 }
@@ -113,14 +117,8 @@ function report(r: OpResult, retry?: (items: OpItem[]) => Promise<void>) {
 /// Record an outcome of work Filezy does itself (extracting, compressing):
 /// its line, its tone, and what wasn't done, for Details.
 export function note(title: string, tone: Activity["tone"], problems: OpItem[] = []) {
-  const result: OpResult = { kind: "copy", items: problems, aborted: false, cancelled: false, error: null, children: 0, clipboard: null };
-  const a: Activity = { id: ++activitySeq, title, tone, problems, result };
-  activity.list.unshift(a);
-  if (activity.list.length > 30) activity.list.pop();
-  if (tone !== "ok") {
-    app.status = title;
-    activity.current = a;
-  }
+  const result: OpResult = { kind: "copy", items: problems, cancelled: false, error: null, clipboard: null };
+  pushActivity({ id: ++activitySeq, title, tone, problems, result });
 }
 
 export function dismissNotice() {
@@ -437,7 +435,8 @@ async function delImpl(permanent = false) {
     return;
   }
   report(r, async (items) => {
-    const again = await invoke<OpResult>("recycle_paths", { paths: items.map((i) => i.src) });
+    // Retry what the user asked for: after Shift+Delete, delete for good again.
+    const again = await invoke<OpResult>(permanent ? "delete_paths" : "recycle_paths", { paths: items.map((i) => i.src) });
     report(again);
     record(again);
     await refresh();

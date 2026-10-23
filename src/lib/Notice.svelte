@@ -1,6 +1,7 @@
 <script lang="ts">
   import { msg } from "./i18n.svelte";
   import { app } from "./store.svelte";
+  import { baseName } from "./paths";
   import { activity, dismissNotice } from "./ops.svelte";
 
   // The operation report behind the message, if the message is one.
@@ -27,12 +28,13 @@
     await r?.();
   }
 
+  /** Windows' error code, as Explorer's dialogs print it: 0x80070005. */
+  const hex = (hr: number) => "0x" + (hr >>> 0).toString(16).toUpperCase().padStart(8, "0");
   const stateText: Record<string, string> = {
     skipped: "Skipped",
     failed: "Failed",
     unattempted: "Not attempted",
   };
-  const leaf = (p: string) => p.slice(p.lastIndexOf("\\") + 1) || p;
 </script>
 
 <svelte:window
@@ -68,8 +70,8 @@
         <div class="atitle {a.tone}">{a.title}</div>
         {#each a.problems.slice(0, 50) as p (p.src)}
           <div class="aprob" title={p.src}>
-            <span class="pname">{leaf(p.src)}</span>
-            <span class="pstate">{stateText[p.state] ?? p.state}{p.error ? `: ${p.error}` : ""}</span>
+            <span class="pname">{baseName(p.src)}</span>
+            <span class="pstate">{stateText[p.state] ?? p.state}{p.error ? `: ${p.error}` : ""}{p.hr < 0 ? ` (${hex(p.hr)})` : ""}</span>
           </div>
         {/each}
         {#if a.problems.length > 50}

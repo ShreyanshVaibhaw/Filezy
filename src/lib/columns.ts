@@ -2,7 +2,7 @@
 // set, order and widths (Explorer remembers them per folder). Name is always
 // first and not listed here.
 
-import { pathKey } from "./paths";
+import { perFolderMap } from "./perfolder";
 
 export type ColKey =
   | "modified"
@@ -68,27 +68,12 @@ function valid(v: unknown): v is Col[] {
   );
 }
 
-/// Saved layouts, with anything malformed dropped (and the cleaned set written back).
-function load(): Record<string, Col[]> {
-  const out: Record<string, Col[]> = {};
-  try {
-    const raw = JSON.parse(localStorage.getItem(STORE) ?? "{}");
-    const entries = raw && typeof raw === "object" && !Array.isArray(raw) ? Object.entries(raw) : [];
-    for (const [k, v] of entries) if (valid(v)) out[k] = v;
-    if (entries.length !== Object.keys(out).length) localStorage.setItem(STORE, JSON.stringify(out));
-  } catch {
-    localStorage.removeItem(STORE);
-  }
-  return out;
-}
-
-let saved: Record<string, Col[]> = load();
-
+const saved = perFolderMap(STORE, valid);
 
 /// The columns a folder (or the search results, SEARCH_KEY) opens with. A
 /// folder a cloud provider syncs also shows Status first, as in Explorer.
 export function columnsFor(path: string, cloud = false): Col[] {
-  const own = saved[pathKey(path)];
+  const own = saved.get(path);
   if (own) return own.map((c) => ({ ...c }));
   const keys = path === SEARCH_KEY ? SEARCH : cloud ? (["status", ...DEFAULT] as ColKey[]) : DEFAULT;
   return keys.map((k) => ({ k, w: colDef(k).width }));
@@ -96,17 +81,12 @@ export function columnsFor(path: string, cloud = false): Col[] {
 
 export function saveColumns(path: string, cols: Col[]) {
   if (!valid(cols)) return;
-  saved[pathKey(path)] = cols.map((c) => ({ k: c.k, w: Math.round(c.w) }));
-  const keys = Object.keys(saved);
-  // ponytail: drop the oldest insertion when the map grows unbounded
-  if (keys.length > 500) delete saved[keys[0]];
-  localStorage.setItem(STORE, JSON.stringify(saved));
+  saved.set(path, cols.map((c) => ({ k: c.k, w: Math.round(c.w) })));
 }
 
 /// Explorer's "Reset folders" forgets the columns too.
 export function clearColumns() {
-  saved = {};
-  localStorage.removeItem(STORE);
+  saved.clear();
 }
 
 /// Explorer's Attributes column: R read-only, H hidden, S system, A archive,

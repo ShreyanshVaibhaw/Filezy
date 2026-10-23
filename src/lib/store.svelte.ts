@@ -5,7 +5,9 @@ import { untrack } from "svelte";
 import { settings, setSetting } from "./settings.svelte";
 import { baseName, isArchive, isServer, isVirtual, joinPath, parentPath, samePath, pathKey } from "./paths";
 import { formatWith, type LocaleFormats } from "./datefmt";
+import { VIEW_KEYS } from "./views";
 import { clearColumns } from "./columns";
+import { perFolderMap } from "./perfolder";
 import { withFilter, withoutFilters } from "./searchquery";
 import { DEVICES, isShellLocation, shellLocation, shellParsing, type ShellFolder } from "./shellplaces";
 
@@ -410,7 +412,6 @@ export const SORT_KEYS = [
   "name", "modified", "type", "size", "created", "author", "category", "tags", "title",
   "location", "attributes", "status", "dimensions", "duration",
 ];
-export const VIEW_KEYS = ["details", "content", "list", "tiles", "icons_s", "icons_m", "icons_l", "icons_xl", "gallery"];
 export const GROUP_KEYS = ["none", "name", "modified", "created", "type", "size", "month"];
 
 function validPrefs(v: unknown): v is FolderPrefs {
@@ -425,36 +426,21 @@ function validPrefs(v: unknown): v is FolderPrefs {
   );
 }
 
-/// Saved views, with anything malformed dropped (and the cleaned set written
-/// back): a corrupt blob must not stop startup or linger.
-function loadFolderPrefs(): Record<string, FolderPrefs> {
-  const out: Record<string, FolderPrefs> = {};
-  try {
-    const raw = JSON.parse(localStorage.getItem("folderPrefs") ?? "{}");
-    const entries = raw && typeof raw === "object" && !Array.isArray(raw) ? Object.entries(raw) : [];
-    for (const [k, v] of entries) if (validPrefs(v)) out[k] = v;
-    if (entries.length !== Object.keys(out).length) localStorage.setItem("folderPrefs", JSON.stringify(out));
-  } catch {
-    localStorage.removeItem("folderPrefs");
-  }
-  return out;
-}
-
 /// Fallback view for a folder the user has never customized, from Settings.
 function defaultPrefs(): FolderPrefs {
   if (settings.defaultView === "gallery") return { s: "modified", a: false, v: "gallery", g: "month" };
   return { s: settings.defaultSort, a: settings.defaultAsc, v: settings.defaultView, g: "none" };
 }
-let folderPrefs: Record<string, FolderPrefs> = loadFolderPrefs();
+// Saved views per folder, validated on load.
+const folderPrefs = perFolderMap("folderPrefs", validPrefs);
 
 /// Explorer's "Reset Folders": every folder falls back to the configured default.
 export function clearFolderPrefs() {
-  folderPrefs = {};
-  localStorage.removeItem("folderPrefs");
+  folderPrefs.clear();
   clearColumns();
 }
 export function folderPrefsCount(): number {
-  return Object.keys(folderPrefs).length;
+  return folderPrefs.size();
 }
 // True while the current grouping came from date-sorting, not a user choice.
 let groupAuto = false;
@@ -462,16 +448,7 @@ let groupAuto = false;
 function savePrefs() {
   if (!app.path || isVirtual(app.path)) return;
   // Auto date-grouping is derived from the sort, so it is stored as "none".
-  folderPrefs[pathKey(app.path)] = {
-    s: app.sortKey,
-    a: app.asc,
-    v: app.view,
-    g: groupAuto ? "none" : app.groupKey,
-  };
-  const keys = Object.keys(folderPrefs);
-  // ponytail: drop the oldest insertion when the map grows unbounded
-  if (keys.length > 500) delete folderPrefs[keys[0]];
-  localStorage.setItem("folderPrefs", JSON.stringify(folderPrefs));
+  folderPrefs.set(app.path, { s: app.sortKey, a: app.asc, v: app.view, g: groupAuto ? "none" : app.groupKey });
 }
 
 function isDateKey(k: string): boolean {
@@ -480,7 +457,7 @@ function isDateKey(k: string): boolean {
 
 /// The arrangement a folder opens with: its saved prefs or the configured default.
 function prefsFor(p: string): { sort: string; asc: boolean; view: string; group: string; auto: boolean } {
-  const prefs = folderPrefs[pathKey(p)] ?? defaultPrefs();
+  const prefs = folderPrefs.get(p) ?? defaultPrefs();
   // Explorer behavior: date-sorted folders group by date automatically.
   const auto = prefs.g === "none" && isDateKey(prefs.s);
   return { sort: prefs.s, asc: prefs.a, view: prefs.v, group: auto ? prefs.s : prefs.g, auto };
@@ -1609,8 +1586,11 @@ export function iconOf(e: Entry): string | null {
   return extMeta.get(e.is_dir ? "//dir" : e.ext)?.icon ?? null;
 }
 
+/** Device pixels for a thumbnail drawn `size` CSS pixels wide, as the shell wants. */
+export const devicePx = (size: number) => Math.min(1024, Math.round(size * (window.devicePixelRatio || 1)));
+
 function thumbKey(e: Entry, size: number): string {
-  return `${entryPath(e)}|${size}|${e.modified}`;
+  return `${entryPath(e)}|${devicePx(size)}|${e.modified}`;
 }
 
 export function requestThumb(e: Entry, size: number) {
@@ -1619,9 +1599,11 @@ export function requestThumb(e: Entry, size: number) {
   if (thumbs.has(key) || isArchive(app.path)) return;
   if (thumbs.size > 700) thumbs.clear(); // ponytail: dumb cap; LRU if memory matters
   thumbs.set(key, null);
-  invoke<string | null>("thumb", { path: entryPath(e), size }).then((t) => {
-    if (t) thumbs.set(key, t);
-  });
+  invoke<string | null>("thumb", { path: entryPath(e), px: devicePx(size) })
+    .then((t) => {
+      if (t) thumbs.set(key, t);
+    })
+    .catch(() => {});
 }
 
 export function thumbOf(e: Entry, size: number): string | null {
@@ -1714,7 +1696,11 @@ export const newItems = $state<{ list: NewItem[] | null }>({ list: null });
 
 export async function loadNewItems() {
   if (newItems.list) return;
-  newItems.list = await invoke<NewItem[]>("new_menu_items").catch(() => []);
+  const list = await invoke<NewItem[]>("new_menu_items").catch(() => []);
+  // Two types can share a name (an app registering .cbv and .cbh both as
+  // "ChessBase Database"); those say which extension each one makes.
+  const shared = (it: NewItem) => list.filter((x) => x.name === it.name).length > 1;
+  newItems.list = list.map((it) => (shared(it) ? { ...it, name: `${it.name} (.${it.ext})` } : it));
   for (const it of newItems.list ?? []) requestExtMeta(it.ext);
 }
 

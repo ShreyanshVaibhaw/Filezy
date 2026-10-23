@@ -3,7 +3,7 @@
   import { msg } from "./i18n.svelte";
   import { menuKeys, fitMenu } from "./menukeys";
   import { invoke } from "@tauri-apps/api/core";
-  import { app, navigate, pinAdd, pinRemove, shellIcon, loadDrives, type Drive } from "./store.svelte";
+  import { app, navigate, pinAdd, pinRemove, shellIcon, loadDrives, fmtSizeAuto, type Drive } from "./store.svelte";
   import { settings, menuOn, anyMenuOn } from "./settings.svelte";
   import ShellItems from "./ShellItems.svelte";
   import { filterExtras, followMenu, type ShellItem, type ShellMenu } from "./shellmenu";
@@ -20,14 +20,6 @@
       default:
         return d.note ?? "Can't be read";
     }
-  }
-
-  function fmtBytes(v: number): string {
-    const TB = 2 ** 40;
-    const GB = 2 ** 30;
-    if (v >= TB) return (v / TB).toFixed(2) + " TB";
-    const gb = v / GB;
-    return (gb >= 10 ? Math.round(gb).toString() : gb.toFixed(1)) + " GB";
   }
 
   let ctx = $state<{ x: number; y: number; at: { x: number; y: number }; path: string } | null>(null);
@@ -177,7 +169,7 @@
             <span class="bar" class:low={d.free < d.total * 0.1}>
               <span class="fill" style="width: {Math.min(100, used * 100)}%"></span>
             </span>
-            <span class="free">{fmtBytes(d.free)} {msg("free of")} {fmtBytes(d.total)}{d.read_only ? " · Read-only" : ""}</span>
+            <span class="free">{fmtSizeAuto(d.free)} {msg("free of")} {fmtSizeAuto(d.total)}{d.read_only ? " · Read-only" : ""}</span>
           {:else}
             <span class="free state" title={d.note ?? ""}>{stateText(d)}</span>
           {/if}
