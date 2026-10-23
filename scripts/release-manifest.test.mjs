@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { makeManifest, verifySignature } from "./make-latest-json.mjs";
+import { checkReleaseTree, makeManifest, verifySignature } from "./make-latest-json.mjs";
 
 function fixture() {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
@@ -38,6 +38,27 @@ test("manifest accepts the exact signed installer and rejects stale, changed or 
     assert.throws(() => makeManifest(options), /verification failed/);
     writeFileSync(join(dir, "Filezy_0.0.9_x64-setup.exe"), f.bytes);
     assert.throws(() => makeManifest(options), /Expected only/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("release tree must be clean and HEAD tagged with the version", () => {
+  const dir = mkdtempSync(join(tmpdir(), "filezy-release-tree-"));
+  try {
+    const git = (...args) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", ...args], { cwd: dir, stdio: "pipe" });
+    git("init", "-q");
+    writeFileSync(join(dir, "a.txt"), "a");
+    git("add", "a.txt");
+    git("commit", "-q", "-m", "first");
+    assert.throws(() => checkReleaseTree("0.1.0", dir), /not tagged v0\.1\.0/);
+    git("tag", "v0.0.9");
+    assert.throws(() => checkReleaseTree("0.1.0", dir), /it has v0\.0\.9/);
+    git("tag", "v0.1.0");
+    checkReleaseTree("0.1.0", dir);
+    writeFileSync(join(dir, "a.txt"), "changed");
+    assert.throws(() => checkReleaseTree("0.1.0", dir), /uncommitted changes/);
+    git("checkout", "-q", "--", "a.txt");
+    writeFileSync(join(dir, "new.txt"), "untracked");
+    assert.throws(() => checkReleaseTree("0.1.0", dir), /uncommitted changes/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

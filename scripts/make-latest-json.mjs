@@ -1,8 +1,10 @@
-// Match the installer, Minisign signature and release version before publishing.
+// Match the installer, Minisign signature and release version before publishing,
+// and refuse a working tree that isn't the clean, tagged release commit.
 import { readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createHash, createPublicKey, verify } from "node:crypto";
+import { execFileSync } from "node:child_process";
 
 export function verifySignature(bytes, signature, publicKey) {
   const decode = (value) => {
@@ -58,12 +60,25 @@ export function makeManifest({ dir, version, publicKey, repo, arch = "x86_64", n
   };
 }
 
+/// A release is built from exactly what its tag names: no uncommitted or
+/// untracked files, and HEAD tagged v<version>.
+export function checkReleaseTree(version, cwd = ".") {
+  const git = (...args) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const dirty = git("status", "--porcelain").trim();
+  if (dirty) throw new Error(`The working tree has uncommitted changes; release from a clean checkout:\n${dirty}`);
+  const tags = git("tag", "--points-at", "HEAD").split(/\r?\n/).filter(Boolean);
+  if (!tags.includes(`v${version}`)) {
+    throw new Error(`HEAD is not tagged v${version}${tags.length ? ` (it has ${tags.join(", ")})` : ""}; tag the release commit first.`);
+  }
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
     const conf = JSON.parse(readFileSync("src-tauri/tauri.conf.json", "utf8"));
     const pkg = JSON.parse(readFileSync("package.json", "utf8"));
     const cargo = readFileSync("src-tauri/Cargo.toml", "utf8").match(/^version\s*=\s*"([^"]+)"/m)?.[1];
     if (pkg.version !== conf.version || cargo !== conf.version) throw new Error("Package, Cargo and Tauri versions must match.");
+    checkReleaseTree(conf.version);
     const manifest = makeManifest({ dir: process.env.FILEZY_BUNDLE_DIR ?? "src-tauri/target/release/bundle/nsis",
       version: conf.version, publicKey: conf.plugins.updater.pubkey, repo: process.env.FILEZY_REPO ?? "ShreyanshVaibhaw/Filezy",
       arch: process.env.FILEZY_ARCH ?? "x86_64", notes: process.argv[2] });

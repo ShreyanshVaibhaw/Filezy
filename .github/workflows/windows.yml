@@ -6,12 +6,14 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+# A newer push to the same branch or pull request replaces a run still going.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   windows-x64:
     runs-on: windows-2022
     timeout-minutes: 60
-    env:
-      CARGO_BUILD_JOBS: 1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,14 +21,24 @@ jobs:
           node-version: 24
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
       - run: npm ci
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      # Menu ids, svelte-check, node tests, the frontend build (dist, which the
+      # Rust build embeds) and the Rust tests.
       - run: npm run verify
+      - run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      # Also proves the test-only code behind the e2e feature still compiles.
+      - run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --features e2e -- -D warnings
       # Packaging CI has no release signing key. Signed updates must also pass
       # release:manifest's verification before a release is published.
-      - run: npm run tauri -- build --bundles nsis --config src-tauri/tauri.ci.conf.json
+      # verify already built dist, so the build skips the frontend step.
+      - run: npm run tauri -- build --bundles nsis --config src-tauri/tauri.ci.conf.json --config '{"build":{"beforeBuildCommand":null}}'
+        shell: bash
       - uses: actions/upload-artifact@v4
         with:
           name: filezy-windows-x64
