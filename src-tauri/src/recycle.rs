@@ -5,7 +5,7 @@
 use serde::Serialize;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::HWND;
-use windows::Win32::System::Com::{CoInitializeEx, CoTaskMemFree, COINIT_APARTMENTTHREADED};
+use windows::Win32::System::Com::CoTaskMemFree;
 use windows::Win32::UI::Shell::Common::{ITEMIDLIST, STRRET};
 use windows::Win32::UI::Shell::{
     IShellFolder, IShellFolder2, SHEmptyRecycleBinW, SHGetDesktopFolder, StrRetToStrW, SHCONTF_FOLDERS,
@@ -32,10 +32,6 @@ pub struct RecycleList {
 /// Rows the page shows at most; the rest are counted and reported.
 const LIST_MAX: usize = 5000;
 
-thread_local! {
-    static COM_INIT: () = unsafe { let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED); };
-}
-
 const BIN: &str = "::{645FF040-5081-101B-9F08-00AA002F954E}";
 
 fn strret(sr: &mut STRRET, pidl: *const ITEMIDLIST) -> String {
@@ -51,7 +47,7 @@ fn strret(sr: &mut STRRET, pidl: *const ITEMIDLIST) -> String {
 }
 
 fn bin_folder() -> Result<IShellFolder, String> {
-    COM_INIT.with(|_| {});
+    crate::com::sta();
     unsafe {
         let desktop = SHGetDesktopFolder().map_err(|e| e.message().to_string())?;
         let w: Vec<u16> = BIN.encode_utf16().chain(std::iter::once(0)).collect();
@@ -190,6 +186,6 @@ pub fn delete(ids: &[String], owner: isize) -> Result<usize, String> {
 
 /// Native empty-bin flow: Windows shows its own confirmation and progress UI.
 pub fn empty(owner: isize) -> Result<(), String> {
-    COM_INIT.with(|_| {});
+    crate::com::sta();
     unsafe { SHEmptyRecycleBinW(Some(HWND(owner as *mut _)), PCWSTR::null(), 0).map_err(|e| e.message().to_string()) }
 }

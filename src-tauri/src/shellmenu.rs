@@ -12,7 +12,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
 use windows::core::{Interface, PCSTR, PCWSTR};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
-use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
 use windows::Win32::UI::Shell::Common::ITEMIDLIST;
 use windows::Win32::UI::Shell::{
     IContextMenu, IContextMenu2, IContextMenu3, IShellFolder, ILClone, ILFindLastID, ILFree, ILIsEqual, ILRemoveLastID,
@@ -188,7 +187,7 @@ impl Default for ShellMenu {
         std::thread::spawn(move || {
             unsafe {
                 if windows::Win32::System::Ole::OleInitialize(None).is_err() {
-                    let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+                    crate::com::sta();
                 }
             }
             let mut current: Option<Current> = None;

@@ -65,7 +65,7 @@ pub fn run<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Result<
     std::thread::spawn(move || {
         unsafe {
             if windows::Win32::System::Ole::OleInitialize(None).is_err() {
-                let _ = windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_APARTMENTTHREADED);
+                crate::com::sta();
             }
         }
         let r = f();

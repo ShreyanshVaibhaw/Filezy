@@ -3,7 +3,7 @@
 //! and puts new items in the library's default save location, as Explorer does.
 use crate::paths;
 use windows::core::HSTRING;
-use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, STGM_READ};
+use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER, STGM_READ};
 use windows::Win32::UI::Shell::{
     IShellItem, IShellItemArray, IShellLibrary, SHCreateItemFromParsingName, ShellLibrary, DSFT_DETECT, LFF_FORCEFILESYSTEM,
     SIGDN_FILESYSPATH,
@@ -13,9 +13,9 @@ pub fn is_library(path: &str) -> bool {
     path.to_lowercase().ends_with(".library-ms")
 }
 
+/// Call in the multithreaded apartment (crate::com::mta).
 fn load(file: &str) -> Result<IShellLibrary, String> {
     unsafe {
-        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
         let lib: IShellLibrary = CoCreateInstance(&ShellLibrary, None, CLSCTX_INPROC_SERVER).map_err(|e| e.message())?;
         let item: IShellItem = SHCreateItemFromParsingName(&HSTRING::from(file), None).map_err(|e| e.message())?;
         lib.LoadLibraryFromItem(&item, STGM_READ.0).map_err(|_| format!("'{}' isn't a library Windows can read.", paths::file_name(file)))?;
@@ -25,6 +25,10 @@ fn load(file: &str) -> Result<IShellLibrary, String> {
 
 /// The library's folders that exist on disk, in the library's order.
 pub fn folders(file: &str) -> Result<Vec<String>, String> {
+    crate::com::mta(|| folders_in_mta(file))
+}
+
+fn folders_in_mta(file: &str) -> Result<Vec<String>, String> {
     let lib = load(file)?;
     unsafe {
         let all: IShellItemArray = lib.GetFolders(LFF_FORCEFILESYSTEM).map_err(|e| e.message())?;
@@ -42,6 +46,10 @@ pub fn folders(file: &str) -> Result<Vec<String>, String> {
 
 /// Where New folder, paste and drops go: the library's default save location.
 pub fn save_folder(file: &str) -> Result<String, String> {
+    crate::com::mta(|| save_folder_in_mta(file))
+}
+
+fn save_folder_in_mta(file: &str) -> Result<String, String> {
     let lib = load(file)?;
     let none = || format!("The library '{}' has no folder to save to. Add one in its properties.", paths::file_name(file));
     unsafe {

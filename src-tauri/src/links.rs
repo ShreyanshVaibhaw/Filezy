@@ -3,19 +3,13 @@
 use crate::fs_list::wide;
 use crate::paths;
 use windows::core::{Interface, PCWSTR};
-use windows::Win32::System::Com::{
-    CoCreateInstance, CoInitializeEx, IPersistFile, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
-};
+use windows::Win32::System::Com::{CoCreateInstance, IPersistFile, CLSCTX_INPROC_SERVER};
 use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
-
-thread_local! {
-    static COM_INIT: () = unsafe { let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED); };
-}
 
 /// Where a shortcut points, or None when it points at something that isn't a
 /// file or folder (a Control Panel item, say).
 pub fn target(path: &str) -> Option<String> {
-    COM_INIT.with(|_| {});
+    crate::com::sta();
     unsafe {
         let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER).ok()?;
         let w = wide(path);
@@ -47,7 +41,7 @@ fn free_name(dest: &str, target: &str) -> String {
 
 /// Create one shortcut per target in `dest`; returns the shortcut paths made.
 pub fn create(targets: &[String], dest: &str) -> Result<Vec<String>, String> {
-    COM_INIT.with(|_| {});
+    crate::com::sta();
     let err = |e: windows::core::Error| e.message().to_string();
     let mut made = Vec::new();
     unsafe {

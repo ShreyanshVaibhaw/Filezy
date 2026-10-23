@@ -14,7 +14,7 @@ use windows::Win32::System::Com::StructuredStorage::{
     InitPropVariantFromStringAsVector, InitPropVariantFromStringVector, PropVariantChangeType, PropVariantClear,
     PROPVARIANT, PROPVAR_CHANGE_FLAGS,
 };
-use windows::Win32::System::Com::{CoInitializeEx, CoTaskMemFree, COINIT_APARTMENTTHREADED};
+use windows::Win32::System::Com::CoTaskMemFree;
 use windows::Win32::System::Variant::{VT_EMPTY, VT_LPWSTR, VT_UI4, VT_VECTOR};
 use windows::Win32::UI::Shell::PropertiesSystem::{
     IPropertyDescription, IPropertyStore, IPropertyStoreCapabilities, PSCoerceToCanonicalValue,
@@ -43,7 +43,7 @@ pub fn is_prop(key: &str) -> bool {
 fn pkey(key: &str) -> Option<PROPERTYKEY> {
     static KEYS: OnceLock<HashMap<&'static str, PROPERTYKEY>> = OnceLock::new();
     // The property system needs COM on the calling thread.
-    COM_INIT.with(|_| {});
+    crate::com::sta();
     KEYS.get_or_init(|| {
         PROPS
             .iter()
@@ -74,12 +74,8 @@ impl Pv {
     }
 }
 
-thread_local! {
-    static COM_INIT: () = unsafe { let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED); };
-}
-
 fn store(path: &str, write: bool) -> Option<IPropertyStore> {
-    COM_INIT.with(|_| {});
+    crate::com::sta();
     let w = wide(path);
     let open = || unsafe { SHGetPropertyStoreFromParsingName(PCWSTR(w.as_ptr()), None, if write { GPS_READWRITE } else { GPS_DEFAULT }) };
     // Thumbnailers, the indexer and virus scanners hold a new or changed file
@@ -165,7 +161,7 @@ pub struct CloudState {
 pub fn cloud_states(paths: &[String]) -> Vec<Option<CloudState>> {
     use windows::Win32::UI::Shell::{IShellFolder2, IShellItem, SHCreateItemFromParsingName, BHID_SFObject};
     static KEY: OnceLock<Option<PROPERTYKEY>> = OnceLock::new();
-    COM_INIT.with(|_| {});
+    crate::com::sta();
     let Some(key) = KEY
         .get_or_init(|| {
             let mut pk = PROPERTYKEY::default();

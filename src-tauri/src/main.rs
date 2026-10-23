@@ -4,6 +4,7 @@ mod archive;
 mod caption;
 mod clip;
 mod cloud;
+mod com;
 mod drives;
 mod droptarget;
 mod e2edrag;

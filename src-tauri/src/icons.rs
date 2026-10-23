@@ -8,7 +8,6 @@ use windows::Win32::Graphics::Gdi::{
     DIB_RGB_COLORS,
 };
 use windows::Win32::Storage::FileSystem::{FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL};
-use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
 use windows::Win32::UI::Shell::{
     SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_SMALLICON, SHGFI_TYPENAME,
     SHGFI_USEFILEATTRIBUTES,
@@ -24,10 +23,6 @@ pub struct ExtMeta {
 }
 
 static EXT_CACHE: Mutex<Option<HashMap<String, ExtMeta>>> = Mutex::new(None);
-
-thread_local! {
-    static COM_INIT: () = unsafe { let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED); };
-}
 
 /// Icon + friendly type name for an extension, resolved without touching disk.
 pub fn ext_meta(ext: &str, is_dir: bool) -> ExtMeta {
@@ -71,7 +66,7 @@ fn image_of(path: &str, size: i32, icon_only: bool) -> Option<String> {
         IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF, SIIGBF_BIGGERSIZEOK,
         SIIGBF_ICONONLY,
     };
-    COM_INIT.with(|_| {});
+    crate::com::sta();
     unsafe {
         let wpath = wide(path);
         let factory: IShellItemImageFactory =
@@ -145,7 +140,7 @@ fn encode_png(rgba: &[u8], w: u32, h: u32) -> Option<String> {
 }
 
 fn shell_info(path: &str, attrs: u32, by_attr: bool) -> ExtMeta {
-    COM_INIT.with(|_| {});
+    crate::com::sta();
     let wpath = wide(path);
     let mut sfi = SHFILEINFOW::default();
     let mut flags = SHGFI_ICON | SHGFI_SMALLICON | SHGFI_TYPENAME;

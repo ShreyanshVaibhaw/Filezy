@@ -2,7 +2,6 @@
 //! reach ordinary filesystem APIs. Copies use the existing shell operation log.
 use serde::Serialize;
 use windows::core::HSTRING;
-use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED};
 use windows::Win32::System::SystemServices::{SFGAO_CANCOPY, SFGAO_FILESYSTEM, SFGAO_FOLDER};
 use windows::Win32::UI::Shell::{
     IEnumShellItems, IShellItem, SHCreateItemFromParsingName, BHID_EnumItems,
@@ -16,14 +15,12 @@ pub struct Item { pub name: String, pub path: String, pub folder: bool, pub copy
 #[derive(Serialize)]
 pub struct Folder { pub name: String, pub parent: Option<String>, pub items: Vec<Item>, pub capped: bool }
 
-struct ComGuard(bool);
-impl Drop for ComGuard {
-    fn drop(&mut self) { if self.0 { unsafe { CoUninitialize(); } } }
+pub fn list(path: &str, devices_only: bool) -> Result<Folder, String> {
+    crate::com::mta(|| list_in_mta(path, devices_only))
 }
 
-pub fn list(path: &str, devices_only: bool) -> Result<Folder, String> {
+fn list_in_mta(path: &str, devices_only: bool) -> Result<Folder, String> {
     unsafe {
-        let _com = ComGuard(CoInitializeEx(None, COINIT_MULTITHREADED).is_ok());
         let root: IShellItem = SHCreateItemFromParsingName(&HSTRING::from(path), None).map_err(|e| e.message())?;
         let name = crate::ops::item_path(&root, SIGDN_NORMALDISPLAY);
         let parent = root.GetParent().ok().map(|p| crate::ops::item_path(&p, SIGDN_DESKTOPABSOLUTEPARSING)).filter(|p| !p.is_empty());

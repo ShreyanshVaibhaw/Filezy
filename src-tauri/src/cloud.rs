@@ -15,10 +15,7 @@ pub struct Root {
 
 /// This user's sync roots; %OneDrive% when no provider registered any.
 pub fn roots() -> Vec<Root> {
-    unsafe {
-        let _ = windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_MULTITHREADED);
-    }
-    let mut out: Vec<Root> = registered().unwrap_or_default();
+    let mut out: Vec<Root> = crate::com::mta(registered).unwrap_or_default();
     out.retain(|r| std::path::Path::new(&r.path).is_dir());
     out.sort_by_key(|r| r.name.to_lowercase());
     if out.is_empty() {

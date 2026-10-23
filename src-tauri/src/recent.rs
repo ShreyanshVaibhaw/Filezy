@@ -3,10 +3,7 @@
 use crate::fs_list::wide;
 use serde::Serialize;
 use windows::core::{Interface, PCWSTR};
-use windows::Win32::System::Com::{
-    CoCreateInstance, CoInitializeEx, IPersistFile, CLSCTX_INPROC_SERVER,
-    COINIT_APARTMENTTHREADED, STGM_READ,
-};
+use windows::Win32::System::Com::{CoCreateInstance, IPersistFile, CLSCTX_INPROC_SERVER, STGM_READ};
 use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
 
 #[derive(Serialize)]
@@ -15,10 +12,6 @@ pub struct RecentFile {
     pub path: String,
     pub ext: String,
     pub modified: i64,
-}
-
-thread_local! {
-    static COM_INIT: () = unsafe { let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED); };
 }
 
 fn resolve_lnk(link: &IShellLinkW, lnk_path: &str) -> Option<String> {
@@ -60,7 +53,7 @@ fn shortcuts() -> Vec<(std::path::PathBuf, std::time::SystemTime)> {
 }
 
 fn shell_link() -> Option<IShellLinkW> {
-    COM_INIT.with(|_| {});
+    crate::com::sta();
     unsafe { CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER) }.ok()
 }
 

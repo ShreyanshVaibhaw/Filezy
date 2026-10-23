@@ -24,7 +24,7 @@ use windows::core::{w, Interface, GUID, HSTRING, PWSTR};
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{CreateSolidBrush, DeleteObject, FillRect, HDC};
 use windows::Win32::System::Com::{
-    CLSIDFromString, CoCreateInstance, CoInitializeEx, CLSCTX_LOCAL_SERVER, COINIT_APARTMENTTHREADED, STGM_READ,
+    CLSIDFromString, CoCreateInstance, CLSCTX_LOCAL_SERVER, STGM_READ,
     STGM_SHARE_DENY_NONE,
 };
 use windows::Win32::UI::Shell::Common::{PERCEIVED, PERCEIVED_TYPE_IMAGE, PERCEIVED_TYPE_TEXT, PERCEIVED_TYPE_VIDEO};
@@ -317,9 +317,7 @@ fn send(req: Req) {
 // ponytail: a handler that never returns from DoPreview holds this thread and
 // every later preview; starting a fresh thread after a timeout fixes that if it happens.
 fn run(rx: Receiver<Req>) {
-    unsafe {
-        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-    }
+    crate::com::sta();
     let mut current: Option<IPreviewHandler> = None;
     let unload = |h: &mut Option<IPreviewHandler>| {
         if let Some(h) = h.take() {

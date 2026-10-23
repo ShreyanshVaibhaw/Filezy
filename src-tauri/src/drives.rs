@@ -45,7 +45,7 @@ pub fn list() -> Vec<Drive> {
             let letter = (b'A' + i) as char;
             let (tx, rx) = mpsc::channel();
             std::thread::spawn(move || {
-                unsafe { let _ = windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_APARTMENTTHREADED); }
+                crate::com::sta();
                 let _ = tx.send(query(letter));
             });
             (letter, rx)
@@ -241,7 +241,7 @@ pub fn watch(app: AppHandle) {
         }
     }
     std::thread::spawn(|| unsafe {
-        let _ = windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_APARTMENTTHREADED);
+        crate::com::sta();
         let inst = GetModuleHandleW(None).unwrap_or_default();
         let class = WNDCLASSW { lpfnWndProc: Some(proc), hInstance: inst.into(), lpszClassName: w!("FilezyDevices"), ..Default::default() };
         RegisterClassW(&class);
@@ -313,7 +313,7 @@ pub fn network(wait: Duration) -> Vec<Place> {
             BHID_EnumItems, FOLDERID_NetworkFolder, IEnumShellItems, IShellItem, SHGetKnownFolderItem, KF_FLAG_DEFAULT,
             SIGDN_DESKTOPABSOLUTEPARSING, SIGDN_NORMALDISPLAY,
         };
-        let _ = windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_APARTMENTTHREADED);
+        crate::com::sta();
         let Ok(net) = SHGetKnownFolderItem::<IShellItem>(&FOLDERID_NetworkFolder, KF_FLAG_DEFAULT, None) else { return };
         let Ok(items) = net.BindToHandler::<_, IEnumShellItems>(None, &BHID_EnumItems) else { return };
         let text = |p: windows::core::PWSTR| {
