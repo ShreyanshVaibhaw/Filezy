@@ -9,6 +9,8 @@
 //   npm run test:e2e -- nav undo         only tests whose name contains a filter
 //   npm run test:e2e -- --keep           keep the temp folder for inspection
 //   npm run test:e2e -- --perf           also run the slow performance measurements
+//   npm run test:e2e -- --no-input       skip tests that take the foreground or
+//                                        replace the clipboard (safe while someone works)
 //
 // Build first: `npm run build:e2e` (or `npm run build:e2e -- --debug`), which
 // writes to src-tauri/target-e2e. The hooks the runner drives exist only in that
@@ -42,6 +44,7 @@ import { E2E_TARGET } from "../build-e2e.mjs";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const has = (f) => args.includes(f);
+const noInput = has("--no-input");
 const filters = args.filter((a) => !a.startsWith("--"));
 const exeArg = args.find((a) => a.startsWith("--exe="))?.slice(6);
 const exe = path.resolve(exeArg ?? path.join(E2E_TARGET, has("--debug") ? "debug" : "release", "filezy.exe"));
@@ -236,6 +239,7 @@ const t = {
    * forward (by process id, never by title, so another Filezy can't be hit).
    */
   async foreground() {
+    if (noInput) t.skip("takes the foreground (run without --no-input)");
     if (foregrounded) return;
     await t.psCmd(`(New-Object -ComObject WScript.Shell).AppActivate(${proc.pid}) | Out-Null`);
     await sleep(150);
@@ -434,6 +438,7 @@ const t = {
    * Retried because other programs on a test machine can replace the clipboard.
    */
   async copyAsPath() {
+    if (noInput) t.skip("replaces the clipboard (run without --no-input)");
     let text = "";
     for (let i = 0; i < 4 && !text; i++) {
       await cdp.ev(`__e2e.withSel((sel) => __e2e.invoke("copy_as_path", { sel }))`);
@@ -453,6 +458,7 @@ const t = {
    * the clipboard: other programs on a test machine can replace it any time.
    */
   async copyToClipboard(cut = false) {
+    if (noInput) t.skip("replaces the clipboard (run without --no-input)");
     const want = (await t.selectedNames()).length;
     for (let i = 0; i < 4; i++) {
       await t.call("copySel", cut);
@@ -465,6 +471,7 @@ const t = {
 
   /** Set the clipboard from another process (clip.ps1 `args`) until the page sees `cond`. */
   async setClipboard(args, cond) {
+    if (noInput) t.skip("replaces the clipboard (run without --no-input)");
     for (let i = 0; ; i++) {
       await t.ps("clip.ps1", ...args);
       try {

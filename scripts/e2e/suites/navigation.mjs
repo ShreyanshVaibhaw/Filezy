@@ -166,4 +166,45 @@ export default [
       t.ok((await t.ev("__e2e.app.status")).includes("can't find"), "says why");
     },
   },
+  {
+    name: "an expanded folder in the navigation pane is listed once, not over and over",
+    async run(t) {
+      await t.ev(`(() => {
+        window.__listDirs = 0;
+        if (window.__fetchWrapped) return;
+        const f = window.fetch;
+        window.fetch = function (u) {
+          if (String(u).includes("ipc.localhost/list_dirs")) window.__listDirs++;
+          return f.apply(this, arguments);
+        };
+        window.__fetchWrapped = true;
+      })()`);
+      // A drive root's key is like "C:" plus a backslash: three characters.
+      const drive = `[...document.querySelectorAll(".navpane .navitem")].find((b) => b.dataset.key?.length === 3 && b.dataset.key[1] === ":")`;
+      t.ok(await t.ev(`!!${drive}`), "a drive in the tree");
+      const toggle = `${drive}.querySelector(".chev").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }))`;
+      await t.ev(toggle);
+      await t.waitFor(`document.querySelectorAll('.navpane .navitem[data-level="3"]').length > 0`, 10000, "the drive's folders listed");
+      await t.sleep(1500);
+      const calls = await t.ev("window.__listDirs");
+      await t.ev(toggle);
+      t.ok(calls <= 2, `list_dirs ran ${calls} times in 1.5 s`);
+    },
+  },
+  {
+    name: "a closed tab comes back with Reopen closed tab",
+    async run(t) {
+      const d = t.dir("reopen-tab");
+      t.mk(path.join(d, "here.txt"));
+      await t.call("newTab", d);
+      await t.settle();
+      await t.ev("__e2e.closeTab(__e2e.app.activeTab)");
+      await t.settle();
+      t.ok((await t.ev("__e2e.app.path")) !== d, "the tab closed");
+      await t.call("reopenClosedTab");
+      await t.waitFor(`__e2e.app.path === ${JSON.stringify(d)}`, 5000, "reopened on its folder");
+      await t.settle();
+      t.eq(await t.names(), ["here.txt"], "and lists it");
+    },
+  },
 ];

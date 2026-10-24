@@ -31,7 +31,9 @@ function syncRoots() {
 async function testCloud(t, rel) {
   if (!fs.existsSync(PROVIDER)) throw new Error(`missing ${PROVIDER}\nbuild it with: npm run build:e2e`);
   execFileSync(PROVIDER, ["clean", PREFIX], { windowsHide: true });
-  const sid = execFileSync("whoami.exe", ["/user", "/fo", "csv", "/nh"], { windowsHide: true, encoding: "utf8" }).trim().split(",").pop().replace(/"/g, "");
+  // Windows' own whoami by full path: under Git Bash, PATH finds coreutils' whoami first.
+  const whoami = path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "whoami.exe");
+  const sid = execFileSync(whoami, ["/user", "/fo", "csv", "/nh"], { windowsHide: true, encoding: "utf8" }).trim().split(",").pop().replace(/"/g, "");
   const dir = t.dir(rel);
   const p = spawn(PROVIDER, ["start", `${PREFIX}${sid}!${t.token}`, dir], { windowsHide: true });
   let err = "";

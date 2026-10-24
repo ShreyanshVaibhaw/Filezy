@@ -196,4 +196,61 @@ export default [
       }
     },
   },
+  {
+    name: "New > Text Document makes an empty file and opens its rename box",
+    async run(t) {
+      const d = t.dir("new-text");
+      t.mk(path.join(d, "a.txt"), "a");
+      await t.nav(d);
+      await t.call("loadNewItems");
+      await t.waitFor("!!__e2e.newItems.list", 5000, "the New menu's types");
+      t.ok(await t.ev("__e2e.newItems.list.some((i) => i.ext === 'txt')"), "Text Document is offered");
+      t.ok(await t.ev("!__e2e.newItems.list.some((i) => i.ext === 'lnk' || i.ext === 'library-ms')"), "no handler-only types");
+      await t.call("newFile", "txt");
+      await t.waitFor("__e2e.app.renaming >= 0", 5000, "rename box");
+      const made = fs.readdirSync(d).find((f) => f !== "a.txt");
+      t.ok(made && made.endsWith(".txt"), `made ${made}`);
+      t.eq(fs.statSync(path.join(d, made)).size, 0, "empty");
+      t.eq(await t.ev("__e2e.rowAt(__e2e.app.renaming)?.name"), made, "the box is on the new file");
+      await t.ev("__e2e.app.renaming = -1");
+    },
+  },
+  {
+    name: "a saved workspace can't be renamed to a name another one has",
+    async run(t) {
+      await t.ev(`(() => { __e2e.saved.workspaces.length = 0; __e2e.saved.workspaces.push({ name: "Work", tabs: ["C:\\\\"] }, { name: "Play", tabs: ["C:\\\\"] }); })()`);
+      const done = t.ev("__e2e.renameSaved('workspaces', 1)");
+      await t.waitFor("__e2e.dialog.ask?.value === 'Play'", 3000, "the rename prompt");
+      await t.ev(`(() => { const i = document.querySelector("dialog input"); i.value = "work"; i.dispatchEvent(new Event("input", { bubbles: true })); document.querySelector("dialog .btn.primary").click(); })()`);
+      await done;
+      t.eq(await t.ev("__e2e.saved.workspaces.map((w) => w.name)"), ["Work", "Play"], "both keep their names");
+      t.ok((await t.ev("__e2e.app.status")).includes("already one named"), "says why");
+      await t.ev("__e2e.saved.workspaces.length = 0");
+    },
+  },
+  {
+    name: "switching Copy off in Settings takes it off the item menu",
+    async run(t) {
+      const d = t.dir("menu-switch");
+      t.mk(path.join(d, "a.txt"), "a");
+      await t.nav(d);
+      await t.select(["a.txt"]);
+      const copyShown = async () => {
+        await t.ev("__e2e.hooks.contextMenu()");
+        await t.waitFor("!!document.querySelector('.ctxmenu')", 3000, "item menu");
+        const shown = await t.ev(`!!document.querySelector('.ctxmenu button[aria-label="Copy"]')`);
+        await t.ev("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
+        await t.ev("document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))");
+        await t.waitFor("!document.querySelector('.ctxmenu')", 3000, "menu closed");
+        return shown;
+      };
+      t.ok(await copyShown(), "Copy is on by default");
+      await t.call("setMenuOn", "file.copy", false);
+      try {
+        t.ok(!(await copyShown()), "switched off, it's gone");
+      } finally {
+        await t.call("setMenuOn", "file.copy", true);
+      }
+    },
+  },
 ];

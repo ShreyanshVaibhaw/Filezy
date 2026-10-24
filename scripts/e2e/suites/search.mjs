@@ -367,4 +367,25 @@ export default [
       }
     },
   },
+  {
+    name: "renaming inside search results keeps the results and selects the renamed item",
+    async run(t) {
+      const d = t.dir("search-rename");
+      t.mk(path.join(d, "sub", "todo.txt"), "t");
+      t.mk(path.join(d, "other.txt"), "o");
+      t.mk(path.join(d, "unrelated.md"), "u");
+      await t.nav(d);
+      await t.call("startSearch", "txt");
+      await t.waitFor("__e2e.app.search?.done", 30000, "search finished");
+      await t.settle();
+      t.eq((await t.names()).sort(), ["other.txt", "todo.txt"], "the results");
+      await t.select(["todo.txt"]);
+      await t.ev(`__e2e.commitRename([...__e2e.sel][0], "done.txt")`);
+      await t.waitFor("__e2e.app.search?.done && __e2e.idle()", 30000, "the search ran again");
+      t.ok(fs.existsSync(path.join(d, "sub", "done.txt")), "renamed on disk");
+      t.eq(await t.ev("__e2e.app.search?.query"), "txt", "still a search");
+      t.eq((await t.names()).sort(), ["done.txt", "other.txt"], "the results, not the folder");
+      t.eq(await t.selectedNames(), ["done.txt"], "the renamed item is selected");
+    },
+  },
 ];

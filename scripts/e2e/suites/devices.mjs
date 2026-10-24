@@ -85,12 +85,32 @@ export default [
     name: "Map network drive opens Windows' own dialog, and closing it changes nothing",
     async run(t) {
       await t.nav("::ThisPC");
-      const before = await t.ev("__e2e.app.drives.length");
+      const paths = () => t.ev("__e2e.app.drives.map((d) => d.path)");
+      const before = await paths();
       await t.click(".cbtn", { where: { title: "See more" } });
       await t.click(".menu-item", { where: { has: "Map network drive" } });
       await t.uia("-Window", "Map Network Drive", "-Close");
       await t.sleep(500);
-      t.eq(await t.ev("__e2e.app.drives.length"), before, "no drive added");
+      // A letter an earlier test made can still be going away; only a new one counts.
+      const added = (await paths()).filter((p) => !before.includes(p));
+      t.eq(added, [], "no drive added");
+    },
+  },
+  {
+    name: "the device adapter lists shell items by identity, keeps device views read-only and explains a missing device",
+    async run(t) {
+      const d = t.dir("dev-shell");
+      t.mk(path.join(d, "example.txt"), "e");
+      const listed = await t.ev(`__e2e.invoke("shell_list", { path: ${JSON.stringify(d)}, devicesOnly: false })`);
+      const item = listed.items.find((i) => i.name === "example.txt");
+      t.ok(item && item.path.endsWith("example.txt") && item.copy, "the item's shell identity and copy capability");
+      await t.call("navigate", "::Devices");
+      await t.waitFor("!__e2e.shellFolder.loading", 10000, "Devices listed");
+      t.ok(await t.ev("!__e2e.can('new') && !__e2e.can('paste') && !__e2e.can('change')"), "nothing in a device view can be changed");
+      t.ok(await t.ev("document.querySelector('.shellpane')?.innerText.includes('unavailable')"), "and the page says so");
+      await t.call("navigate", "::Shell:" + encodeURIComponent("::{00000000-0000-0000-0000-000000000000}"));
+      await t.waitFor("!__e2e.shellFolder.loading", 10000, "the missing device answered");
+      t.ok(await t.ev("__e2e.shellFolder.error.length > 0"), "a device that isn't there gets an error, not an empty list");
     },
   },
 ];

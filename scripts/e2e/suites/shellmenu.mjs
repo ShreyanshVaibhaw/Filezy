@@ -62,6 +62,8 @@ export default [
       await t.nav(d);
       await t.call("selectAll");
       await itemMenu(t);
+      // A fresh process's shell fills Send to after the menu is built; the menu follows it.
+      await t.until(async () => ((await entries(t, ["Send to"])) ?? []).includes("Compressed (zipped) folder"), 15000, "Send to lists Compressed (zipped) folder");
       await pick(t, ["Send to", "Compressed (zipped) folder"]);
       await t.until(() => zipIn(d).length === 1, 30000, "a zip appears");
       t.eq((await t.zipEntries(path.join(d, zipIn(d)[0]))).length, 150, "all 150 items are in it");

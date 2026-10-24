@@ -204,4 +204,28 @@ export default [
       }
     },
   },
+  {
+    name: "dual pane puts this window and a new one side by side, and Copy to the other window copies there",
+    async run(t) {
+      const a = t.dir("ses-dual/a");
+      const b = t.dir("ses-dual/b");
+      t.mk(path.join(a, "file.txt"), "x");
+      await t.nav(a);
+      await t.ev(`__e2e.invoke("split_view", { path: ${JSON.stringify(b)} })`);
+      const w = await t.otherWindow();
+      try {
+        t.eq(low(await w.ev("__e2e.app.path")), low(b), "the new window shows its folder");
+        const rect = (x) => x.ev("Promise.all([__e2e.win.outerPosition(), __e2e.win.outerSize()]).then(([p, s]) => [p.x, p.y, s.width, s.height])");
+        const [l, r] = [await rect(t), await rect(w)];
+        t.ok(l[0] < r[0] && Math.abs(l[1] - r[1]) <= 2 && Math.abs(l[3] - r[3]) <= 2, `side by side: ${l} and ${r}`);
+        await t.select(["file.txt"]);
+        await t.call("sendSelTo", b, false);
+        await t.until(() => fs.existsSync(path.join(b, "file.txt")), 10000, "copied into the other window's folder");
+        t.ok(fs.existsSync(path.join(a, "file.txt")), "and the original stays");
+      } finally {
+        await w.ev("void __e2e.closeTab(__e2e.app.activeTab)").catch(() => {});
+        w.close();
+      }
+    },
+  },
 ];

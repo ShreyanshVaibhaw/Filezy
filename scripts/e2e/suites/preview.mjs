@@ -281,7 +281,7 @@ export default [
       await t.nav(d);
       await withPane(t, async () => {
         await t.select(["pages.pdf"]);
-        await t.waitFor(`document.querySelector(".preview iframe.pdf")?.src.startsWith("http://asset.localhost/")`, 5000, "the PDF's frame");
+        await t.waitFor(`document.querySelector(".preview iframe.pdf")?.src.startsWith("http://preview.localhost/")`, 5000, "the PDF's frame");
         // Another origin than the app's: the app's page can't reach into it, nor it out.
         await t.sleep(500);
         t.ok(await t.ev(`document.querySelector(".preview iframe.pdf").contentDocument === null`), "the frame is closed to the app's page");

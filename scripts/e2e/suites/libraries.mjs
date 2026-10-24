@@ -57,6 +57,8 @@ export default [
       t.ok(!fs.existsSync(path.join(second, "New folder")), "and only there");
       await t.until(async () => (await t.names()).includes("New folder"), 5000, "listed in the library");
       await t.waitFor("__e2e.app.renaming >= 0", 5000, "its name is ready to type, as after New folder anywhere");
+      // Library rows are keyed by full path; the box must be on the new folder, not the first row.
+      t.eq(await t.ev("__e2e.rowAt(__e2e.app.renaming)?.name"), "New folder", "the rename box is on the new folder");
       await t.ev("__e2e.app.renaming = -1");
       await t.call("startSearch", "needle");
       await t.waitFor("__e2e.app.search?.done", 30000, "search finished");
