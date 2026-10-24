@@ -48,7 +48,7 @@ fn shortcuts() -> Vec<(std::path::PathBuf, std::time::SystemTime)> {
             Some((e.path(), t))
         })
         .collect();
-    lnks.sort_by(|a, b| b.1.cmp(&a.1));
+    lnks.sort_by_key(|a| std::cmp::Reverse(a.1));
     lnks
 }
 
