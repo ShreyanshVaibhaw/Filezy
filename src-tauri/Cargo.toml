@@ -7,7 +7,7 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2.12", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 notify = "8"
@@ -16,8 +16,8 @@ png = "0.17"
 windows-core = "0.62"
 windows-collections = "0.3"
 winreg = "0.55"
-tauri-plugin-updater = "2.10.1"
-tauri-plugin-process = "2.3.1"
+tauri-plugin-updater = "2.14"
+tauri-plugin-process = "2.4"
 # Archives (archive.rs): ZIP read and write, 7z and tar read.
 zip = { version = "9.0.2", default-features = false, features = ["aes-crypto", "bzip2", "deflate", "deflate64", "lzma", "xz", "ppmd"] }
 sevenz-rust2 = { version = "0.24", default-features = false, features = ["bzip2", "ppmd", "deflate"] }
