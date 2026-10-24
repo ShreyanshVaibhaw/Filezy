@@ -1,7 +1,8 @@
 <script lang="ts">
   import { msg } from "./i18n.svelte";
   import { menuKeys } from "./menukeys";
-  import { app, navigate, folderName, pinRemove, movePin, shellIcon, treeDirty, THIS_PC, HOME, RECYCLE, RECYCLE_GUID, NETWORK } from "./store.svelte";
+  import { app, navigate, folderName, pinRemove, movePin, treeDirty, THIS_PC, HOME, RECYCLE, RECYCLE_GUID, NETWORK } from "./store.svelte";
+  import { shellIcon } from "./rowmeta.svelte";
   import { menuOn, settings } from "./settings.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { untrack } from "svelte";

@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { msg } from "./i18n.svelte";
-  import { app, sel, fmtSizeAuto, selStats, setView, stopSearch } from "./store.svelte";
+  import { msg, msgCount } from "./i18n.svelte";
+  import { app, sel, selStats, setView, stopSearch } from "./store.svelte";
+  import { fmtSizeAuto } from "./rowmeta.svelte";
 
   const selN = $derived(app.allSelected ? app.total : sel.size);
   const selSize = $derived(selN && selStats.v?.count === selN ? selStats.v.bytes : 0);
@@ -10,23 +11,23 @@
     const s = app.search;
     if (!s) return "";
     // What covered the search, and what it couldn't: said while it runs, too.
-    const covered = s.provider === "index" ? "Results from the Windows index" : s.note;
-    if (app.searching) return ["Searching…", covered].filter(Boolean).join(". ");
+    const covered = s.provider === "index" ? msg("Results from the Windows index") : s.note;
+    if (app.searching) return [msg("Searching…"), covered].filter(Boolean).join(". ");
     const parts: string[] = [];
-    if (s.stopped) parts.push("Search stopped; these are the results found so far");
-    if (s.capped) parts.push(`Showing the first ${app.total.toLocaleString()} results`);
-    if (s.skipped) parts.push(`${s.skipped.toLocaleString()} folder${s.skipped === 1 ? "" : "s"} couldn't be searched`);
+    if (s.stopped) parts.push(msg("Search stopped; these are the results found so far"));
+    if (s.capped) parts.push(msg("Showing the first {n} results", { n: app.total.toLocaleString() }));
+    if (s.skipped) parts.push(msgCount(s.skipped, "{n} folder couldn't be searched", "{n} folders couldn't be searched"));
     if (covered) parts.push(covered);
     return parts.join(". ");
   });
 </script>
 
 <div class="statusbar">
-  <span class="stat">{app.total.toLocaleString()} {msg("item")}{app.total === 1 ? "" : "s"}</span>
+  <span class="stat">{msgCount(app.total, "{n} item", "{n} items")}</span>
   {#if selN}
     <span class="statsep"></span>
     <span class="stat">
-      {selN.toLocaleString()} {msg("item")}{selN > 1 ? "s" : ""} {msg("selected")}
+      {msgCount(selN, "{n} item selected", "{n} items selected")}
       {#if selSize}&nbsp;{fmtSizeAuto(selSize)}{/if}
     </span>
   {/if}

@@ -12,6 +12,7 @@
     role,
     width,
     busy,
+    class: cls = "",
     onkeydown,
     children,
   }: {
@@ -23,6 +24,8 @@
     width: number;
     /** Still working: screen readers wait for it to settle. */
     busy?: boolean;
+    /** Extra classes, for styles and tests that pick out one dialog. */
+    class?: string;
     /** Keys inside the dialog, before they're kept from the rest of the app. */
     onkeydown?: (ev: KeyboardEvent) => void;
     children: Snippet;
@@ -56,7 +59,7 @@
 
 <dialog
   use:modal
-  class="dlg"
+  class="dlg {cls}"
   style:width="min({width}px, calc(100vw - 32px))"
   {role}
   aria-labelledby={labelledby}

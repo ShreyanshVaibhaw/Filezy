@@ -37,7 +37,7 @@
     </div>
   </form>
   <div class="section">
-    {msg("Computers")}{network.loading ? "" : ` (${network.places.length})`}
+    {network.loading ? msg("Computers") : msg("Computers ({n})", { n: network.places.length })}
     <button class="refresh" title={msg("Look again")} aria-label={msg("Look again")} disabled={network.loading} onclick={loadNetwork}>
       <span class="glyph" aria-hidden="true">&#xE72C;</span>
     </button>

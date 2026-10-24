@@ -40,6 +40,7 @@
 {#if extractDlg.open}
   <Modal
     width={560}
+    class="extractdlg"
     labelledby="ex-title"
     onclose={close}
     onkeydown={(ev) => {

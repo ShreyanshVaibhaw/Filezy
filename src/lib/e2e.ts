@@ -4,15 +4,17 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import * as store from "./store.svelte";
+import * as rowmeta from "./rowmeta.svelte";
 import * as ops from "./ops.svelte";
 import * as selection from "./selection.svelte";
 import * as archive from "./archive.svelte";
-import { settings, setSetting, setTheme } from "./settings.svelte";
+import * as tools from "./tools.svelte";
+import * as saved from "./saved.svelte";
+import { settings, setSetting, setTheme, setMenuOn } from "./settings.svelte";
 import { dialog } from "./ask.svelte";
 import type { Entry } from "./store.svelte";
 import { setMessages } from "./i18n.svelte";
 import { transferTab } from "./tabtransfer";
-import { closeTool } from "./tools.svelte";
 
 let fetching = 0;
 /// Every row of the current listing. A watcher refresh can replace the listing
@@ -38,15 +40,18 @@ invoke<boolean>("e2e_enabled")
     if (!on) return;
     (globalThis as Record<string, unknown>).__e2e = {
       ...store,
+      ...rowmeta,
       ...ops,
       ...selection,
       ...archive,
+      ...tools,
+      ...saved,
       settings,
       setSetting,
       setTheme,
+      setMenuOn,
       setMessages,
       transferTab,
-      closeTool,
       dialog,
       invoke,
       idle: () => store.listingIdle() && !ops.opsBusy() && !fetching,

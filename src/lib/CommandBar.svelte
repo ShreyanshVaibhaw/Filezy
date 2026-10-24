@@ -2,10 +2,11 @@
   import { msg } from "./i18n.svelte";
   import { menuKeys } from "./menukeys";
   import {
-    app, sel, sortBy, setGroup, refresh, toggleHidden, setView, selectAll, loadNewItems, newItems,
-    extMeta, navigate, can, SETTINGS, THIS_PC, NETWORK, loadDrives, applyFilter, setSearchScope, clearSearchHistory, startSearch, clearSearch,
-    selStats, type SearchScope,
+    app, sel, sortBy, setGroup, refresh, toggleHidden, setView, selectAll,
+    navigate, can, SETTINGS, THIS_PC, NETWORK, loadDrives, applyFilter, setSearchScope,
+    clearSearchHistory, startSearch, clearSearch, selStats, type SearchScope,
   } from "./store.svelte";
+  import { loadNewItems, newItems, extMeta } from "./rowmeta.svelte";
   import ShellItems from "./ShellItems.svelte";
   import type { ShellItem } from "./shellmenu";
   import { filterOf } from "./searchquery";

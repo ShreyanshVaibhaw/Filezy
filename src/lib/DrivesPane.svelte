@@ -3,10 +3,11 @@
   import { msg } from "./i18n.svelte";
   import { menuKeys, fitMenu } from "./menukeys";
   import { invoke } from "@tauri-apps/api/core";
-  import { app, navigate, pinAdd, pinRemove, shellIcon, loadDrives, fmtSizeAuto, type Drive } from "./store.svelte";
+  import { app, navigate, pinAdd, pinRemove, loadDrives, type Drive } from "./store.svelte";
+  import { shellIcon, fmtSizeAuto } from "./rowmeta.svelte";
   import { settings, menuOn, anyMenuOn } from "./settings.svelte";
   import ShellItems from "./ShellItems.svelte";
-  import { filterExtras, followMenu, type ShellItem, type ShellMenu } from "./shellmenu";
+  import { nativeMenuAt, streamShellMenu, type ShellItem, type ShellMenu } from "./shellmenu";
 
   /// What a drive that can't be read shows instead of its free space.
   function stateText(d: Drive): string {
@@ -72,19 +73,11 @@
       return;
     }
     // Native entries show instantly; extension entries stream in when ready.
-    invoke<ShellMenu>("shell_menu_paths", { paths: [path] })
-      .then((m) => {
-        if (seq !== ctxSeq || !ctx) return;
-        ctxSession = m.session;
-        ctxNote = m.note ?? "";
-        ctxItems = filterExtras(m.items, NATIVE_VERBS);
-        followMenu(m, () => seq === ctxSeq && !!ctx, (items) => (ctxItems = filterExtras(items, NATIVE_VERBS)));
-      })
-      .catch((e) => {
-        if (seq !== ctxSeq) return;
-        if (String(e) !== "superseded") ctxNote = String(e);
-        ctxItems = [];
-      });
+    streamShellMenu(invoke<ShellMenu>("shell_menu_paths", { paths: [path] }), NATIVE_VERBS, () => seq === ctxSeq && !!ctx, (items, session, note) => {
+      ctxItems = items;
+      ctxSession = session;
+      ctxNote = note;
+    });
   }
 
   /// The drive verbs this page runs itself. False when it isn't one.
@@ -124,15 +117,12 @@
   /// Windows' own menu for the drive ("Show more options").
   async function moreOptions(path: string, at: { x: number; y: number }, extended = false) {
     ctx = null;
-    // Closing our menu hands the focus back to the page; let that land first,
-    // or it arrives while Windows' menu is open and closes it.
-    await new Promise((r) => setTimeout(r, 60));
-    const s = window.devicePixelRatio || 1;
+    const { x, y } = await nativeMenuAt(at);
     try {
       const verb = await invoke<string | null>("shell_menu_native", {
         paths: [path],
-        x: Math.round(at.x * s),
-        y: Math.round(at.y * s),
+        x,
+        y,
         extended,
         handled: [...NATIVE_VERBS],
       });
@@ -146,7 +136,7 @@
 <svelte:window onmousedown={(e) => { if (ctx && !(e.target as HTMLElement).closest(".drivemenu")) ctx = null; }} />
 
 <div class="drivespane">
-  <div class="section">{msg("Devices and drives (")}{app.drives.length})</div>
+  <div class="section">{msg("Devices and drives ({n})", { n: app.drives.length })}</div>
   <div class="tiles">
     {#each app.drives as d (d.path)}
       {@const used = d.total ? (d.total - d.free) / d.total : 0}
@@ -169,7 +159,7 @@
             <span class="bar" class:low={d.free < d.total * 0.1}>
               <span class="fill" style="width: {Math.min(100, used * 100)}%"></span>
             </span>
-            <span class="free">{fmtSizeAuto(d.free)} {msg("free of")} {fmtSizeAuto(d.total)}{d.read_only ? " · Read-only" : ""}</span>
+            <span class="free">{msg("{free} free of {total}", { free: fmtSizeAuto(d.free), total: fmtSizeAuto(d.total) })}{d.read_only ? ` · ${msg("Read-only")}` : ""}</span>
           {:else}
             <span class="free state" title={d.note ?? ""}>{stateText(d)}</span>
           {/if}

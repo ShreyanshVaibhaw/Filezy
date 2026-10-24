@@ -43,6 +43,7 @@
   import ToolDialog from "./lib/ToolDialog.svelte";
   import ShellPane from "./lib/ShellPane.svelte";
   import { isShellLocation } from "./lib/shellplaces";
+  import { shellMenuUsed } from "./lib/shellmenu";
 
   let addressEdit: { focus: () => void; focusSearch: () => void } | undefined = $state();
   trackSelStats();
@@ -84,7 +85,9 @@
     // right-click doesn't pay the multi-second cold QueryContextMenu cost.
     // Pointless when extension entries are switched off in Settings.
     if (settings.shellExtras) {
-      setTimeout(() => invoke("shell_menu_paths", { paths: [app.home] }).catch(() => {}), 2500);
+      // Skipped once a real menu was asked for: the worker keeps one menu, and
+      // this one would replace it, so its entries could no longer be read.
+      setTimeout(() => shellMenuUsed.yes || invoke("shell_menu_paths", { paths: [app.home] }).catch(() => {}), 2500);
     }
     loadDrives();
     invoke<typeof app.specials>("special_dirs").then((s) => (app.specials = s)).catch(() => {});
@@ -290,7 +293,7 @@
     display: flex;
     flex-direction: column;
     /* An opaque base also keeps covered-window captures readable. */
-    background: var(--bg, var(--mica-fallback));
+    background: var(--mica-fallback);
   }
   .content {
     flex: 1;

@@ -6,10 +6,10 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { nativeCaption } from "./caption";
   import {
-    app, tabs, extMeta, folderName, newTab, switchTab, closeTab,
-    duplicateTab, closeOtherTabs, closeTabsRight, shellIcon,
-    HOME, THIS_PC, RECYCLE, SETTINGS, RECYCLE_GUID,
+    app, tabs, folderName, newTab, switchTab, closeTab, duplicateTab, closeOtherTabs,
+    closeTabsRight, HOME, THIS_PC, RECYCLE, SETTINGS, RECYCLE_GUID,
   } from "./store.svelte";
+  import { extMeta, shellIcon } from "./rowmeta.svelte";
   import { menuOn, anyMenuOn } from "./settings.svelte";
   import { dropHover } from "./drag";
   import { isVirtual } from "./paths";

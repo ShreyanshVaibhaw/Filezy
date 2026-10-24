@@ -2,48 +2,13 @@
    No data-theme attribute = System (follows the OS via prefers-color-scheme).
    Opaque bases also work when native capture cannot composite Mica. */
 
+/* Windows 11 Dark and Light are fluent.css's own palette, fixed to one scheme. */
 [data-theme="win11-dark"] {
   color-scheme: dark;
-  --text: #ffffff;
-  --text-2: rgba(255, 255, 255, 0.786);
-  --text-3: rgba(255, 255, 255, 0.55);
-  --text-disabled: rgba(255, 255, 255, 0.36);
-  --mica-fallback: #202020;
-  --card: rgba(255, 255, 255, 0.033);
-  --surface: rgba(255, 255, 255, 0.06);
-  --surface-hover: rgba(255, 255, 255, 0.09);
-  --stroke: rgba(255, 255, 255, 0.07);
-  --stroke-strong: rgba(255, 255, 255, 0.14);
-  --hover: rgba(255, 255, 255, 0.058);
-  --sel: rgba(255, 255, 255, 0.09);
-  --sel-hover: rgba(255, 255, 255, 0.12);
-  --accent: #4cc2ff;
-  --menu-bg: #2c2c2c;
-  --input-bg: rgba(255, 255, 255, 0.06);
-  --close-hover: #c42b1c;
-  --scrollbar: rgba(255, 255, 255, 0.35);
 }
 
 [data-theme="win11-light"] {
   color-scheme: light;
-  --text: #1a1a1a;
-  --text-2: rgba(0, 0, 0, 0.78);
-  --text-3: rgba(0, 0, 0, 0.55);
-  --text-disabled: rgba(0, 0, 0, 0.36);
-  --mica-fallback: #f3f3f3;
-  --card: rgba(255, 255, 255, 0.5);
-  --surface: rgba(255, 255, 255, 0.7);
-  --surface-hover: rgba(249, 249, 249, 0.55);
-  --stroke: rgba(0, 0, 0, 0.06);
-  --stroke-strong: rgba(0, 0, 0, 0.14);
-  --hover: rgba(0, 0, 0, 0.045);
-  --sel: rgba(0, 0, 0, 0.065);
-  --sel-hover: rgba(0, 0, 0, 0.09);
-  --accent: #005fb8;
-  --menu-bg: #f9f9f9;
-  --input-bg: rgba(255, 255, 255, 0.85);
-  --close-hover: #c42b1c;
-  --scrollbar: rgba(0, 0, 0, 0.35);
 }
 
 [data-theme="catppuccin-mocha"] {

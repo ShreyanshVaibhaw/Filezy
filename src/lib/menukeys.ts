@@ -111,7 +111,6 @@ export function menuKeys(node: HTMLElement, close: () => void) {
 export function fitMenu(node: HTMLElement, _key?: unknown) {
   const fit = () => {
     node.style.maxWidth = `${Math.max(0, innerWidth - 8)}px`;
-    node.style.minWidth = `min(200px, calc(100vw - 8px))`;
     node.style.maxHeight = `${innerHeight - 8}px`;
     // A fixed flyout escapes the scrolling parent instead of being clipped.
     // Ordinary submenus are repositioned beside their owning item below.

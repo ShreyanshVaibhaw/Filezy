@@ -3,13 +3,11 @@
      the file's handler can write are edited in place; for several items each
      one reports whether the change took. -->
 <script lang="ts">
-  import { msg } from "./i18n.svelte";
+  import { msg, msgCount } from "./i18n.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { untrack } from "svelte";
-  import {
-    app, rowAt, sel, entryPath, requestMeta, requestThumb, thumbOf, typeOf, fmtDate, fmtSizeAuto,
-    selCount, selRef, folderName, refresh, requestStatus, statusOf, selStats,
-  } from "./store.svelte";
+  import { app, rowAt, sel, entryPath, selCount, selRef, folderName, refresh, selStats } from "./store.svelte";
+  import { requestMeta, requestThumb, thumbOf, typeOf, fmtDate, fmtSizeAuto, requestStatus, statusOf } from "./rowmeta.svelte";
   import type { Entry } from "./store.svelte";
   import { baseName, isArchive } from "./paths";
 
@@ -168,7 +166,7 @@
         <div class="sub">{typeOf(one)}</div>
       {:else}
         <div class="big glyph" aria-hidden="true">&#xE8A9;</div>
-        <div class="name">{count.toLocaleString()} {msg("items selected")}</div>
+        <div class="name">{msgCount(count, "{n} item selected", "{n} items selected")}</div>
       {/if}
     </div>
     <dl class="fields">

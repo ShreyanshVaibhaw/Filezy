@@ -9,24 +9,27 @@
   --icons: "Segoe Fluent Icons", "Segoe MDL2 Assets";
   color-scheme: dark;
 
-  --text: #ffffff;
-  --text-2: rgba(255, 255, 255, 0.786);
-  --text-3: rgba(255, 255, 255, 0.55);
-  --text-disabled: rgba(255, 255, 255, 0.36);
-  --mica-fallback: #202020;
-  --card: rgba(255, 255, 255, 0.033);
-  --surface: rgba(255, 255, 255, 0.06);
-  --surface-hover: rgba(255, 255, 255, 0.09);
-  --stroke: rgba(255, 255, 255, 0.07);
-  --stroke-strong: rgba(255, 255, 255, 0.14);
-  --hover: rgba(255, 255, 255, 0.058);
-  --sel: rgba(255, 255, 255, 0.09);
-  --sel-hover: rgba(255, 255, 255, 0.12);
-  --accent: #4cc2ff;
-  --menu-bg: #2c2c2c;
-  --input-bg: rgba(255, 255, 255, 0.06);
+  /* Windows 11's palette, dark or light by color-scheme: the System theme
+     follows the OS (below), Windows 11 Dark and Light set it (themes.css), and
+     the other themes replace these values outright. */
+  --text: light-dark(#1a1a1a, #ffffff);
+  --text-2: light-dark(rgba(0, 0, 0, 0.78), rgba(255, 255, 255, 0.786));
+  --text-3: light-dark(rgba(0, 0, 0, 0.55), rgba(255, 255, 255, 0.55));
+  --text-disabled: light-dark(rgba(0, 0, 0, 0.36), rgba(255, 255, 255, 0.36));
+  --mica-fallback: light-dark(#f3f3f3, #202020);
+  --card: light-dark(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.033));
+  --surface: light-dark(rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.06));
+  --surface-hover: light-dark(rgba(249, 249, 249, 0.55), rgba(255, 255, 255, 0.09));
+  --stroke: light-dark(rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.07));
+  --stroke-strong: light-dark(rgba(0, 0, 0, 0.14), rgba(255, 255, 255, 0.14));
+  --hover: light-dark(rgba(0, 0, 0, 0.045), rgba(255, 255, 255, 0.058));
+  --sel: light-dark(rgba(0, 0, 0, 0.065), rgba(255, 255, 255, 0.09));
+  --sel-hover: light-dark(rgba(0, 0, 0, 0.09), rgba(255, 255, 255, 0.12));
+  --accent: light-dark(#005fb8, #4cc2ff);
+  --menu-bg: light-dark(#f9f9f9, #2c2c2c);
+  --input-bg: light-dark(rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.06));
   --close-hover: #c42b1c;
-  --scrollbar: rgba(255, 255, 255, 0.35);
+  --scrollbar: light-dark(rgba(0, 0, 0, 0.35), rgba(255, 255, 255, 0.35));
   /* Status colors for text and icons, readable on every theme's dark or light
      surfaces (each theme sets color-scheme). */
   --danger: light-dark(#c42b1c, #ff99a4);
@@ -38,23 +41,6 @@
   /* System theme only: an explicit data-theme always wins over the OS setting. */
   :root:not([data-theme]) {
     color-scheme: light;
-    --text: #1a1a1a;
-    --text-2: rgba(0, 0, 0, 0.78);
-    --text-3: rgba(0, 0, 0, 0.55);
-    --text-disabled: rgba(0, 0, 0, 0.36);
-    --mica-fallback: #f3f3f3;
-    --card: rgba(255, 255, 255, 0.5);
-    --surface: rgba(255, 255, 255, 0.7);
-    --surface-hover: rgba(249, 249, 249, 0.55);
-    --stroke: rgba(0, 0, 0, 0.06);
-    --stroke-strong: rgba(0, 0, 0, 0.14);
-    --hover: rgba(0, 0, 0, 0.045);
-    --sel: rgba(0, 0, 0, 0.065);
-    --sel-hover: rgba(0, 0, 0, 0.09);
-    --accent: #005fb8;
-    --menu-bg: #f9f9f9;
-    --input-bg: rgba(255, 255, 255, 0.85);
-    --scrollbar: rgba(0, 0, 0, 0.35);
   }
 }
 
@@ -175,7 +161,7 @@ input:focus-visible {
 .menu {
   position: fixed;
   z-index: 1000;
-  min-width: 200px;
+  min-width: min(200px, calc(100vw - 8px));
   background: var(--menu-bg);
   border: 1px solid var(--stroke-strong);
   border-radius: 8px;

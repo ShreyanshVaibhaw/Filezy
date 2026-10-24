@@ -126,11 +126,11 @@
   </div>
 
   {#if !recycleItems.list.length}
-    <div class="empty">{recycleItems.loading ? "Loading…" : "Recycle Bin is empty."}</div>
+    <div class="empty">{recycleItems.loading ? msg("Loading…") : msg("Recycle Bin is empty.")}</div>
   {:else}
     {#if recycleItems.total > recycleItems.list.length}
       <div class="capped">
-        {msg("Showing the first")} {recycleItems.list.length.toLocaleString()} {msg("of")} {recycleItems.total.toLocaleString()} {msg("items.")}
+        {msg("Showing the first {shown} of {n} items.", { shown: recycleItems.list.length.toLocaleString(), n: recycleItems.total.toLocaleString() })}
       </div>
     {/if}
     <div class="rheader">

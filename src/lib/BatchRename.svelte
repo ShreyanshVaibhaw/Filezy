@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { msg } from "./i18n.svelte";
+  import { msg, msgCount } from "./i18n.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { batch, commitBatch } from "./ops.svelte";
   import { baseName, joinPath, parentPath } from "./paths";
@@ -83,7 +83,7 @@
       }
     }}
   >
-    <h2 id="br-title">{msg("Rename")} {batch.items.length} {msg("items")}</h2>
+    <h2 id="br-title">{msg("Rename {n} items", { n: batch.items.length.toLocaleString() })}</h2>
     <div class="modes" role="radiogroup" aria-label={msg("Rename by")}>
       {#each MODES as [m, label] (m)}
         <button class="mode" role="radio" aria-checked={rule.mode === m} class:on={rule.mode === m} onclick={() => setMode(m)}>{msg(label)}</button>
@@ -135,11 +135,11 @@
     </div>
     {#if clashes}
       <p class="hint err">
-        {clashes === 1 ? "1 new name is" : `${clashes} new names are`} {msg("already used in that folder; those items keep their names.")}
+        {msgCount(clashes, "{n} new name is already used in that folder; that item keeps its name.", "{n} new names are already used in that folder; those items keep their names.")}
       </p>
     {/if}
     <div class="btns">
-      <span class="count">{changed} of {batch.items.length} {msg("names change")}</span>
+      <span class="count">{msg("{changed} of {n} names change", { changed: changed.toLocaleString(), n: batch.items.length.toLocaleString() })}</span>
       <button class="btn primary" disabled={!!invalid || !changed} onclick={go}>{msg("Rename")}</button>
       <button class="btn" onclick={() => (batch.open = false)}>{msg("Cancel")}</button>
     </div>

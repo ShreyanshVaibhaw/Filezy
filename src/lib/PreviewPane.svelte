@@ -4,7 +4,8 @@
   // files go to Windows' own preview handler (Word, Excel, fonts...), whose
   // window the backend keeps over this pane (src-tauri/src/preview.rs).
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-  import { app, sel, rowAt, entryPath, openPath, devicePx } from "./store.svelte";
+  import { app, sel, rowAt, entryPath, openPath } from "./store.svelte";
+  import { devicePx } from "./rowmeta.svelte";
   import { isArchive } from "./paths";
 
   type Kind = "text" | "image" | "thumb" | "audio" | "video" | "pdf" | "native" | "none";

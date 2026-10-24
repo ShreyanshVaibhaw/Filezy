@@ -4,6 +4,7 @@
 /// instead of being offered an update it cannot apply.
 import { invoke } from "@tauri-apps/api/core";
 import type { Update } from "@tauri-apps/plugin-updater";
+import { explainUpdateError } from "./updateerror";
 
 type Phase = "idle" | "checking" | "none" | "found" | "downloading" | "ready" | "error";
 
@@ -19,16 +20,6 @@ export const updater = $state({
 invoke<boolean>("is_installed")
   .then((v) => (updater.installed = v))
   .catch(() => {});
-
-/// The updater plugin's errors in plain words; anything else keeps its own text.
-export function explainUpdateError(e: unknown): string {
-  const raw = String(e).replace(/`/g, "").trim();
-  if (/release JSON|error sending request|dns|connect/i.test(raw)) return "Couldn't get update information from the server. Check your connection and try again later.";
-  const status = /status: (\d{3})/i.exec(raw);
-  if (status) return `The update couldn't be downloaded (the server answered ${status[1]}). Try again later.`;
-  if (/signature/i.test(raw)) return "The downloaded update failed its signature check, so it wasn't installed.";
-  return raw;
-}
 
 export async function checkForUpdates() {
   if (updater.phase === "checking" || updater.phase === "downloading") return;

@@ -33,13 +33,15 @@ export const OUR_VERBS = new Set([
 /// Keep a shown menu current. Some extensions add entries after the menu was
 /// built (Send to fills in its targets from a background thread for items in
 /// several folders), which a real menu shows as they arrive. Reads `menu`
-/// again while `showing()` holds, for a few seconds, and hands `update` each
+/// again while `showing()` holds, for about 12 seconds, and hands `update` each
 /// version that changed.
 export function followMenu(menu: ShellMenu, showing: () => boolean, update: (items: ShellItem[]) => void) {
   let last = JSON.stringify(menu.items);
   let reads = 0;
   const read = () => {
-    if (!showing() || ++reads > 10) return;
+    // Cold, the shell can take several seconds to fill Send to for a big
+    // selection, so keep reading while the menu is shown, for about 12 s.
+    if (!showing() || ++reads > 40) return;
     invoke<ShellItem[]>("shell_menu_items", { session: menu.session })
       .then((items) => {
         if (!showing()) return;
@@ -73,4 +75,39 @@ export function filterExtras(items: ShellItem[], native: Set<string>): ShellItem
   // it is currently switched on.
   rememberExtras(out.filter((it) => !it.sep).map((it) => it.text));
   return out.filter((it) => it.sep || extraOn(it.text));
+}
+
+/** A real menu was asked for: the startup warm-up must not replace it. */
+export const shellMenuUsed = { yes: false };
+
+/// Fill a shown menu with the shell's entries for it. They come after the menu
+/// appears (QueryContextMenu loads every extension DLL) and keep following as
+/// late extensions add theirs. `ours` are the verbs the menu draws itself.
+export function streamShellMenu(
+  load: Promise<ShellMenu>,
+  ours: Set<string>,
+  showing: () => boolean,
+  show: (items: ShellItem[], session: number, note: string) => void,
+) {
+  shellMenuUsed.yes = true;
+  load
+    .then((m) => {
+      if (!showing()) return;
+      show(filterExtras(m.items, ours), m.session, m.note ?? "");
+      followMenu(m, showing, (items) => show(filterExtras(items, ours), m.session, m.note ?? ""));
+    })
+    .catch((e) => {
+      // "superseded": a newer right-click took over the worker; its own result will come.
+      if (showing()) show([], 0, String(e) === "superseded" ? "" : String(e));
+    });
+}
+
+/// Where Windows' own menu ("Show more options") opens, in device pixels.
+/// Waits for the focus our closing menu hands back to land first, or it would
+/// arrive while Windows' menu is open and close it.
+export async function nativeMenuAt(at: { x: number; y: number }): Promise<{ x: number; y: number }> {
+  shellMenuUsed.yes = true;
+  await new Promise((r) => setTimeout(r, 60));
+  const s = window.devicePixelRatio || 1;
+  return { x: Math.round(at.x * s), y: Math.round(at.y * s) };
 }

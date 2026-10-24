@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { msg } from "./i18n.svelte";
+  import { msg, msgCount } from "./i18n.svelte";
   import { getVersion } from "@tauri-apps/api/app";
   import appIcon from "../../app-icon.png";
   import {
@@ -238,7 +238,7 @@
             <div class="rowname">{msg("Reset folder views")}</div>
             <div class="rowdesc">
               {clearedCount >= 0
-                ? `Cleared ${clearedCount} saved folder view${clearedCount === 1 ? "" : "s"}`
+                ? msgCount(clearedCount, "Cleared {n} saved folder view", "Cleared {n} saved folder views")
                 : folderPrefsCount() === 1
                   ? "1 folder has its own saved view and sort"
                   : `${folderPrefsCount()} folders have their own saved view and sort`}
@@ -269,7 +269,7 @@
             <span class="glyph rowicon" aria-hidden="true">&#xE737;</span>
             <div class="rowlabel">
               <div class="rowname">{w.name}</div>
-              <div class="rowdesc" title={w.tabs.join("\n")}>{w.tabs.length} {w.tabs.length === 1 ? msg("tab") : msg("tabs")}: {w.tabs.join(", ")}</div>
+              <div class="rowdesc" title={w.tabs.join("\n")}>{msgCount(w.tabs.length, "{n} tab: {list}", "{n} tabs: {list}", { list: w.tabs.join(", ") })}</div>
             </div>
             <div class="rowbtns">
               <button class="btn" onclick={() => openWorkspace(w)} aria-label={`${msg("Open")} ${w.name}`}>{msg("Open")}</button>
@@ -370,7 +370,7 @@
             {msg("Show all entries again")}
           </button>
           <span class="rowdesc">
-            {settings.hiddenMenu.length} {msg("entr")}{settings.hiddenMenu.length === 1 ? "y" : "ies"} {msg("hidden")}
+            {msgCount(settings.hiddenMenu.length, "{n} entry hidden", "{n} entries hidden")}
           </span>
         </div>
 
@@ -401,7 +401,7 @@
             {/each}
             <div class="resetrow">
               <button class="btn" onclick={forgetExtras}>{msg("Forget this list")}</button>
-              <span class="rowdesc">{seenSorted.length} {msg("seen so far")}</span>
+              <span class="rowdesc">{msgCount(seenSorted.length, "{n} seen so far", "{n} seen so far")}</span>
             </div>
           {:else}
             <div class="rowdesc groupdesc">
@@ -431,7 +431,7 @@
               {:else if updater.phase === "none"}
                 {msg("Filezy is up to date")}
               {:else if updater.phase === "found"}
-                {msg("Version")} {updater.version} {msg("is available")}
+                {msg("Version {version} is available", { version: updater.version })}
               {:else if updater.phase === "downloading"}
                 {msg("Downloading…")} {updater.percent}%
               {:else if updater.phase === "ready"}

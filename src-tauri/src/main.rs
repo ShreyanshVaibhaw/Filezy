@@ -1493,9 +1493,13 @@ fn main() {
                 // was last closed, so it never jumps there after appearing.
                 let hwnd = w.hwnd().map(|h| h.0 as isize).unwrap_or(0);
                 // A window split_view opened takes its half of the monitor instead.
-                if hwnd == 0 || !(tools::apply_snap(hwnd) || session::restore(hwnd)) {
-                    let _ = w.show();
+                if hwnd != 0 && !tools::apply_snap(hwnd) {
+                    session::restore(hwnd);
                 }
+                // Shown through Tauri as well, even when SetWindowPlacement already
+                // showed it: otherwise Tauri still counts the window hidden, and
+                // its next maximize or restore drops WS_VISIBLE and hides it.
+                let _ = w.show();
                 w.on_window_event(move |e| match e {
                     // The previewer's window is owned, not a child, so it follows the window by hand.
                     tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. } => {

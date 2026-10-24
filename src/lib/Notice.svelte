@@ -75,7 +75,7 @@
           </div>
         {/each}
         {#if a.problems.length > 50}
-          <div class="aprob more">{msg("…and")} {a.problems.length - 50} {msg("more")}</div>
+          <div class="aprob more">{msg("…and {n} more", { n: (a.problems.length - 50).toLocaleString() })}</div>
         {/if}
       </div>
     {:else}

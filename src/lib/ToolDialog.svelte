@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { msg } from "./i18n.svelte";
+  import { msg, msgCount } from "./i18n.svelte";
   import { onMount } from "svelte";
   import { listen } from "@tauri-apps/api/event";
   import { tool, sizes, ALGOS, runHashes, stopTool, closeTool, onProgress, onSize, analyzeFolder, type Size } from "./tools.svelte";
-  import { navigate, openPath, fmtSizeAuto as fmtBytes } from "./store.svelte";
+  import { navigate, openPath } from "./store.svelte";
+  import { fmtSizeAuto as fmtBytes } from "./rowmeta.svelte";
   import { baseName } from "./paths";
   import Modal from "./Modal.svelte";
 
@@ -130,7 +131,7 @@
             <span class="sname" title={s.path}>{baseName(s.path)}</span>
             <span class="bar" aria-hidden="true"><span style="width:{(s.bytes / largest) * 100}%"></span></span>
             <span class="ssize">{fmtBytes(s.bytes)}{s.done ? "" : "…"}</span>
-            <span class="scount dim">{s.is_dir ? `${s.files.toLocaleString()} ${msg("files")}` : ""}</span>
+            <span class="scount dim">{s.is_dir ? msgCount(s.files, "{n} file", "{n} files") : ""}</span>
           </div>
         {:else}
           <div class="dim pad">{tool.busy ? msg("Measuring…") : msg("This folder is empty.")}</div>
@@ -140,9 +141,9 @@
         {/if}
       </div>
       <p class="verdict" role="status">
-        {fmtBytes(sum.bytes)} {msg("in")} {sum.files.toLocaleString()} {msg("files and")} {sum.folders.toLocaleString()} {msg("folders")}{tool.busy ? "…" : "."}
-        {#if sum.skipped}<span class="warn">{sum.skipped} {sum.skipped === 1 ? msg("folder couldn't be read") : msg("folders couldn't be read")}.</span>{/if}
-        {#if sum.links}<span class="dim">{sum.links} {sum.links === 1 ? msg("link not followed") : msg("links not followed")}.</span>{/if}
+        {msg("{size} in {files} files and {folders} folders", { size: fmtBytes(sum.bytes), files: sum.files.toLocaleString(), folders: sum.folders.toLocaleString() })}{tool.busy ? "…" : "."}
+        {#if sum.skipped}<span class="warn">{msgCount(sum.skipped, "{n} folder couldn't be read.", "{n} folders couldn't be read.")}</span>{/if}
+        {#if sum.links}<span class="dim">{msgCount(sum.links, "{n} link not followed.", "{n} links not followed.")}</span>{/if}
       </p>
     {/if}
 

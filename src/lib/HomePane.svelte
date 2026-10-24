@@ -4,9 +4,10 @@
   import { invoke } from "@tauri-apps/api/core";
   import { untrack } from "svelte";
   import {
-    app, navigate, newTab, openPath, recentFiles, fmtDate, folderName, shellIcon, pinRemove, movePin,
-    isFavorite, setFavorite, removeRecent, extMeta, requestExtMeta,
+    app, navigate, newTab, openPath, recentFiles, folderName, pinRemove, movePin,
+    isFavorite, setFavorite, removeRecent,
   } from "./store.svelte";
+  import { fmtDate, shellIcon, extMeta, requestExtMeta } from "./rowmeta.svelte";
   import { openFileLocation } from "./ops.svelte";
   import { menuKeys, fitMenu } from "./menukeys";
   import { menuOn } from "./settings.svelte";
