@@ -116,8 +116,8 @@ npm run build:e2e            # optimized exe with the end-to-end test hooks (-- 
 npm run test:e2e             # drives that exe through Windows (scripts/e2e; -- --debug for the debug one)
 ```
 
-The release binary lands at `src-tauri/target/release/filezy.exe`.
-`build:e2e` writes to `src-tauri/target-e2e` instead, so it never replaces the release binary.
+The release binary lands at `src-tauri/target/release/filezy.exe`, or under Cargo's `build.target-dir` / `CARGO_TARGET_DIR` when one is set.
+`build:e2e` writes to a sibling folder with `-e2e` on the end (`src-tauri/target-e2e` by default), so it never replaces the release binary.
 The end-to-end hooks exist only in the `build:e2e` exe, so a shipped build can't be driven by them.
 The E2E runner includes tests that can foreground windows or change the clipboard.
 Use ExtraCursor for interactive desktop testing while someone is using the computer, with background dispatch and a disposable profile.
