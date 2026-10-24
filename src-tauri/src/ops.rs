@@ -164,8 +164,10 @@ fn ref_path(it: Ref<IShellItem>) -> String {
 
 #[derive(Default)]
 struct Log {
-    /// Requested source identities, to tell top-level items from their children.
-    top: HashSet<String>,
+    /// Requested sources by the identity of their long form, to tell top-level
+    /// items from their children. The shell reports "C:\Users\RUNNER~1\x"
+    /// as "C:\Users\runneradmin\x", so results map back to the request.
+    top: HashMap<String, String>,
     items: Vec<Item>,
     positions: HashMap<String, usize>,
     /// Destinations that already existed when the engine reached them.
@@ -173,12 +175,18 @@ struct Log {
 }
 
 impl Log {
-    fn is_top(&self, src: &str) -> bool {
-        self.top.contains(&paths::identity(src))
+    fn new<S: AsRef<str>>(sources: impl IntoIterator<Item = S>) -> Log {
+        let top = sources.into_iter().map(|s| (paths::identity(&paths::long(s.as_ref())), s.as_ref().to_string())).collect();
+        Log { top, ..Default::default() }
+    }
+
+    /// The requested source a reported item stands for, if it is top-level.
+    fn requested(&self, src: &str) -> Option<&String> {
+        self.top.get(&paths::identity(src))
     }
 
     fn pre(&mut self, src: &str, dest: Ref<IShellItem>, name: &PCWSTR) {
-        if !self.is_top(src) {
+        if self.requested(src).is_none() {
             return;
         }
         let dst = target(dest, name, src);
@@ -192,9 +200,9 @@ impl Log {
             return; // not an outcome yet: the conflict dialog decides it
         }
         // Items inside a folder are part of their top-level item's outcome.
-        if !self.is_top(&src) {
+        let Some(src) = self.requested(&src).cloned() else {
             return;
-        }
+        };
         let (state, error) = classify(hr);
         let replaced = state == State::Done && !dst.is_empty() && self.existed.contains(&paths::identity(&dst));
         let item = Item { src, dst, state, error, replaced, bin_id, size: 0, modified: 0, hr: hr.0 };
@@ -412,7 +420,7 @@ fn queue(fo: &IFileOperation, op: &Op, log: &mut Log) -> Result<(), String> {
 
 fn perform(op: &Op, owner: isize) -> OpResult {
     let mut result = OpResult { kind: op.kind(), items: vec![], cancelled: false, error: None, clipboard: None };
-    let log = Arc::new(Mutex::new(Log { top: op.sources().iter().map(|s| paths::identity(s)).collect(), ..Default::default() }));
+    let log = Arc::new(Mutex::new(Log::new(op.sources())));
     let mut run = || -> Result<bool, String> {
         unsafe {
             let fo: IFileOperation = CoCreateInstance(&FileOperation, None, CLSCTX_INPROC_SERVER).map_err(|e| e.message().to_string())?;
@@ -614,7 +622,7 @@ mod tests {
     #[test]
     fn wsl_case_distinct_operations_keep_both_outcomes() {
         let sources = [r"\\wsl.localhost\Ubuntu\tmp\Case.txt", r"\\wsl.localhost\Ubuntu\tmp\case.txt"];
-        let mut log = Log { top: sources.iter().map(|s| paths::identity(s)).collect(), ..Default::default() };
+        let mut log = Log::new(sources);
         for src in sources {
             log.post(src.into(), format!(r"{src}.copy"), HRESULT(0), None);
         }
@@ -655,7 +663,7 @@ mod tests {
 
     #[test]
     fn pending_conflicts_wait_for_the_final_answer() {
-        let mut log = Log { top: [r"c:\s\c2.txt".to_string()].into_iter().collect(), ..Default::default() };
+        let mut log = Log::new([r"c:\s\c2.txt"]);
         let src = || r"C:\s\c2.txt".to_string();
         log.post(src(), String::new(), HRESULT(COPYENGINE_S_PENDING), None);
         assert!(log.items.is_empty(), "a queued conflict is not an outcome");
@@ -691,7 +699,7 @@ mod tests {
         assert_eq!(state("folder"), Some(State::Done), "{r:?}");
         assert_eq!(state("missing.txt"), Some(State::Failed), "{r:?}");
         let a = r.items.iter().find(|i| i.src.ends_with("a.txt")).unwrap();
-        assert!(a.dst.eq_ignore_ascii_case(&paths::join(&dst, "a.txt")));
+        assert!(a.dst.eq_ignore_ascii_case(&paths::join(&paths::long(&dst), "a.txt")), "{}", a.dst);
         assert!(!a.replaced);
         assert_eq!(a.size, 1);
         assert!(std::path::Path::new(&paths::join(&dst, "folder\\inner.txt")).exists());
