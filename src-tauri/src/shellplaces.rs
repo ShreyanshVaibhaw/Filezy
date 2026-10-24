@@ -101,7 +101,8 @@ mod tests {
         assert_eq!(folder.items.len(), 2);
         assert!(folder.items[0].folder);
         assert!(folder.items.iter().all(|i| !i.path.is_empty() && i.copy));
-        assert!(folder.items.iter().any(|i| i.name == "日本語.txt"));
+        // Names are Explorer's: without ".txt" when it hides known extensions.
+        assert!(folder.items.iter().any(|i| i.name.trim_end_matches(".txt") == "日本語"));
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

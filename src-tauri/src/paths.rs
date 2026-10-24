@@ -7,8 +7,8 @@
 use crate::fs_list::wide;
 use windows::core::PCWSTR;
 use windows::Win32::Storage::FileSystem::{
-    FindClose, FindFirstFileW, GetFileAttributesW, GetFullPathNameW, GetVolumeNameForVolumeMountPointW, GetVolumePathNameW,
-    FILE_ATTRIBUTE_DIRECTORY, INVALID_FILE_ATTRIBUTES, WIN32_FIND_DATAW,
+    FindClose, FindFirstFileW, GetFileAttributesW, GetFullPathNameW, GetLongPathNameW, GetVolumeNameForVolumeMountPointW,
+    GetVolumePathNameW, FILE_ATTRIBUTE_DIRECTORY, INVALID_FILE_ATTRIBUTES, WIN32_FIND_DATAW,
 };
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -197,6 +197,24 @@ fn full_path(p: &str) -> Result<String, String> {
             return Err(windows::core::Error::from_thread().message().to_string());
         }
         Ok(from_wide(&buf))
+    }
+}
+
+/// Display path with 8.3 short names ("RUNNER~1") expanded, the form the shell
+/// reports items in. A path that doesn't exist comes back as given.
+pub fn long(p: &str) -> String {
+    let w = wide(&to_native(p));
+    unsafe {
+        let need = GetLongPathNameW(PCWSTR(w.as_ptr()), None);
+        if need == 0 {
+            return p.to_string();
+        }
+        let mut buf = vec![0u16; need as usize];
+        let got = GetLongPathNameW(PCWSTR(w.as_ptr()), Some(&mut buf));
+        if got == 0 || got >= need {
+            return p.to_string();
+        }
+        to_display(&from_wide(&buf))
     }
 }
 

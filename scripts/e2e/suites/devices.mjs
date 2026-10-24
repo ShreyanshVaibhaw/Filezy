@@ -102,7 +102,8 @@ export default [
       const d = t.dir("dev-shell");
       t.mk(path.join(d, "example.txt"), "e");
       const listed = await t.ev(`__e2e.invoke("shell_list", { path: ${JSON.stringify(d)}, devicesOnly: false })`);
-      const item = listed.items.find((i) => i.name === "example.txt");
+      // Names are Explorer's: without ".txt" when it hides known extensions.
+      const item = listed.items.find((i) => i.name.replace(/\.txt$/, "") === "example");
       t.ok(item && item.path.endsWith("example.txt") && item.copy, "the item's shell identity and copy capability");
       await t.call("navigate", "::Devices");
       await t.waitFor("!__e2e.shellFolder.loading", 10000, "Devices listed");
