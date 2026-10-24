@@ -82,6 +82,13 @@
   // The item that takes Tab focus (roving tabindex); it follows the keyboard.
   let focusKey = $state(HOME);
   const tabTo = (key: string) => (key === focusKey ? 0 : -1);
+  let tree: HTMLDivElement | undefined = $state();
+  // The tab stop's item can go away (a folder unpinned, a branch collapsed or a
+  // drive removed); Home takes it then, or Tab and F6 would skip the tree.
+  $effect(() => {
+    void [focusKey, app.pins, app.specials, app.drives, app.cloudRoots, wslRoots, pcOpen, open.size, kids.size];
+    if (tree && !tree.querySelector('[tabindex="0"]')) focusKey = HOME;
+  });
 
   function toggleKey(key: string) {
     if (key === THIS_PC) pcOpen = !pcOpen;
@@ -216,6 +223,7 @@
 
 <div
   class="navpane"
+  bind:this={tree}
   role="tree"
   aria-label={msg("Navigation pane")}
   data-drop-scroll

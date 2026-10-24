@@ -178,7 +178,7 @@ export default [
         await t.waitFor("!!document.querySelector('.details') && !document.querySelector('.preview')", 3000, "the Details pane");
         await t.key("p", { alt: true });
         await t.waitFor("!!document.querySelector('.preview') && !document.querySelector('.details')", 3000, "the Preview pane instead");
-        await t.ev("document.querySelector('.panegrip').focus()");
+        await t.ev("document.querySelector('.panegrip .splitter').focus()");
         await t.key("ArrowLeft");
         await t.key("ArrowLeft");
         t.eq(await t.ev("__e2e.settings.paneWidth"), 332, "two steps wider, and saved");
@@ -207,7 +207,8 @@ export default [
         await t.select(["doc.txt - Shortcut.lnk"]);
         await t.waitFor(
           `[...document.querySelectorAll(".details dt")].find((x) => x.textContent === "Target")?.nextElementSibling?.textContent === ${JSON.stringify(target)}`,
-          5000,
+          // Resolving a shortcut goes through the shell, which can be slow on a busy machine.
+          10000,
           "the target",
         );
       } finally {

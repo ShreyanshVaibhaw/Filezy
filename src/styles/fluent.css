@@ -198,8 +198,7 @@ input:focus-visible {
   font-size: 8px;
   color: var(--text);
 }
-/* An entry that opens a submenu: its label, then a chevron at the right edge;
-   the submenu flies out beside it. */
+/* An entry that opens a submenu: its label, then a chevron at the right edge. */
 .subwrap {
   position: relative;
 }
@@ -217,10 +216,8 @@ input:focus-visible {
   font-size: 10px;
   color: var(--text-3);
 }
+/* Placed beside its entry by fitMenu (menukeys.ts), which every menu runs. */
 .menu.submenu {
-  position: absolute;
-  left: calc(100% - 4px);
-  top: -4px;
   max-height: 60vh;
   overflow-y: auto;
 }

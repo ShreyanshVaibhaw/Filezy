@@ -126,6 +126,8 @@ async function reset() {
     e.history.redo.length = 0;
     e.app.status = "";
     e.app.statusInfo = "";
+    // Focus left on a command button or menu would keep file-list keys from the list.
+    document.activeElement?.blur?.();
   })()`);
   await waitFor("__e2e.idle()", 15000, "the app never went idle after the reset");
 }

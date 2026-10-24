@@ -15,13 +15,15 @@ const rect = (t, sel) =>
     return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, x: r.left + r.width / 2, y: r.top + r.height / 2 };
   })()`);
 
-/** The middle of a file list row, by name. */
-const rowAt = (t, name) =>
-  t.ev(`(() => {
-    const row = [...document.querySelectorAll(".vrow")].find((r) => r.querySelector(".fname")?.textContent === ${JSON.stringify(name)});
-    const b = row.getBoundingClientRect();
+/** The middle of a file list row, by name, once the list draws it (a watcher re-list can be under way). */
+const rowAt = async (t, name) => {
+  const find = `[...document.querySelectorAll(".vrow")].find((r) => r.querySelector(".fname")?.textContent === ${JSON.stringify(name)})`;
+  await t.waitFor(`!!${find}`, 5000, `the row for ${name}`);
+  return t.ev(`(() => {
+    const b = ${find}.getBoundingClientRect();
     return { x: b.left + 120, y: b.top + b.height / 2 };
   })()`);
+};
 
 /** A blank spot in the file list, below its rows. */
 const blank = async (t) => {

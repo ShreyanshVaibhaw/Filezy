@@ -211,7 +211,8 @@ export default [
       const made = fs.readdirSync(d).find((f) => f !== "a.txt");
       t.ok(made && made.endsWith(".txt"), `made ${made}`);
       t.eq(fs.statSync(path.join(d, made)).size, 0, "empty");
-      t.eq(await t.ev("__e2e.rowAt(__e2e.app.renaming)?.name"), made, "the box is on the new file");
+      // The row arrives with the next fetch after the re-list.
+      await t.waitFor(`__e2e.rowAt(__e2e.app.renaming)?.name === ${JSON.stringify(made)}`, 5000, "the box is on the new file");
       await t.ev("__e2e.app.renaming = -1");
     },
   },
