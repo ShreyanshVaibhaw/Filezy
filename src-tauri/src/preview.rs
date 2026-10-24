@@ -281,7 +281,7 @@ pub fn text(path: &str) -> Result<Option<Text>, String> {
 /// character split at the end isn't a sign of binary data.
 fn decode(b: &[u8], cut: bool) -> Option<String> {
     let utf16 = |b: &[u8], le: bool| {
-        let units = b.chunks_exact(2).map(|c| if le { u16::from_le_bytes([c[0], c[1]]) } else { u16::from_be_bytes([c[0], c[1]]) });
+        let units = b.as_chunks::<2>().0.iter().map(|&c| if le { u16::from_le_bytes(c) } else { u16::from_be_bytes(c) });
         char::decode_utf16(units).map(|c| c.unwrap_or('\u{FFFD}')).collect::<String>()
     };
     if let Some(rest) = b.strip_prefix(&[0xEF, 0xBB, 0xBF]) {

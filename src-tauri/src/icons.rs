@@ -85,8 +85,8 @@ fn image_of(path: &str, size: i32, icon_only: bool) -> Option<String> {
         if got == 0 {
             return None;
         }
-        let opaque = pixels.chunks_exact(4).all(|p| p[3] == 0);
-        for px in pixels.chunks_exact_mut(4) {
+        let opaque = pixels.as_chunks::<4>().0.iter().all(|p| p[3] == 0);
+        for px in pixels.as_chunks_mut::<4>().0 {
             px.swap(0, 2);
             if opaque {
                 px[3] = 255;
@@ -166,7 +166,7 @@ fn hicon_to_data_url(hicon: HICON) -> Option<String> {
         let got = GetDIBits(hdc, info.hbmColor, 0, h as u32, Some(pixels.as_mut_ptr() as *mut _), &mut bmi, DIB_RGB_COLORS);
 
         let mut mask_pixels = None;
-        if got != 0 && pixels.chunks_exact(4).all(|p| p[3] == 0) {
+        if got != 0 && pixels.as_chunks::<4>().0.iter().all(|p| p[3] == 0) {
             // No alpha channel: derive it from the AND mask.
             let mut mp = vec![0u8; (w * h * 4) as usize];
             let mut mbmi = BITMAPINFO { bmiHeader: header, ..Default::default() };
@@ -183,7 +183,7 @@ fn hicon_to_data_url(hicon: HICON) -> Option<String> {
         }
 
         // BGRA -> RGBA, applying mask-derived alpha when needed.
-        for (i, px) in pixels.chunks_exact_mut(4).enumerate() {
+        for (i, px) in pixels.as_chunks_mut::<4>().0.iter_mut().enumerate() {
             px.swap(0, 2);
             if let Some(m) = &mask_pixels {
                 px[3] = if m[i * 4] == 0 { 255 } else { 0 };
