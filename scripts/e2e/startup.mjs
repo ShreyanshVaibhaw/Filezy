@@ -12,9 +12,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { connect, freePort, profileEnv } from "./cdp.mjs";
+import { cargoTarget } from "../cargo-target.mjs";
 
 const arg = (k, d) => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3) ?? d;
-const exe = path.resolve(arg("exe", "src-tauri/target/release/filezy.exe"));
+const exe = path.resolve(arg("exe") ?? path.join(cargoTarget(), "release", "filezy.exe"));
 const runs = Number(arg("runs", "5"));
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "filezy-startup-"));
 const dir = path.join(root, "folder");

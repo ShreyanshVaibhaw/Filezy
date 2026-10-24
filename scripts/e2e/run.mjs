@@ -4,8 +4,8 @@
 // WebView2 storage, %APPDATA%, the app's %TEMP% and every fixture live under
 // one temp folder.
 //
-//   npm run test:e2e                     every suite against target-e2e/release/filezy.exe
-//   npm run test:e2e -- --debug          use target-e2e/debug/filezy.exe
+//   npm run test:e2e                     every suite against <target>-e2e/release/filezy.exe
+//   npm run test:e2e -- --debug          use <target>-e2e/debug/filezy.exe
 //   npm run test:e2e -- nav undo         only tests whose name contains a filter
 //   npm run test:e2e -- --keep           keep the temp folder for inspection
 //   npm run test:e2e -- --perf           also run the slow performance measurements
@@ -13,7 +13,7 @@
 //                                        replace the clipboard (safe while someone works)
 //
 // Build first: `npm run build:e2e` (or `npm run build:e2e -- --debug`), which
-// writes to src-tauri/target-e2e. The hooks the runner drives exist only in that
+// writes next to Cargo's build folder (src-tauri/target-e2e by default). The hooks the runner drives exist only in that
 // build (the `e2e` feature); a shipped build ignores FILEZY_E2E. A plain
 // `cargo build` exe loads the Vite dev server instead of the bundled UI.
 //

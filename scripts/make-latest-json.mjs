@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { cargoTarget } from "./cargo-target.mjs";
 
 export function verifySignature(bytes, signature, publicKey) {
   const decode = (value) => {
@@ -79,7 +80,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     const cargo = readFileSync("src-tauri/Cargo.toml", "utf8").match(/^version\s*=\s*"([^"]+)"/m)?.[1];
     if (pkg.version !== conf.version || cargo !== conf.version) throw new Error("Package, Cargo and Tauri versions must match.");
     checkReleaseTree(conf.version);
-    const manifest = makeManifest({ dir: process.env.FILEZY_BUNDLE_DIR ?? "src-tauri/target/release/bundle/nsis",
+    const manifest = makeManifest({ dir: process.env.FILEZY_BUNDLE_DIR ?? join(cargoTarget(), "release", "bundle", "nsis"),
       version: conf.version, publicKey: conf.plugins.updater.pubkey, repo: process.env.FILEZY_REPO ?? "ShreyanshVaibhaw/Filezy",
       arch: process.env.FILEZY_ARCH ?? "x86_64", notes: process.argv[2] });
     writeFileSync("latest.json", JSON.stringify(manifest, null, 2) + "\n");
